@@ -1,0 +1,36 @@
+Keselamatan Kerja di Tegangan Menengah (20 kV)
+
+1. Bahaya Utama:
+   - Sengatan listrik fatal (arus >100 mA bisa mematikan)
+   - Busur listrik (arc flash) → suhu >10.000°C
+   - Ledakan akibat short circuit
+
+2. Prosedur Lockout/Tagout (LOTO):
+   - Matikan sumber dari gardu induk
+   - Kunci pemutus dengan gembok pribadi
+   - Pasang label "JANGAN DIHIDUPKAN – SEDANG DIPERBAIKI"
+
+3. Peralatan Pelindung Diri (APD):
+   - Sarung tangan karet kelas 00/0/1 (sesuai tegangan)
+   - Pelindung wajah & pakaian tahan api (arc-rated)
+   - Sepatu safety dielektrik
+   - Mat isolasi di area kerja
+
+4. Peralatan Kerja:
+   - Tang pengecek tegangan (voltage detector) terkalibrasi
+   - Grounding portable (short-circuiting set) untuk grounding sementara
+   - Tongkat isolasi (hot stick) untuk operasi jarak jauh
+
+5. Jarak Aman (Indonesia, sesuai SPLN):
+   - 20 kV: jarak minimal 0.7 meter dari konduktor bertegangan
+   - Jangan kerja sendirian — minimal 2 orang
+
+6. Langkah Kerja:
+   a. Pastikan sirkit benar-benar mati (ukur dengan alat teruji)
+   b. Grounding temporary di kedua sisi lokasi kerja
+   c. Kerjakan hanya di area yang telah diamankan
+   d. Lepas grounding setelah pekerjaan selesai
+
+7. Pelatihan Wajib:
+   - Sertifikasi Ahli K3 Listrik
+   - Pelatihan APD & prosedur darurat

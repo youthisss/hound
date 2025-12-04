@@ -1,0 +1,34 @@
+Pengembangan Perangkat Lunak Embedded
+
+1. Bahasa Pemrograman:
+   - C: standar industri, kontrol memori langsung
+   - C++: OOP, tapi hindari fitur berat (exception, RTTI)
+   - Rust: memori aman, mulai populer di embedded
+   - Python: untuk prototyping atau gateway (bukan mikro)
+
+2. Prinsip Pengkodean:
+   - Hindari dynamic allocation (malloc/free)
+   - Gunakan const & static sebisa mungkin
+   - Error handling: return code, bukan exception
+
+3. Toolchain:
+   - Compiler: GCC, Clang
+   - Build system: CMake, Make
+   - Debugger: GDB, JTAG
+
+4. Testing:
+   - Unit test: untuk modul logika (gunakan Ceedling, Unity)
+   - Hardware-in-loop: uji dengan perangkat nyata
+   - Static analysis: PC-lint, SonarQube
+
+5. Version Control:
+   - Git: wajib, bahkan untuk proyek pribadi
+   - Submodul: untuk library eksternal
+
+6. CI/CD untuk Embedded:
+   - Build otomatis di push ke Git
+   - Flash otomatis ke perangkat uji (dengan Raspberry Pi sebagai programmer)
+
+7. Best Practice:
+   - Document setiap fungsi (Doxygen)
+   - Gunakan coding standard (MISRA C untuk safety-critical)

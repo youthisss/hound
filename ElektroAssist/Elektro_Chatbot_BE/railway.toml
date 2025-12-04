@@ -1,0 +1,5 @@
+[build]
+builder = "gomod"
+
+[deploy]
+startCommand = "go run main.go"

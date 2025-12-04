@@ -1,0 +1,26 @@
+Pembangkit Listrik Surya – Rumahan
+
+- Panel surya:
+  • Tegangan VOC ~22V untuk panel 300W/24V
+  • Arus ISC = rating arus maks
+
+- Charge controller:
+  • PWM: murah, efisiensi ~70%
+  • MPPT: mahal, efisiensi ~95%
+
+- Perhitungan:
+  • Kebutuhan harian (Wh) = jumlah perangkat × watt × jam
+  • Kapasitas baterai (Ah) = (Wh / V_bat) / DoD / efisiensi
+    Contoh: 1000Wh, 12V, DoD 50%, efisiensi 80% → Ah = 1000/(12×0.5×0.8) ≈ 208Ah
+
+- Inverter:
+  • Pure sine wave untuk elektronik sensitif
+  • Modified sine wave untuk beban resistif (lampu, heater)
+
+- Instalasi:
+  • Panel menghadap utara (di belahan selatan) atau selatan (di utara)
+  • Sudut ≈ lintang geografis
+  • Bebas bayangan sepanjang hari
+
+- Izin:
+  • Di Indonesia, sistem <200 kW tidak perlu IUPTLS

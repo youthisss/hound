@@ -1,0 +1,34 @@
+Transformator Distribusi – Prinsip & Spesifikasi
+
+1. Fungsi:
+   - Menurunkan tegangan TM (20 kV) ke TR (220/380V)
+   - Menyalurkan daya ke pelanggan
+
+2. Jenis Umum di Indonesia:
+   - Minyak: untuk luar ruang (pole-mounted atau pad-mounted)
+   - Kering (dry-type): untuk dalam ruang (gedung, mall)
+
+3. Rating Standar:
+   - Daya: 50 kVA, 100 kVA, 160 kVA, 250 kVA, 500 kVA
+   - Tegangan primer: 20 kV (fase-fase)
+   - Tegangan sekunder: 400V (3 fasa) atau 230V (1 fasa)
+
+4. Konfigurasi:
+   - Primer: delta (Δ)
+   - Sekunder: bintang (Y) dengan netral grounded
+   - Vektor group: Dyn11 (paling umum di Indonesia)
+
+5. Rugi-Rugi:
+   - Rugi besi (no-load loss): akibat arus eddy & histeresis
+   - Rugi tembaga (load loss): I²R di belitan
+   - Efisiensi: 98–99% pada beban penuh
+
+6. Proteksi:
+   - Fuse cut-out (primer)
+   - MCB atau fuse (sekunder)
+   - Buchholz relay (untuk transformator minyak besar)
+
+7. Pemeliharaan:
+   - Periksa minyak (warna, kadar air) tiap 6 bulan
+   - Ukur resistansi isolasi belitan
+   - Pastikan grounding body transformator baik (<5 ohm)

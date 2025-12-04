@@ -1,0 +1,25 @@
+Desain Catu Daya – Pilihan & Perhitungan
+
+1. Linear Regulator (misal: 7805, LM317):
+   • Output stabil, noise rendah
+   • Efisiensi rendah jika dropout besar
+   • Dropout voltage 7805: ~2V → input ≥7V untuk output 5V
+   • Tambah heatsink jika dissipasi >1W
+
+2. Switching Regulator (Buck/Boost):
+   • Efisiensi 85–95%
+   • Noise lebih tinggi → tambah filter LC
+   • Contoh: LM2596, MP1584
+
+3. Perhitungan disipasi panas:
+   P = (V_in - V_out) × I_load
+   Contoh: 12V → 5V @ 1A → P = 7W → butuh heatsink besar!
+
+4. Kapasitor input/output:
+   • Input: 10–100 µF elektrolit + 100nF keramik
+   • Output: minimal 10 µF
+
+5. Proteksi:
+   • Reverse polarity diode
+   • Fuse di input
+   • TVS diode untuk surge

@@ -1,0 +1,9 @@
+Antarmuka Sensor Umum
+
+- Sensor analog (misal: LM35): output 10 mV/°C → baca via ADC mikro.
+- Sensor digital (misal: DHT22): komunikasi 1-wire → butuh timing presisi.
+- I2C: SDA + SCL, alamat 7-bit, pull-up resistor 4.7kΩ ke VCC.
+- SPI: SCLK, MOSI, MISO, CS — lebih cepat dari I2C.
+- Level shifting diperlukan jika VCC sensor ≠ VCC mikro (misal: 3.3V ↔ 5V).
+- Hindari kabel panjang untuk sinyal analog — rentan noise.
+- Gunakan kapasitor dekoupling 100nF dekat pin VCC setiap IC.

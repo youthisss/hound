@@ -1,0 +1,37 @@
+Turbin Angin & Sistem Hybrid Terbarukan
+
+1. Turbin Angin Skala Kecil (<10 kW):
+   - Jenis: horizontal axis (HAWT) atau vertical axis (VAWT)
+   - Cut-in speed: 2.5–3.5 m/s
+   - Rated power: pada kecepatan angin 10–12 m/s
+   - Cut-off: >25 m/s (proteksi badai)
+
+2. Produksi Energi:
+   - Daya angin = 0.5 × ρ × A × v³  
+     (ρ = densitas udara, A = area sapuan, v = kecepatan angin)
+   - Energi harian sangat fluktuatif → butuh baterai/hybrid
+
+3. Sistem Hybrid Umum:
+   - Solar + Wind: saling melengkapi (angin malam/hujan, surya siang)
+   - Solar + Diesel: untuk daerah terpencil (minimalkan solar)
+   - Solar + Grid: on-grid dengan backup
+
+4. Komponen Hybrid:
+   - Hybrid inverter: kelola input dari panel, turbin, generator
+   - Dump load: buang kelebihan energi ke pemanas saat baterai penuh
+   - MPPT ganda: untuk panel & turbin terpisah
+
+5. Desain untuk Indonesia:
+   - Rata-rata kecepatan angin: 2–6 m/s (kecuali pantai/puncak)
+   - PLTS lebih efektif daripada turbin angin di kebanyakan lokasi
+   - Hybrid solar-wind hanya ekonomis di pulau terpencil dengan angin konsisten
+
+6. Kelebihan Hybrid:
+   - Ketersediaan energi lebih stabil
+   - Kurangi ukuran baterai
+   - Tingkatkan keandalan sistem off-grid
+
+7. Tantangan:
+   - Kompleksitas kontrol
+   - Biaya awal tinggi
+   - Pemeliharaan turbin (bearing, blade)

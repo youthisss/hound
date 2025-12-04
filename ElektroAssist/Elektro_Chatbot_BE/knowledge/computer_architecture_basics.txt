@@ -1,0 +1,31 @@
+Arsitektur Komputer untuk Insinyur
+
+1. Von Neumann vs Harvard:
+   - Von Neumann: memori instruksi & data bersatu (PC)
+   - Harvard: terpisah (mikrokontroler) → paralel akses
+
+2. CPU Components:
+   - ALU: operasi aritmatika
+   - Register: penyimpanan cepat
+   - Control Unit: decode & eksekusi instruksi
+
+3. Memory Hierarchy:
+   - Register → Cache (L1/L2) → RAM → Storage
+   - Embedded: sering tanpa cache, akses RAM langsung
+
+4. Bus System:
+   - Data bus, address bus, control bus
+   - Width: 8-bit, 16-bit, 32-bit → pengaruhi kecepatan
+
+5. Instruction Set:
+   - CISC (x86): instruksi kompleks
+   - RISC (ARM, RISC-V): instruksi sederhana, efisien
+
+6. Relevansi Elektro:
+   - Pilih mikro berbasis RISC-V untuk proyek open-source
+   - Optimasi kode: hindari floating-point di AVR 8-bit
+   - Gunakan DMA untuk transfer data besar (tanpa CPU)
+
+7. Tren:
+   - Heterogeneous computing: CPU + GPU + NPU
+   - Chiplet design: modul kecil disatukan

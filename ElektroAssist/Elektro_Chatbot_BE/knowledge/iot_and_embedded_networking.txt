@@ -1,0 +1,32 @@
+Jaringan untuk Perangkat Embedded & IoT
+
+1. Protokol Fisik:
+   - Wi-Fi (2.4/5 GHz): untuk bandwidth tinggi, jarak <100m
+   - Bluetooth/BLE: untuk low-power, jarak <30m, pairing device
+   - LoRa: jarak 2–15 km (line-of-sight), daya rendah, untuk sensor jarak jauh
+   - NB-IoT/LTE-M: pakai jaringan seluler, untuk smart meter
+
+2. Protokol Aplikasi:
+   - MQTT: publish-subscribe, ringan, ideal untuk sensor → server cloud
+     • Broker: Mosquitto, AWS IoT Core
+     • QoS 0/1/2 untuk kontrol keandalan
+   - HTTP/REST: untuk perangkat dengan sumber daya cukup (ESP32)
+   - CoAP: versi ringan HTTP untuk perangkat sangat terbatas
+
+3. Topologi:
+   - Star: semua node ke gateway (paling umum)
+   - Mesh: node saling relay (Zigbee, Thread) → jangkauan luas
+
+4. Alamat & Konfigurasi:
+   - IP statis vs DHCP: untuk perangkat tetap, gunakan IP statis
+   - MAC address: unik per perangkat, bisa dipakai untuk identifikasi
+   - Port forwarding: untuk akses perangkat dari internet (hati-hati keamanan!)
+
+5. Troubleshooting:
+   - Ping untuk cek konektivitas dasar
+   - Wireshark untuk analisis paket (MQTT, Modbus TCP)
+   - Cek RSSI (sinyal Wi-Fi) — < -70 dBm = lemah
+
+6. Daya & Jaringan:
+   - PoE (Power over Ethernet): kirim daya + data lewat kabel UTP
+   - Untuk sensor baterai: hindari polling terus-menerus — gunakan event-driven

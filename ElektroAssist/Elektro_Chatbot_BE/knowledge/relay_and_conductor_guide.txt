@@ -1,0 +1,25 @@
+Relay & Contactor – Pemilihan & Aplikasi
+
+- Relay elektromekanik:
+  • Coil: 5V, 12V, 24V DC atau 220V AC
+  • Kontak: NO (normally open), NC (normally closed)
+  • Rating: misal 10A/250VAC — jangan exceed!
+
+- Solid State Relay (SSR):
+  • Tidak ada suara, tahan jutaan siklus
+  • Tapi butuh heatsink jika arus >2A
+  • Rentan surge — tambah snubber/fuse
+
+- Contactor:
+  • Untuk arus tinggi (>20A)
+  • Punya auxiliary contact untuk interlock
+  • Butuh coil voltage sesuai kontrol (24V/220V)
+
+- Perlindungan:
+  • Diode flyback untuk coil DC relay
+  • RC snubber untuk coil AC
+  • Fuse di sisi beban
+
+- Aplikasi:
+  • Relay 5V: kontrol lampu dari Arduino
+  • Contactor 3-fasa: kontrol motor industri

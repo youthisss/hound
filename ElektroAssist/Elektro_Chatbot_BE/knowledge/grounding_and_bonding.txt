@@ -1,0 +1,34 @@
+Pembumian (Grounding) & Penyamaan Potensial
+
+1. Jenis Sistem Grounding (IEC):
+   - TT: Netral trafo & body perangkat di-ground terpisah → butuh ELCB
+   - TN-S: Netral & ground terpisah sejak sumber → umum di gedung
+   - TN-C-S: PEN (gabungan netral-ground) di luar, dipisah di dalam → umum di rumah Indonesia
+
+2. Elektroda Grounding:
+   - Batang tembaga ≥16 mm², panjang ≥2 m
+   - Ditanam vertikal, di lokasi lembab
+   - Minimal 2 batang, jarak ≥3 m → paralel untuk turunkan resistansi
+
+3. Resistansi Maksimum:
+   - Rumah: ≤5 ohm
+   - Gardu listrik: ≤0.5 ohm
+   - Tower transmisi: ≤10 ohm
+
+4. Penyamaan Potensial (Bonding):
+   - Sambung semua bagian logam (pipa air, struktur, peralatan) ke sistem ground
+   - Hindari beda potensial saat gangguan
+
+5. Kabel Grounding:
+   - Warna: hijau-kuning (wajib!)
+   - Ukuran: minimal = kabel fasa (untuk instalasi utama)
+   - Tidak boleh ada saklar atau fuse di jalur ground
+
+6. Pengukuran:
+   - Gunakan Earth Ground Tester (metode 3-point fall-of-potential)
+   - Ukur saat tanah kering → nilai terburuk
+
+7. Bahaya Grounding Buruk:
+   - Tegangan sentuh tinggi saat gangguan
+   - ELCB tidak trip
+   - Kerusakan peralatan akibat surge

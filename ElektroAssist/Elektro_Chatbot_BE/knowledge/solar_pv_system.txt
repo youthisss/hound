@@ -1,0 +1,40 @@
+Sistem Pembangkit Listrik Tenaga Surya (PLTS) – Prinsip & Desain
+
+1. Komponen Utama:
+   - Panel surya (PV module): konversi cahaya → DC
+   - Inverter: ubah DC → AC (pure sine wave untuk elektronik)
+   - Baterai (opsional): simpan energi untuk malam/hari hujan
+   - Charge controller (jika ada baterai): atur pengisian
+   - Struktur penyangga: atap atau ground-mounted
+
+2. Jenis Sistem:
+   - On-grid: terhubung PLN, tidak butuh baterai, bisa ekspor listrik
+   - Off-grid: mandiri, butuh baterai, untuk daerah terpencil
+   - Hybrid: on-grid + baterai, backup saat mati lampu
+
+3. Desain PLTS On-Grid:
+   - Ukuran sistem (kWp) = total watt panel
+   - Contoh: 10 panel × 370W = 3.7 kWp
+   - Produksi harian ≈ kWp × 4–5 jam (Indonesia)
+   - Inverter rating ≥ 80% dari daya panel (misal: 3 kW inverter untuk 3.7 kWp)
+
+4. Desain PLTS Off-Grid:
+   - Hitung beban harian (Wh): jumlah perangkat × watt × jam
+   - Kapasitas baterai (Ah) = (Beban harian / V_bat) / DoD / efisiensi
+     Contoh: 2000Wh, 24V, DoD 50%, efisiensi 85% → Ah = 2000/(24×0.5×0.85) ≈ 196Ah
+   - Panel harus cukup isi baterai dalam 4–5 jam sinar
+
+5. Regulasi Indonesia:
+   - PLTS < 200 kW tidak perlu IUPTLS
+   - Ekspor listrik ke PLN: skema net metering (kredit kWh)
+   - Inverter harus memenuhi SPLN 325:2017
+
+6. Instalasi Aman:
+   - Gunakan DC isolator & fuse DC di string panel
+   - Grounding panel & struktur wajib
+   - Kabel DC: PV1-F atau kabel double insulated
+   - Jarak maks DC: kurangi rugi daya (gunakan tegangan tinggi: 24V/48V)
+
+7. Troubleshooting:
+   - Daya rendah? → cek bayangan, kotoran panel, suhu tinggi
+   - Inverter error? → cek tegangan DC, grounding, frekuensi jaringan

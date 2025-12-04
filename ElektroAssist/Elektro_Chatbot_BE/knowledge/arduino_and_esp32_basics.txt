@@ -1,0 +1,22 @@
+Mikrokontroler Populer – Aturan & Batasan
+
+- Arduino Uno (ATmega328P):
+  • Tegangan: 5V
+  • Arus maks per pin: 40 mA
+  • Arus total semua pin: 200 mA
+  • Jangan langsung drive relay/motor — gunakan transistor atau modul driver.
+
+- ESP32:
+  • Tegangan: 3.3V (pin GPIO hanya 3.3V tolerant!)
+  • Arus maks per pin: ~40 mA (total ~500 mA dari regulator)
+  • Deep sleep current: ~10 µA
+  • Built-in WiFi/BLE — matikan jika tidak dipakai untuk hemat daya.
+
+- Sensor umum:
+  • DHT22: butuh pull-up 4.7kΩ ke VCC
+  • MQ-2 (gas): butuh pemanasan 20-60 detik sebelum akurat
+  • LM35: output 10 mV/°C — jangan pakai kabel panjang (>30 cm)
+
+- Power supply:
+  • Jangan power ESP32 via pin 5V jika pakai USB — bisa merusak regulator.
+  • Untuk sensor 5V + ESP32 3.3V: gunakan level shifter.

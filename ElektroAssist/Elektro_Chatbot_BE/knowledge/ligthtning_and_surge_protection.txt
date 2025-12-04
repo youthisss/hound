@@ -1,0 +1,22 @@
+Proteksi Petir & Surge
+
+- SPD (Surge Protection Device):
+  • Tipe I: di panel utama (untuk petir langsung)
+  • Tipe II: di sub-panel (untuk surge induksi)
+  • Tipe III: di perangkat sensitif
+
+- Grounding petir:
+  • Minimal 2 elektroda, jarak >3m
+  • Kabel down conductor: tembaga minimal 50 mm²
+
+- Bonding:
+  • Semua ground (listrik, telekom, petir) harus disambung jadi satu sistem
+
+- Untuk rumah:
+  • Cukup SPD Tipe II + grounding baik
+  • Pasang di MCB utama
+
+- Indikator SPD:
+  • Biasanya punya jendela warna (hijau = baik, merah = rusak)
+
+- Jangan andalkan hanya pada stopkontak surge protector — itu Tipe III!

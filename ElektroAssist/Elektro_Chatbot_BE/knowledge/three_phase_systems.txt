@@ -1,0 +1,27 @@
+Sistem Tiga Fasa – Prinsip & Perhitungan
+
+- Tegangan:
+  • Line-to-line (V_LL): 380V (Indonesia)
+  • Line-to-neutral (V_LN): 220V
+
+- Hubungan:
+  • Bintang (Y): V_LL = √3 × V_LN, I_fasa = I_line
+  • Delta (Δ): V_LL = V_fasa, I_line = √3 × I_fasa
+
+- Daya total:
+  P = √3 × V_LL × I × PF  (watt)
+  S = √3 × V_LL × I        (VA)
+
+- Beban seimbang:
+  • Arus netral ≈ 0 → netral bisa dikecilkan
+- Beban tidak seimbang:
+  • Arus netral = penjumlahan vektor arus fasa
+  • Bisa lebih besar dari arus fasa!
+
+- Urutan fasa:
+  • R-S-T (atau L1-L2-L3)
+  • Penting untuk arah putaran motor
+
+- Pengukuran:
+  • Gunakan clamp meter 3-fasa atau 3 buah clamp
+  • Ukur arus tiap fasa terpisah

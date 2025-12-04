@@ -1,0 +1,28 @@
+Alat Ukur Listrik & Cara Pakai
+
+- Multimeter:
+  • Ukur V, I, R
+  • Untuk arus: sambung seri, pindah probe ke soket arus
+  • Jangan ukur arus saat probe di soket tegangan → bisa rusak!
+
+- Clamp Meter:
+  • Ukur arus AC tanpa putus kabel
+  • Untuk arus DC, butuh clamp berbasis Hall effect
+
+- Osiloskop:
+  • Tampilkan bentuk gelombang tegangan vs waktu
+  • Atur timebase (detik/div) dan volt/div
+  • Gunakan probe 10x untuk sinyal tinggi frekuensi
+
+- Megger:
+  • Ukur resistansi isolasi (kabel, motor)
+  • Tegangan uji: 500V atau 1000V DC
+  • Nilai baik: >1 MΩ
+
+- Power Quality Analyzer:
+  • Ukur THD, faktor daya, harmonik, flicker
+  • Penting untuk instalasi industri
+
+- Keselamatan:
+  • Pastikan alat ukur sesuai kategori (CAT II/III/IV)
+  • Jangan ukur tegangan > rating alat

@@ -1,0 +1,24 @@
+(Perbandingan teknologi nirkabel untuk sistem elektro)
+Perbandingan Protokol Nirkabel – Pemilihan untuk Aplikasi Elektro
+
+| Fitur          | Wi-Fi (2.4 GHz) | Bluetooth/BLE | Zigbee (2.4 GHz) | LoRa (923 MHz) | NB-IoT |
+|----------------|------------------|----------------|-------------------|----------------|--------|
+| Jarak          | <100 m          | <30 m         | 10–100 m         | 2–15 km        | Seluler |
+| Daya           | Tinggi          | Rendah        | Rendah            | Sangat Rendah  | Rendah |
+| Throughput     | 10–100 Mbps     | 1–2 Mbps      | 250 kbps          | 0.3–50 kbps    | 200 kbps |
+| Topologi       | Star            | P2P/Mesh      | Mesh              | Star           | Star |
+| Latensi        | Rendah          | Rendah        | Sedang            | Tinggi         | Sedang |
+| Biaya Modul    | Rendah          | Rendah        | Rendah            | Sedang         | Tinggi |
+| Contoh Aplikasi| HMI, streaming  | Beacon, sensor| Lighting, HVAC   | Smart meter, sensor rural | Smart meter kota |
+
+Panduan Pemilihan:
+- Butuh bandwidth tinggi? → **Wi-Fi** (misal: kamera thermal)
+- Butuh hemat baterai & jarak menengah? → **BLE atau Zigbee**
+- Jarak jauh di area rural? → **LoRa**
+- Infrastruktur seluler tersedia? → **NB-IoT/LTE-M**
+- Kontrol lampu gedung? → **Zigbee (mesh self-healing)**
+
+Catatan untuk Elektro:
+- Hindari 2.4 GHz di dekat inverter/PLC — noise tinggi!
+- LoRa lebih tahan noise karena frekuensi sub-GHz
+- BLE 5.0 punya fitur long-range (2x jarak)

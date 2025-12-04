@@ -1,0 +1,36 @@
+PLC (Programmable Logic Controller) – Dasar & Aplikasi
+
+1. Fungsi Utama:
+   - Menggantikan relay elektromekanik konvensional
+   - Mengontrol mesin/lini produksi berdasarkan logika input-output
+
+2. Komponen Utama:
+   - CPU: prosesor & memori program
+   - Modul Input: menerima sinyal dari sensor (NPN/PNP, 24V DC)
+   - Modul Output: menggerakkan aktuator (relay, transistor, triac)
+   - Power Supply: biasanya 24V DC
+
+3. Bahasa Pemrograman (IEC 61131-3):
+   - Ladder Logic (LD): paling umum, mirip rangkaian relay
+   - Function Block Diagram (FBD): untuk kontrol proses
+   - Structured Text (ST): mirip Pascal/C, untuk logika kompleks
+
+4. Contoh Aplikasi:
+   - Motor starter dengan interlock
+   - Sistem conveyor dengan sensor posisi
+   - Kontrol tangki level cairan
+
+5. Vendor Populer:
+   - Siemens (S7-1200/1500)
+   - Allen-Bradley (CompactLogix)
+   - Mitsubishi (FX series)
+   - Schneider (Modicon)
+
+6. Komunikasi:
+   - Protokol: Modbus RTU/TCP, Profibus, Ethernet/IP
+   - HMI: layar sentuh untuk monitoring & kontrol
+
+7. Troubleshooting:
+   - Cek lampu status modul (RUN, ERR, I/O)
+   - Gunakan software untuk monitor variabel real-time
+   - Pastikan sensor/aktuator terhubung benar (NPN vs PNP)

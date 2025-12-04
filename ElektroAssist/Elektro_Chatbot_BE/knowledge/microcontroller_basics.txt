@@ -1,0 +1,9 @@
+Dasar Mikrokontroler
+
+- Arduino Uno: ATmega328P, 5V, 16 MHz, 14 pin digital, 6 ADC.
+- ESP32: dual-core, WiFi/BLE, 3.3V, 34 GPIO, ADC 12-bit.
+- Input digital: HIGH jika >0.7×VCC, LOW jika <0.3×VCC.
+- Output digital: arus maks per pin ≈ 20–40 mA (jangan langsung drive relay!).
+- PWM: simulasi analog via duty cycle (misal: analogWrite(128) = 50% di Arduino).
+- Timer/counter: untuk delay akurat, pengukuran frekuensi.
+- Jangan lupa: selalu init pin sebagai INPUT atau OUTPUT di setup().

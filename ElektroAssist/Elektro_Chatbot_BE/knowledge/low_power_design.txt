@@ -1,0 +1,10 @@
+Desain Elektronika Arus Rendah
+
+- Mode tidur mikrokontroler (sleep, deep sleep) bisa turunkan arus ke µA.
+- Pilih LDO dengan quiescent current rendah (misal: MCP1700: 1.6 µA).
+- Matikan modul tidak terpakai (WiFi, Bluetooth) saat idle.
+- Gunakan clock external rendah frekuensi (32.768 kHz) untuk RTC.
+- Hindari pull-up resistor bernilai rendah — gunakan 10k–100kΩ.
+- Untuk baterai: hitung lifetime = (Kapasitas baterai dalam mAh) / (Arus rata-rata dalam mA).
+- Regulator switching (buck) lebih efisien daripada linear untuk selisih tegangan besar.
+- Contoh: ESP32 rata-rata 80 mA saat aktif, tapi bisa <10 µA di deep sleep.

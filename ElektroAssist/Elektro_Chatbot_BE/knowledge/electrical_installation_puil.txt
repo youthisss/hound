@@ -1,0 +1,20 @@
+Aturan Instalasi Listrik (Berdasarkan PUIL 2011 – Versi Publik)
+
+- Setiap sirkit akhir harus dilindungi oleh MCB sesuai kapasitas kabel.
+- Kabel dalam tembok harus dipasang dalam conduit (pipa pelindung PVC/logam).
+- Jarak aman antar kabel:
+  • Listrik & air: ≥20 cm
+  • Listrik & gas: ≥50 cm
+- Stopkontak:
+  • Ketinggian: 15–30 cm dari lantai (umum), ≥120 cm di dapur
+  • Di kamar mandi: hanya boleh tipe IP44 dan >60 cm dari shower/bak
+- Pencahayaan:
+  • Minimal 1 titik per ruang
+  • Saklar di dekat pintu masuk
+- Arde (grounding):
+  • Wajib untuk semua peralatan logam
+  • Terminal arde terpisah dari netral di panel utama
+- Beban maksimal:
+  • Sirkit lampu: ≤500W
+  • Sirkit stopkontak: ≤1500W (untuk 2.5 mm² + MCB 16A)
+- Faktor keamanan: beban nyata ≤80% kapasitas sirkit.
