@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+/* Custom Calendar Styles */
+.react-calendar {
+    width: 100%;
+    background: white;
+    border: none;
+    font-family: inherit;
+    line-height: 1.125em;
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+.react-calendar__navigation button {
+    color: #166534;
+    min-width: 44px;
+    background: none;
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 8px;
+}
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+    background-color: #f0fdf4;
+    border-radius: 8px;
+}
+.react-calendar__month-view__days__day--weekend {
+    color: #ef4444;
+}
+.react-calendar__tile {
+    padding: 10px 6px;
+    background: none;
+    text-align: center;
+    line-height: 16px;
+    font-size: 14px;
+}
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+    background-color: #f0fdf4;
+    border-radius: 8px;
+    color: #166534;
+}
+.react-calendar__tile--now {
+    background: #fef08a;
+    border-radius: 8px;
+    font-weight: bold;
+    color: #854d0e;
+}
+.react-calendar__tile--now:enabled:hover,
+.react-calendar__tile--now:enabled:focus {
+    background: #fde047;
+}
+.react-calendar__tile--active {
+    background: #166534 !important;
+    border-radius: 8px;
+    color: white !important;
+}
+abbr[title] {
+    text-decoration: none;
+}
+
+:root {
+    --foreground-rgb: 0, 0, 0;
+    --background-start-rgb: 214, 219, 220;
+    --background-end-rgb: 255, 255, 255;
+}
+
+body {
+    color: rgb(var(--foreground-rgb));
+    background: #f9fafb; /* gray-50 */
+}
+
+/* --- CUSTOM CALENDAR STYLES (Agar Tidak Aneh) --- */
+.react-calendar {
+    width: 100% !important;
+    background: none !important;
+    border: none !important;
+    font-family: inherit;
+    line-height: 1.125em;
+}
+
+.react-calendar__navigation {
+    display: flex;
+    margin-bottom: 10px;
+}
+
+.react-calendar__navigation button {
+    min-width: 44px;
+    background: none;
+    font-size: 16px;
+    font-weight: bold;
+    color: #166534; /* green-800 */
+}
+
+.react-calendar__navigation button:disabled {
+    background-color: #f0f0f0;
+}
+
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+    background-color: #ecfdf5; /* green-50 */
+    border-radius: 8px;
+}
+
+.react-calendar__month-view__weekdays {
+    text-align: center;
+    text-transform: uppercase;
+    font-weight: bold;
+    font-size: 0.75em;
+    color: #9ca3af; /* gray-400 */
+    margin-bottom: 8px;
+}
+
+.react-calendar__month-view__weekdays__weekday abbr {
+    text-decoration: none;
+}
+
+.react-calendar__month-view__days__day--weekend {
+    color: #ef4444; /* red-500 */
+}
+
+.react-calendar__tile {
+    max-width: 100%;
+    padding: 10px 6.6667px;
+    background: none;
+    text-align: center;
+    line-height: 16px;
+    font-size: 14px;
+    border-radius: 12px;
+    transition: all 0.2s;
+}
+
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+    background-color: #d1fae5; /* green-100 */
+    color: #065f46;
+}
+
+.react-calendar__tile--now {
+    background: #fef08a !important; /* yellow-200 */
+    color: #854d0e;
+    font-weight: bold;
+}
+
+.react-calendar__tile--active {
+    background: #10b981 !important; /* emerald-500 */
+    color: white !important;
+    box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.4);
+}
+
+/* Hilangkan garis fokus default */
+button:focus {
+    outline: none;
+}
+
+.admin-calendar-wrapper .react-calendar__navigation button {
+    color: #2563eb; /* blue-600 */
+}
+
+.admin-calendar-wrapper .react-calendar__navigation button:enabled:hover,
+.admin-calendar-wrapper .react-calendar__navigation button:enabled:focus {
+    background-color: #eff6ff; /* blue-50 */
+}
+
+.admin-calendar-wrapper .react-calendar__tile:enabled:hover,
+.admin-calendar-wrapper .react-calendar__tile:enabled:focus {
+    background-color: #dbeafe; /* blue-100 */
+    color: #1e40af;
+}
+
+.admin-calendar-wrapper .react-calendar__tile--now {
+    background: #fef9c3 !important; /* yellow-100 */
+    color: #854d0e;
+}
+
+.admin-calendar-wrapper .react-calendar__tile--active {
+    background: #2563eb !important; /* blue-600 (Ganti Hijau jadi Biru) */
+    color: white !important;
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4);
+}
