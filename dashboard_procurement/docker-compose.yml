@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rygell-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rygell
+      POSTGRES_PASSWORD: rygell_secret
+      POSTGRES_DB: rygell_dashboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  rygell-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rygell-api
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: rygell
+      DB_PASSWORD: rygell_secret
+      DB_NAME: rygell_dashboard
+      SERVER_PORT: 8080
+      UPLOAD_DIR: /app/uploads
+      JWT_SECRET: rygell_super_secret_change_me
+      JWT_EXPIRY_HOURS: 24
+      ADMIN_NAME: Administrator
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads:/app/uploads
+
+  rygell-web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rygell-web
+    restart: unless-stopped
+    depends_on:
+      - rygell-api
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
+  uploads:

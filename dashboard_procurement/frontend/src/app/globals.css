@@ -1,0 +1,35 @@
+
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+}
+
+/* Refine Edit Button Overrides (Green Theme) */
+.refine-edit-button:hover,
+.refine-edit-button:focus {
+  color: #10b981 !important;
+  border-color: #10b981 !important;
+}
+
+/* Refine Delete Button Overrides (Red Theme) */
+.refine-delete-button:hover,
+.refine-delete-button:focus {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+/* Card overrides to bypass AntD version incompatibilities with styles.body */
+.no-padding-card .ant-card-body {
+  padding: 0 !important;
+}
+
+/* Hide ALL scrollbars globally for a clean dashboard look (can still scroll) */
+* {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE and Edge */
+}
+
+*::-webkit-scrollbar {
+  display: none !important; /* Chrome, Safari, and Opera */
+}
