@@ -98,7 +98,6 @@ def analyze_with_llm(artifacts: Artifacts, config: Config) -> tuple[dict, dict]:
 
     if not content:
         raise LlmError("empty LLM response")
-    
     # Strip markdown code fences if present
     content_clean = content.strip()
     if content_clean.startswith("```"):

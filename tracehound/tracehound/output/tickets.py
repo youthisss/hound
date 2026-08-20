@@ -159,7 +159,6 @@ def create_github_ticket(
         raise GithubError("GH_REPO and GH_TOKEN are required for --gh")
     if "/" not in repo:
         raise GithubError(f"GH_REPO must be owner/name, got {repo!r}")
-    
     parsed = urlsplit(api_base)
     local_hosts = {"localhost", "127.0.0.1", "::1"}
     if parsed.scheme not in {"https", "http"} or not parsed.hostname:
