@@ -1,0 +1,9 @@
+$ make build
+cc -Wall -o app main.c utils.c
+main.c:42:17: error: implicit declaration of function 'compute_total'; did you mean 'compute_subtotal'? [-Wimplicit-function-declaration]
+   42 |     int total = compute_total(order);
+      |                 ^~~~~~~~~~~~
+utils.c:10:3: error: conflicting types for 'compute_total'
+   10 |   int compute_total(Order *o) { return o->qty * o->price; }
+      |   ^~~~~~~~~~~~~
+make: *** [Makefile:7: app] Error 1

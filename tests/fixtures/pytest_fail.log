@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.4, pytest-8.2.1, pluggy-1.5.0
+rootdir: /home/ci/build/app
+collected 3 items
+
+tests/test_cart.py::test_cart_total FAILED                                   [ 33%]
+tests/test_cart.py::test_cart_add PASSED                                     [ 66%]
+tests/test_cart.py::test_cart_empty PASSED                                   [100%]
+
+============================== FAILURES ==============================
+_______________________________ test_cart_total _______________________________
+
+    def test_cart_total():
+        cart = Cart()
+        cart.add(Item("apple", price=2.0))
+        cart.add(Item("banana", price=3.0))
+>       assert cart.total == 10.0
+E       assert 5.0 == 10.0
+E        +  where 5.0 = <app.cart.Cart object at 0x7f8a1c2d3b40>.total
+
+tests/test_cart.py:12: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_cart.py::test_cart_total - assert 5.0 == 10.0
+1 failed, 2 passed in 0.04s

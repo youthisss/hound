@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/ci/app/src/worker.py", line 88, in process
+    result = handler(event)
+  File "/home/ci/app/src/handlers/payment.py", line 34, in handle_payment
+    return gateway.charge(card, amount)
+  File "/home/ci/app/src/vendor/gateway.py", line 120, in charge
+    raise ConnectionError("upstream timeout")

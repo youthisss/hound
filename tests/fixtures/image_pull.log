@@ -1,0 +1,3 @@
+deployment/api configured
+Warning  Failed     12s (x3 over 30s)  kubelet  Failed to pull image "registry.example.com/api:missing": manifest unknown
+Warning  ImagePullBackOff  10s  kubelet  Back-off pulling image "registry.example.com/api:missing"

@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.4, pytest-8.2.1, pluggy-1.5.0
+rootdir: /home/ci/build/worker
+collected 4 items
+
+tests/test_scheduler.py::test_scheduler_flaky RERUN                           [ 25%]
+tests/test_scheduler.py::test_scheduler_flaky FAILED                          [ 25%]
+tests/test_scheduler.py::test_scheduler_flaky PASSED                          [ 50%]
+tests/test_scheduler.py::test_scheduler_ordering PASSED                       [ 75%]
+tests/test_scheduler.py::test_scheduler_priority PASSED                       [100%]
+
+============================== FAILURES ==============================
+______________________________ test_scheduler_flaky ______________________________
+    def test_scheduler_flaky():
+        runner = SchedulerRunner()
+        tasks = runner.build_tasks()
+>       assert len(tasks) == 3
+E       assert 2 == 3
+tests/test_scheduler.py:18: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_scheduler.py::test_scheduler_flaky - assert 2 == 3
+3 passed, 1 failed, 1 rerun in 2.10s

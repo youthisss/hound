@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.4, pytest-8.2.1, pluggy-1.5.0
+rootdir: /home/ci/build/worker
+collected 2 items
+
+tests/test_cache.py::test_cache_hit PASSED                                  [ 50%]
+tests/test_cache.py::test_cache_eviction FAILED                             [100%]
+
+============================== FAILURES ==============================
+_____________________________ test_cache_eviction _____________________________
+    def test_cache_eviction():
+        cache = LruCache(2)
+        cache.put("a", 1)
+>       cache.put("b", 2)
+E       Fatal Python error: Segmentation fault
+tests/test_cache.py:12
+Segmentation fault (core dumped)
+=========================== short test summary info ============================
+1 failed in 0.05s

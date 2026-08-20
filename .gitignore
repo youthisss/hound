@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+rca_output/
+.env
+.rca_agent/
+.pytest_cache/
+.hound-agent/
+hound-agent-output/

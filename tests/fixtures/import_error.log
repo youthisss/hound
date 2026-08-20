@@ -1,0 +1,8 @@
+$ python app/main.py
+Traceback (most recent call last):
+  File "/home/ci/app/app/main.py", line 3, in <module>
+    from app.cart import Cart
+ModuleNotFoundError: No module named 'app'
+  File "/home/ci/app/app/cart.py", line 1, in <module>
+    import orjson
+ImportError: cannot import name 'orjson' from 'orjson' (unknown location)

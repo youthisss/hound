@@ -1,0 +1,17 @@
+.venv
+__pycache__
+*.pyc
+hound-agent-output
+demo
+demo_batch
+demo_tui
+.pytest_cache
+.git
+.env
+.env.*
+.hound-agent
+.hound-agent.yml
+.hound-agent.yaml
+hound-agent-output
+*.pem
+*.key
