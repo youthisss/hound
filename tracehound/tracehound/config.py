@@ -272,7 +272,7 @@ def load_config(
 
     comps = _mapping_section(yaml_cfg, "components")
     cfg.components = {str(k): str(v) for k, v in comps.items()}
-    
+
     dedup_cfg = _mapping_section(yaml_cfg, "dedup")
     state = dedup_cfg.get("state_file")
     if state:
@@ -303,7 +303,7 @@ def load_config(
         raise ValueError("policy.recurrence_threshold must be an integer") from exc
     if not 2 <= cfg.recurrence_threshold <= 100:
         raise ValueError("policy.recurrence_threshold must be in [2, 100]")
-            
+
     gh = _mapping_section(yaml_cfg, "github")
     if gh.get("repo"):
         cfg.gh_repo = str(gh["repo"])
