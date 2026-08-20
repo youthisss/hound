@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.4, pytest-8.2.1, pluggy-1.5.0
+rootdir: /home/ci/build/worker
+collected 3 items
+
+tests/test_api.py::test_healthz PASSED                                      [ 33%]
+tests/test_api.py::test_metrics PASSED                                      [ 66%]
+tests/test_api.py::test_slow_endpoint FAILED                                [100%]
+
+============================== FAILURES ==============================
+_____________________________ test_slow_endpoint ______________________________
+    def test_slow_endpoint():
+        resp = client.get("/healthz")
+>       assert resp.status_code == 200
+E       TimeoutError: Connection to upstream timed out after 30s
+tests/test_api.py:12: TimeoutError
+=========================== short test summary info ============================
+FAILED tests/test_api.py::test_slow_endpoint - TimeoutError: upstream timed out after 30s
+1 failed in 30.5s
