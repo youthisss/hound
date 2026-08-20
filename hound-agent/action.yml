@@ -1,0 +1,48 @@
+name: "Hound Agent"
+description: "Auto-investigate CI/CD failures: root cause -> triage -> ticket draft."
+branding:
+  icon: "search"
+  color: "blue"
+
+inputs:
+  log:
+    description: "Path to the failure log file"
+    required: true
+  repo:
+    description: "Path to the repository checkout (context)"
+    required: false
+    default: "${{ github.workspace }}"
+  out:
+    description: "Output directory"
+    required: false
+    default: "${{ github.workspace }}/hound-agent-output"
+  offline:
+    description: "Force rule-based analysis (no LLM)"
+    required: false
+    default: "true"
+outputs:
+  report:
+    description: "Path to the primary RCA JSON report"
+  ticket:
+    description: "Path to the primary ticket draft"
+  severity:
+    description: "Primary failure severity"
+  kind:
+    description: "Primary failure kind"
+  stage:
+    description: "Primary failure stage"
+  dedup_key:
+    description: "Primary failure fingerprint"
+runs:
+  using: "docker"
+  image: "Dockerfile.action"
+  args:
+    - analyze
+    - --log
+    - ${{ inputs.log }}
+    - --repo
+    - ${{ inputs.repo }}
+    - --out
+    - ${{ inputs.out }}
+    - --offline-value
+    - ${{ inputs.offline }}
