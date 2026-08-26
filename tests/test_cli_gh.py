@@ -1,7 +1,6 @@
 import json
 
 from hound_agent.cli import main
-from tests.conftest import fixture
 from tests.test_github import FakeResponse
 
 FIXTURE_ROOT = __import__("pathlib").Path(__file__).parent / "fixtures"

@@ -1,0 +1,15 @@
+{
+  "eval_case_version": "1.0",
+  "id": "dev-pytest-failure",
+  "artifact": "pytest-failure.log",
+  "expected": {
+    "stage": "test",
+    "kind": "test_failure",
+    "primary_event": {"stage": "test", "kind": "test_failure"},
+    "failed_tests": ["test_cart_total"],
+    "stack_frames": [{"file": "tests/test_cart.py", "line": 12, "function": ""}],
+    "severity_range": ["medium"],
+    "duplicate_group": "cart-total",
+    "redactions": []
+  }
+}

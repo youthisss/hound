@@ -9,7 +9,9 @@ from urllib.parse import urlsplit
 
 import yaml
 
-from hound_agent.output.report import _atomic_write
+from hound_agent.fsio import atomic_write
+from hound_agent.models import KINDS
+from hound_agent.trust import policy_for, resolve_source_class
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_CONFIG_PATH = Path(".hound-agent.yml")
@@ -42,7 +44,7 @@ PROVIDERS: dict[str, dict] = {
     },
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "default_model": "gemini-2.0-flash",
+        "default_model": "gemini-3.7-flash",
         "env": {"api_key": "GEMINI_API_KEY", "model": "GEMINI_MODEL", "base_url": "GEMINI_BASE_URL"},
     },
     "groq": {
@@ -59,6 +61,11 @@ PROVIDERS: dict[str, dict] = {
         "base_url": "https://api.deepseek.com/v1",
         "default_model": "deepseek-chat",
         "env": {"api_key": "DEEPSEEK_API_KEY", "model": "DEEPSEEK_MODEL", "base_url": "DEEPSEEK_BASE_URL"},
+    },
+    "9router": {
+        "base_url": "http://127.0.0.1:20128/v1",
+        "default_model": "ag/gemini-3.7-flash-low",
+        "env": {"api_key": "NINE_ROUTER_API_KEY", "model": "NINE_ROUTER_MODEL", "base_url": "NINE_ROUTER_BASE_URL"},
     },
     "azure": {
         "base_url": None,  # Azure needs a custom base URL, always
@@ -79,10 +86,24 @@ def _pick_provider(provider: str | None) -> str:
     else:
         p = provider.strip().lower()
 
-    if p not in PROVIDERS:
-        sys.stderr.write(f"Warning: Unknown provider '{p}', falling back to 'custom'\n")
-        p = "custom"
+    if p not in _effective_providers():
+        raise ValueError(f"unknown provider: {p}")
     return p
+
+
+def _effective_providers() -> dict[str, dict]:
+    from hound_agent.providers import load_custom_providers
+
+    providers = dict(PROVIDERS)
+    for provider_id, definition in load_custom_providers().items():
+        if provider_id not in providers:
+            providers[provider_id] = {
+                "base_url": definition.get("base_url"),
+                "default_model": definition.get("default_model", ""),
+                "models": definition.get("models", []),
+                "env": {},
+            }
+    return providers
 
 
 def _env(name: str | None) -> str | None:
@@ -101,6 +122,7 @@ class Config:
     timeout: float = 120.0
     max_tokens: int = 2048
     max_retries: int = 3
+    max_concurrency: int = 4
     offline: bool = False
     redact: bool = True
     components: dict[str, str] = field(default_factory=dict)
@@ -108,6 +130,8 @@ class Config:
     state_backend: str = "file"
     state_url: str = ""
     state_token: str = ""
+    dedup_max_entries: int = 50000
+    dedup_retention_days: int = 90
     gh_token: str = ""
     gh_repo: str = ""
     gh_api_base: str = "https://api.github.com"
@@ -121,10 +145,23 @@ class Config:
     slack_webhook: str = ""
     severity_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     recurrence_threshold: int = 3
+    # Cost control (M19.4): reuse past analyses instead of re-calling the LLM,
+    # skip the LLM for cheap kinds, and cap spending.
+    reuse: bool = True
+    reuse_after_occurrences: int = 3
+    routing: str = "all"
+    skip_kinds: list[str] = field(default_factory=list)
+    pricing: dict[str, dict] = field(default_factory=dict)
+    require_llm: bool = False
+    source_class: str = "local_artifact"
+    allow_source_context: bool = True
+    allow_enrichment: bool = True
+    allow_llm: bool = True
+    allow_delivery: bool = True
 
     @property
     def llm_enabled(self) -> bool:
-        if self.offline:
+        if self.offline or not self.allow_llm:
             return False
         if self.api_key:
             return True
@@ -142,6 +179,8 @@ def load_config(
     api_key: str | None = None,
     redact: bool | None = None,
     max_retries: int | None = None,
+    require_llm: bool | None = None,
+    source_class: str | None = None,
 ) -> Config:
     yaml_cfg: dict = {}
     if config_path:
@@ -156,11 +195,17 @@ def load_config(
             raise ValueError("config root must be a mapping")
 
     llm_cfg = _mapping_section(yaml_cfg, "llm")
+    trust_cfg = _mapping_section(yaml_cfg, "trust")
+    configured_source = trust_cfg.get("source_class")
+    if configured_source is not None and not isinstance(configured_source, str):
+        raise ValueError("trust.source_class must be a string")
+    trust = policy_for(resolve_source_class(source_class, configured_source))
+    effective_offline = offline or not trust.allow_llm
 
     # 1) Provider selection: CLI flag > YAML > TH_API_PROVIDER > "openai"
     prov_input = provider or llm_cfg.get("provider")
     provider = _pick_provider(str(prov_input) if prov_input else None)
-    preset = PROVIDERS.get(provider, PROVIDERS["custom"])
+    preset = _effective_providers()[provider]
     env = preset.get("env", {})
 
     # 2) Precedence ladder: CLI > YAML > TH_* > Provider env > OPENAI_* env > Preset default
@@ -176,6 +221,7 @@ def load_config(
         or yaml_key
         or os.environ.get("TH_API_KEY")
         or _env(p_key_env)
+        or __import__("hound_agent.credentials", fromlist=["get_api_key"]).get_api_key(provider)
         or ""
     )
 
@@ -211,11 +257,11 @@ def load_config(
 
     if not str(model).strip():
         raise ValueError("model must not be empty")
-    if provider == "anthropic" and not offline and not base_url:
+    if provider == "anthropic" and not effective_offline and not base_url:
         raise ValueError("anthropic requires ANTHROPIC_BASE_URL pointing to an OpenAI-compatible proxy")
-    if provider in {"azure", "custom"} and not offline and not base_url:
+    if provider in {"azure", "custom"} and not effective_offline and not base_url:
         raise ValueError(f"{provider} requires an OpenAI-compatible HTTPS base_url")
-    if base_url and not offline:
+    if base_url and not effective_offline:
         parsed_url = urlsplit(str(base_url))
         if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
             raise ValueError(f"base_url must be an HTTP(S) URL, got {base_url!r}")
@@ -227,13 +273,16 @@ def load_config(
     timeout_val = llm_cfg.get("timeout", 120.0)
     tokens_val = llm_cfg.get("max_tokens", 2048)
     retries_val = llm_cfg.get("max_retries", 3)
+    concurrency_val = llm_cfg.get("max_concurrency", 4)
 
     try:
-        temperature = float(temp_val if offline else os.environ.get("TH_TEMPERATURE", temp_val))
-        timeout = float(timeout_val if offline else os.environ.get("TH_TIMEOUT", timeout_val))
-        max_tokens = int(tokens_val if offline else os.environ.get("TH_MAX_TOKENS", tokens_val))
-        retry_source = max_retries if max_retries is not None else (retries_val if offline else os.environ.get("TH_MAX_RETRIES", retries_val))
+        temperature = float(temp_val if effective_offline else os.environ.get("TH_TEMPERATURE", temp_val))
+        timeout = float(timeout_val if effective_offline else os.environ.get("TH_TIMEOUT", timeout_val))
+        max_tokens = int(tokens_val if effective_offline else os.environ.get("TH_MAX_TOKENS", tokens_val))
+        retry_source = max_retries if max_retries is not None else (retries_val if effective_offline else os.environ.get("TH_MAX_RETRIES", retries_val))
         resolved_retries = int(retry_source)
+        concurrency_source = concurrency_val if effective_offline else os.environ.get("TH_MAX_CONCURRENCY", concurrency_val)
+        resolved_concurrency = int(concurrency_source)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"invalid LLM numeric configuration: {exc}") from exc
 
@@ -247,11 +296,56 @@ def load_config(
         raise ValueError(f"max_tokens must be in (0, 32768], got {max_tokens!r}")
     if not 0 <= resolved_retries <= 10:
         raise ValueError(f"max_retries must be in [0, 10], got {resolved_retries!r}")
+    if not 1 <= resolved_concurrency <= 64:
+        raise ValueError(f"max_concurrency must be in [1, 64], got {resolved_concurrency!r}")
+
+    routing_val = llm_cfg.get("routing", "all")
+    if routing_val not in {"all", "exclude-kinds"}:
+        raise ValueError(f"llm.routing must be 'all' or 'exclude-kinds', got {routing_val!r}")
+    routing = str(routing_val)
+
+    skip_val = llm_cfg.get("skip_kinds") or []
+    if not isinstance(skip_val, list) or not all(isinstance(kind, str) for kind in skip_val):
+        raise ValueError("llm.skip_kinds must be a list of failure kind names")
+    unknown_kinds = sorted(set(skip_val) - set(KINDS))
+    if unknown_kinds:
+        raise ValueError(f"llm.skip_kinds contains unknown kinds: {', '.join(unknown_kinds)}")
+    skip_kinds = [str(kind) for kind in skip_val]
+
+    require_llm_val = llm_cfg.get("require", False)
+    if not isinstance(require_llm_val, bool):
+        raise ValueError("llm.require must be a boolean")
+    resolved_require_llm = require_llm if require_llm is not None else (
+        require_llm_val or os.environ.get("TH_REQUIRE_LLM", "") == "1"
+    )
+    if effective_offline and resolved_require_llm:
+        raise ValueError("llm.require cannot be enabled in offline mode")
+    if not trust.allow_llm and resolved_require_llm:
+        raise ValueError(f"llm.require is forbidden for source class {trust.source_class}")
+
+    pricing_val = llm_cfg.get("pricing") or {}
+    if not isinstance(pricing_val, dict):
+        raise ValueError("llm.pricing must be a mapping of provider:model to rates")
+    pricing: dict[str, dict] = {}
+    for name, entry in pricing_val.items():
+        if not isinstance(entry, dict):
+            raise ValueError(f"llm.pricing.{name} must be a mapping")
+        try:
+            prompt_per = float(entry.get("prompt_per_mtok", 0.0) or 0.0)
+            completion_per = float(entry.get("completion_per_mtok", 0.0) or 0.0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"llm.pricing.{name} rates must be numbers") from exc
+        if prompt_per < 0 or completion_per < 0:
+            raise ValueError(f"llm.pricing.{name} rates must be >= 0")
+        pricing[str(name)] = {"prompt_per_mtok": prompt_per, "completion_per_mtok": completion_per}
+
 
     redact_cfg = yaml_cfg.get("redact")
     redact_val = not (os.environ.get("TH_NO_REDACT", "") == "1") and redact_cfg is not False
     if redact is not None:
         redact_val = redact
+    if trust.source_class == "fork_pr":
+        redact_val = True
     redact = redact_val
 
     cfg = Config(
@@ -263,8 +357,18 @@ def load_config(
         timeout=timeout,
         max_tokens=max_tokens,
         max_retries=resolved_retries,
-        offline=offline,
+        max_concurrency=resolved_concurrency,
+        offline=effective_offline,
         redact=redact,
+        routing=routing,
+        skip_kinds=skip_kinds,
+        pricing=pricing,
+        require_llm=resolved_require_llm,
+        source_class=trust.source_class,
+        allow_source_context=trust.allow_source_context,
+        allow_enrichment=trust.allow_enrichment,
+        allow_llm=trust.allow_llm,
+        allow_delivery=trust.allow_delivery,
         gh_token=os.environ.get("GH_TOKEN", ""),
         gh_repo=os.environ.get("GH_REPO", ""),
         gh_api_base=os.environ.get("GH_API_BASE", "https://api.github.com"),
@@ -274,7 +378,7 @@ def load_config(
     cfg.components = {str(k): str(v) for k, v in comps.items()}
 
     dedup_cfg = _mapping_section(yaml_cfg, "dedup")
-    state = dedup_cfg.get("state_file")
+    state = dedup_cfg.get("path") or dedup_cfg.get("state_file")
     if state:
         cfg.state_file = str(state)
     backend = dedup_cfg.get("backend")
@@ -287,8 +391,38 @@ def load_config(
     if token:
         sys.stderr.write("Warning: dedup token found in YAML config; prefer an environment variable.\n")
         cfg.state_token = str(token)
-    if cfg.state_backend not in {"", "file"}:
-        raise ValueError("HTTP dedup backend is disabled until it supports conditional writes")
+    entries = dedup_cfg.get("max_entries")
+    if entries is not None:
+        try:
+            cfg.dedup_max_entries = int(entries)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("dedup.max_entries must be an integer") from exc
+        if cfg.dedup_max_entries < 1:
+            raise ValueError("dedup.max_entries must be >= 1")
+    retention = dedup_cfg.get("retention_days")
+    if retention is not None:
+        try:
+            cfg.dedup_retention_days = int(retention)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("dedup.retention_days must be an integer") from exc
+        if cfg.dedup_retention_days < 1:
+            raise ValueError("dedup.retention_days must be >= 1")
+    if cfg.state_backend not in {"", "file", "sqlite"}:
+        if cfg.state_backend == "http":
+            raise ValueError("HTTP dedup backend is disabled until it supports conditional writes")
+        raise ValueError(f"unsupported dedup backend: {cfg.state_backend!r}")
+
+    reuse_val = dedup_cfg.get("reuse", True)
+    if not isinstance(reuse_val, bool):
+        raise ValueError("dedup.reuse must be a boolean")
+    cfg.reuse = reuse_val
+    occurrences_val = dedup_cfg.get("reuse_after_occurrences", 3)
+    try:
+        cfg.reuse_after_occurrences = int(occurrences_val)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("dedup.reuse_after_occurrences must be an integer") from exc
+    if not 2 <= cfg.reuse_after_occurrences <= 1000:
+        raise ValueError("dedup.reuse_after_occurrences must be in [2, 1000]")
 
     policy = _mapping_section(yaml_cfg, "policy")
     overrides = _mapping_section(policy, "severity_overrides")
@@ -378,5 +512,5 @@ def set_model_config(value: str, config_path: str | Path = DEFAULT_CONFIG_PATH) 
         llm["model"] = value
     data["llm"] = llm
     path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(path, yaml.safe_dump(data, sort_keys=False))
+    atomic_write(path, yaml.safe_dump(data, sort_keys=False))
     return path

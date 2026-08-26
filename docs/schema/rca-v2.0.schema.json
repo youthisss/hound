@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hound-agent.local/schema/rca-v2.0.schema.json",
+  "title": "Hound Agent RCA Document v2.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "meta", "failure", "context", "root_cause", "analysis", "triage", "ticket"],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "meta": {"$ref": "#/$defs/meta"},
+    "failure": {"$ref": "#/$defs/failure"},
+    "context": {"$ref": "#/$defs/context"},
+    "root_cause": {"$ref": "#/$defs/rootCause"},
+    "triage": {"$ref": "#/$defs/triage"},
+    "ticket": {"$ref": "#/$defs/ticket"},
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_facts", "evidence", "hypotheses", "missing_information", "recommended_checks"],
+      "properties": {
+        "observed_facts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/observedFact"}
+        },
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidence"}
+        },
+        "hypotheses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/hypothesis"}
+        },
+        "missing_information": {"type": "array", "items": {"type": "string"}},
+        "recommended_checks": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "model", "log_file", "generated_at", "redacted", "usage", "reused", "reused_from_key", "llm"],
+      "properties": {
+        "engine": {"enum": ["llm", "fallback", "merged"]},
+        "model": {"type": ["string", "null"]},
+        "log_file": {"type": "string"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "redacted": {"type": "boolean"},
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prompt_tokens": {"type": "integer", "minimum": 0},
+            "completion_tokens": {"type": "integer", "minimum": 0},
+            "total_tokens": {"type": "integer", "minimum": 0}
+          }
+        },
+        "reused": {"type": "boolean"},
+        "reused_from_key": {"type": ["string", "null"]},
+        "llm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "fallback_reason"],
+          "properties": {
+            "status": {"enum": ["succeeded", "failed", "not_requested", "reused"]},
+            "fallback_reason": {"type": ["string", "null"]}
+          }
+        },
+        "trust": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_class", "source_context", "enrichment", "llm", "delivery"],
+          "properties": {
+            "source_class": {"enum": ["trusted_branch", "fork_pr", "local_artifact"]},
+            "source_context": {"type": "boolean"},
+            "enrichment": {"type": "boolean"},
+            "llm": {"type": "boolean"},
+            "delivery": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "failureEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "kind", "message", "role"],
+      "properties": {
+        "stage": {"enum": ["ci", "build", "test", "deploy", "unknown"]},
+        "kind": {"$ref": "#/$defs/failureKind"},
+        "message": {"type": "string"},
+        "role": {"enum": ["primary", "downstream"]}
+      }
+    },
+    "failureKind": {
+      "enum": [
+        "compilation_error", "test_failure", "import_error", "timeout", "flaky", "deployment_failed",
+        "rollback", "health_check_failed", "image_pull_error", "migration_failed", "permission_error",
+        "readiness_timeout", "oom_killed", "crash_loop", "liveness_probe_failed", "readiness_probe_failed",
+        "scheduling_failed", "quota_exceeded", "network_failure", "registry_auth_failure", "config_missing",
+        "ci_failure", "dependency_resolution", "disk_full", "tls_certificate_error", "api_rate_limited", "unknown"
+      ]
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "kind", "summary", "message", "stacktrace", "failed_tests", "events"],
+      "properties": {
+        "stage": {"enum": ["ci", "build", "test", "deploy", "unknown"]},
+        "kind": {"$ref": "#/$defs/failureKind"},
+        "summary": {"type": "string"},
+        "message": {"type": "string"},
+        "stacktrace": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["file", "line", "function", "code"],
+            "properties": {
+              "file": {"type": "string"}, "line": {"type": "integer"},
+              "function": {"type": ["string", "null"]}, "code": {"type": "string"}
+            }
+          }
+        },
+        "failed_tests": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["name", "file", "line", "assertion"],
+            "properties": {
+              "name": {"type": "string"}, "file": {"type": "string"},
+              "line": {"type": ["integer", "null"]}, "assertion": {"type": "string"}
+            }
+          }
+        },
+        "events": {"type": "array", "items": {"$ref": "#/$defs/failureEvent"}}
+      }
+    },
+    "runContext": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provider", "run_id", "run_url", "job_id", "job_name", "workflow", "branch", "commit_sha", "step_name", "attempt", "conclusion", "duration_ms", "pr_number", "base_sha", "head_sha"],
+      "properties": {
+        "provider": {"type": "string"}, "run_id": {"type": "string"}, "run_url": {"type": "string"},
+        "job_id": {"type": "string"}, "job_name": {"type": "string"}, "workflow": {"type": "string"},
+        "branch": {"type": "string"}, "commit_sha": {"type": "string"}, "step_name": {"type": "string"},
+        "attempt": {"type": ["integer", "null"], "minimum": 1}, "conclusion": {"type": "string"},
+        "duration_ms": {"type": ["integer", "null"], "minimum": 1}, "pr_number": {"type": "string"},
+        "base_sha": {"type": "string"}, "head_sha": {"type": "string"}
+      }
+    },
+    "deploymentContext": {
+      "type": "object", "additionalProperties": false,
+      "required": ["platform", "environment", "cluster", "target", "namespace", "release", "revision", "previous_revision", "artifact", "strategy", "started_at", "migration_version", "outcome", "recovery"],
+      "properties": {
+        "platform": {"type": "string"}, "environment": {"type": "string"}, "cluster": {"type": "string"},
+        "target": {"type": "string"}, "namespace": {"type": "string"}, "release": {"type": "string"},
+        "revision": {"type": "string"}, "previous_revision": {"type": "string"}, "artifact": {"type": "string"},
+        "strategy": {"type": "string"}, "started_at": {"type": "string"}, "migration_version": {"type": "string"},
+        "outcome": {"type": "string"}, "recovery": {"type": "string"}
+      }
+    },
+    "requestContext": {
+      "type": "object", "additionalProperties": false,
+      "required": ["request_id", "trace_id", "session_id", "user_id", "users", "method", "path"],
+      "properties": {
+        "request_id": {"type": "string"}, "trace_id": {"type": "string"}, "session_id": {"type": "string"},
+        "user_id": {"type": "string"}, "users": {"type": "array", "maxItems": 10, "items": {"type": "string"}},
+        "method": {"type": "string"}, "path": {"type": "string"}
+      }
+    },
+    "context": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run", "deployment", "request", "owners"],
+      "properties": {
+        "run": {"$ref": "#/$defs/runContext"}, "deployment": {"$ref": "#/$defs/deploymentContext"},
+        "request": {"$ref": "#/$defs/requestContext"},
+        "owners": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "rootCause": {
+      "type": "object", "additionalProperties": false,
+      "required": ["hypothesis", "confidence", "evidence", "fix_suggestion"],
+      "properties": {
+        "hypothesis": {"type": "string"}, "confidence": {"enum": ["high", "medium", "low"]},
+        "evidence": {"type": "array", "items": {"type": "string"}}, "fix_suggestion": {"type": "string"}
+      }
+    },
+    "triage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["severity", "component", "priority", "dedup_key", "is_duplicate_of", "flaky_suspect", "recurring_incident", "occurrence_count"],
+      "properties": {
+        "severity": {"enum": ["critical", "high", "medium", "low"]}, "component": {"type": "string"},
+        "priority": {"type": "integer", "minimum": 1, "maximum": 5}, "dedup_key": {"type": "string"},
+        "is_duplicate_of": {"type": ["string", "null"]}, "flaky_suspect": {"type": "boolean"},
+        "recurring_incident": {"type": "boolean"}, "occurrence_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "ticket": {
+      "type": "object", "additionalProperties": false,
+      "required": ["title", "body_md", "labels"],
+      "properties": {
+        "title": {"type": "string"}, "body_md": {"type": "string"},
+        "labels": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "evidenceRef": {"type": "string", "pattern": "^ev-[0-9]{3,}$"},
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "value", "provenance"],
+      "properties": {
+        "id": {"$ref": "#/$defs/evidenceRef"},
+        "kind": {"type": "string", "minLength": 1},
+        "value": {},
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_type", "artifact", "locator", "collector", "observed_at"],
+          "properties": {
+            "source_type": {"type": "string"},
+            "artifact": {"type": "string"},
+            "locator": {"type": "string"},
+            "collector": {"type": "string"},
+            "observed_at": {"type": ["string", "null"], "format": "date-time"}
+          }
+        }
+      }
+    },
+    "observedFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "value", "evidence_refs"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^fact-[0-9]{3,}$"},
+        "kind": {"type": "string", "minLength": 1},
+        "value": {},
+        "evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/evidenceRef"}}
+      }
+    },
+    "hypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "statement", "source", "support_status", "supporting_evidence_refs",
+        "contradicting_evidence_refs", "confidence", "missing_information", "recommended_checks"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^hyp-[0-9]{3,}$"},
+        "statement": {"type": "string", "minLength": 1},
+        "source": {"enum": ["deterministic", "llm"]},
+        "support_status": {"enum": ["supported", "unsupported", "insufficient_evidence"]},
+        "supporting_evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/evidenceRef"}},
+        "contradicting_evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/evidenceRef"}},
+        "confidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["band", "score", "reasons"],
+          "properties": {
+            "band": {"enum": ["high", "medium", "low"]},
+            "score": {"type": "number", "minimum": 0, "maximum": 1},
+            "reasons": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "missing_information": {"type": "array", "items": {"type": "string"}},
+        "recommended_checks": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+Collecting numpy==2.0.0 (from -r requirements.txt)
+  Downloading numpy-2.0.0.tar.gz (100 MB)
+     ━━━━━━━━━━━━━━━━ 47.2/100.0 MB
+WARNING: Disk usage is at 99% of capacity
+ERROR: Could not install packages due to an OSError: [Errno 28] No space left on device
+
+ERROR: Job failed: command terminated with exit code 1

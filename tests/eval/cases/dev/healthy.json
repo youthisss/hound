@@ -1,0 +1,15 @@
+{
+  "eval_case_version": "1.0",
+  "id": "dev-healthy",
+  "artifact": "healthy.log",
+  "expected": {
+    "stage": "unknown",
+    "kind": "unknown",
+    "primary_event": null,
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["low"],
+    "duplicate_group": null,
+    "redactions": []
+  }
+}

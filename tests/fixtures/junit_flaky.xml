@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="shop.CartTest" tests="1" failures="0" errors="0">
+  <testcase classname="shop.CartTest" name="total_eventually_returns" file="tests/CartTest.java">
+    <flakyFailure message="Expected 11 but got 10">first attempt failed; rerun passed</flakyFailure>
+  </testcase>
+</testsuite>

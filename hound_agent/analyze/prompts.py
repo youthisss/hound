@@ -5,7 +5,7 @@ import secrets
 import json
 from dataclasses import asdict
 
-from hound_agent.models import Artifacts
+from hound_agent.models import Artifacts, build_evidence_items
 
 LOG_TEXT_LIMIT = 12000
 ENRICHMENT_LIMIT = 16000
@@ -26,8 +26,9 @@ exit codes, changed files, run metadata, deployment metadata, and log ordering w
 Evidence rules:
 - Treat artifact fields and log text as the only source of truth. Do not claim access to systems, files,
   URLs, credentials, repositories, or run history that are not present in the artifacts.
-- Quote or accurately paraphrase concrete signals such as an error, exit code, test name, resource,
-  command, or configuration value. Do not invent values or citations.
+- Cite only IDs from available_evidence. Do not invent evidence IDs, values, or citations.
+- When context.request is present, use it only to distinguish the affected request or actor; it is not
+  proof of root cause and does not define incident identity.
 - Set confidence to "high" only when direct evidence identifies the cause; use "medium" for a strongly
   supported inference; use "low" when evidence is incomplete, conflicting, or only indicates an area
   to investigate.
@@ -45,7 +46,10 @@ Return ONLY one valid JSON object, with exactly these keys and no others:
 {
   "hypothesis": "concise likely root cause",
   "confidence": "high" | "medium" | "low",
-  "evidence": ["specific supporting observation"],
+  "evidence_refs": ["ev-001"],
+  "contradicting_evidence_refs": [],
+  "missing_information": ["specific missing fact"],
+  "recommended_checks": ["safe diagnostic check"],
   "fix_suggestion": "concrete next step"
 }
 Use JSON double quotes, valid escaping, and no Markdown fences or commentary."""
@@ -53,7 +57,12 @@ Use JSON double quotes, valid escaping, and no Markdown fences or commentary."""
 
 def build_user_prompt(artifacts: Artifacts) -> str:
     boundary = f"TRACEHOUND_BOUNDARY_{secrets.token_hex(16)}"
-    payload = asdict(artifacts)
+    # Evidence comes first so the size fitter preserves the citation contract
+    # before spending its bounded string budget on raw logs and enrichment.
+    payload = {
+        "available_evidence": build_evidence_items(artifacts),
+        **asdict(artifacts),
+    }
     payload["log_text"] = artifacts.log_text[-LOG_TEXT_LIMIT:]
     payload["frames"] = payload["frames"][:15]
     payload["failed_tests"] = payload["failed_tests"][:10]
@@ -66,10 +75,69 @@ def build_user_prompt(artifacts: Artifacts) -> str:
         bounded_enrichment.append(item[:remaining])
         remaining -= len(bounded_enrichment[-1])
     payload["enrichment"] = bounded_enrichment
-    serialized = json.dumps(payload, ensure_ascii=False, indent=2).replace(boundary, "")[:PROMPT_LIMIT]
+    serialized = json.dumps(payload, ensure_ascii=False, indent=2).replace(boundary, "")
+    if len(serialized) > PROMPT_LIMIT:
+        payload = _fit_payload(payload, PROMPT_LIMIT)
+        serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace(boundary, "")
     return "\n".join([
         "Analyze the untrusted CI/CD artifact JSON between the boundary lines.",
         boundary,
         serialized,
         boundary,
     ])
+
+
+def _fit_payload(payload: dict, limit: int) -> dict:
+    """Bound arbitrary strings while preserving evidence IDs and classifications."""
+    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if len(serialized) <= limit:
+        return payload
+    string_chars = sum(len(value) for value in _strings(payload))
+    if not string_chars:
+        return payload
+    budget = max(0, string_chars - (len(serialized) - limit))
+    protected_keys = {"id", "kind", "source_type", "locator", "collector", "stage"}
+    protected_chars = sum(
+        len(value)
+        for key, value in _keyed_strings(payload)
+        if key in protected_keys
+    )
+    remaining = max(0, budget - protected_chars)
+
+    def trim(value, key: str | None = None):
+        nonlocal remaining
+        if isinstance(value, str):
+            if key in protected_keys:
+                return value
+            kept = value[:remaining]
+            remaining -= len(kept)
+            return kept
+        if isinstance(value, list):
+            return [trim(item, key) for item in value]
+        if isinstance(value, dict):
+            return {child_key: trim(item, child_key) for child_key, item in value.items()}
+        return value
+
+    return trim(payload)
+
+
+def _strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _strings(item)
+
+
+def _keyed_strings(value, key: str | None = None):
+    if isinstance(value, str):
+        yield key, value
+    elif isinstance(value, list):
+        for item in value:
+            yield from _keyed_strings(item, key)
+    elif isinstance(value, dict):
+        for child_key, item in value.items():
+            yield from _keyed_strings(item, child_key)

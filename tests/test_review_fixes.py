@@ -186,6 +186,82 @@ def test_collector_replaces_oversized_line(tmp_path):
     assert result.log_file.read_text(encoding="utf-8") == "[REDACTED:oversized_line]\n"
 
 
+def test_derived_artifact_collections_are_bounded(tmp_path):
+    from hound_agent.ingest.stacktrace import MAX_STACK_FRAMES, parse_stacktrace
+    from hound_agent.ingest.structured import parse_structured_artifact
+    from hound_agent.ingest.tests import MAX_FAILED_TESTS, parse_failed_tests
+
+    failed_lines = "\n".join(
+        f"FAILED tests/test_{index}.py::test_{index} - assertion failed"
+        for index in range(MAX_FAILED_TESTS + 1)
+    )
+    assert len(parse_failed_tests(failed_lines)) == MAX_FAILED_TESTS
+
+    frames = "\n".join(
+        f'  File "app_{index}.py", line 1, in run'
+        for index in range(MAX_STACK_FRAMES + 1)
+    )
+    assert len(parse_stacktrace(frames)) == MAX_STACK_FRAMES
+
+    report = tmp_path / "junit.xml"
+    report.write_text(
+        "<testsuite>" + "".join(
+            f"<testcase name='test_{index}'><failure message='bad'/></testcase>"
+            for index in range(MAX_FAILED_TESTS + 1)
+        ) + "</testsuite>",
+        encoding="utf-8",
+    )
+    parsed = parse_structured_artifact(report)
+    assert parsed is not None
+    assert len(parsed[-1]) == MAX_FAILED_TESTS
+
+
+def test_failed_test_summary_enriches_retained_tests_beyond_cap():
+    from hound_agent.ingest.tests import MAX_FAILED_TESTS, parse_failed_tests
+
+    # Pytest prints detail headers first, then the FAILED ... - assertion
+    # summary. Reaching the cap must not stop the scan: retained records
+    # still need their file paths and assertion text.
+    text = "\n".join(
+        ["_" * 12 + f" test_{index} " + "_" * 12 for index in range(MAX_FAILED_TESTS)]
+        + [f"FAILED tests/test_{index}.py::test_{index} - assert {index} == 0"
+           for index in range(MAX_FAILED_TESTS)]
+    )
+    tests = parse_failed_tests(text)
+    assert len(tests) == MAX_FAILED_TESTS
+    assert tests[0].file == "tests/test_0.py"
+    assert tests[-1].file == f"tests/test_{MAX_FAILED_TESTS - 1}.py"
+    assert tests[0].assertion == "assert 0 == 0"
+    assert tests[-1].assertion == f"assert {MAX_FAILED_TESTS - 1} == 0"
+
+
+def test_repo_path_normalization_keeps_all_frames(tmp_path):
+    from hound_agent.ingest.stacktrace import (
+        MAX_SNIPPET_FRAMES,
+        MAX_STACK_FRAMES,
+        attach_snippets,
+        dedupe_repo_paths,
+        parse_stacktrace,
+    )
+
+    frames = parse_stacktrace("\n".join(
+        f'  File "app_{index}.py", line 1, in run'
+        for index in range(MAX_STACK_FRAMES)
+    ))
+    assert len(frames) == MAX_STACK_FRAMES
+
+    normalized = dedupe_repo_paths(frames, str(tmp_path))
+    # Normalization preserves every admitted frame; only snippets are capped.
+    assert len(normalized) == MAX_STACK_FRAMES
+
+    for index in range(MAX_STACK_FRAMES):
+        (tmp_path / f"app_{index}.py").write_text("line1\nline2\nline3\n", encoding="utf-8")
+    with_snippets = attach_snippets(normalized, str(tmp_path))
+    assert len(with_snippets) == MAX_STACK_FRAMES
+    with_code = [frame for frame in with_snippets if frame.code]
+    assert len(with_code) == MAX_SNIPPET_FRAMES
+
+
 def test_collector_log_permissions_are_private(tmp_path):
     import io
     import pytest
@@ -333,6 +409,82 @@ def test_unsupported_dedup_backend_fails_during_config_load(tmp_path):
         load_config(config_path=str(config))
 
 
+def test_sqlite_dedup_config_parses_path_and_limits(tmp_path):
+    from hound_agent.config import load_config
+
+    config = tmp_path / "sqlite-state.yml"
+    config.write_text(
+        "dedup:\n"
+        "  backend: sqlite\n"
+        "  path: /var/state/hound.sqlite3\n"
+        "  max_entries: 12345\n"
+        "  retention_days: 30\n"
+        "llm:\n"
+        "  max_concurrency: 8\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(config_path=str(config))
+    assert cfg.state_backend == "sqlite"
+    assert cfg.state_file == "/var/state/hound.sqlite3"
+    assert cfg.dedup_max_entries == 12345
+    assert cfg.dedup_retention_days == 30
+    assert cfg.max_concurrency == 8
+
+
+def test_dedup_state_file_alias_still_works(tmp_path):
+    from hound_agent.config import load_config
+
+    config = tmp_path / "alias.yml"
+    config.write_text("dedup:\n  backend: sqlite\n  state_file: old/path.db\n", encoding="utf-8")
+    assert load_config(config_path=str(config)).state_file == "old/path.db"
+
+
+def test_unknown_dedup_backend_rejected(tmp_path):
+    import pytest
+    from hound_agent.config import load_config
+
+    config = tmp_path / "bogus.yml"
+    config.write_text("dedup:\n  backend: mongo\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported dedup backend"):
+        load_config(config_path=str(config))
+
+
+def test_dedup_limit_validation(tmp_path):
+    import pytest
+    from hound_agent.config import load_config
+
+    for body, match in (
+        ("dedup:\n  max_entries: nope\n", "max_entries"),
+        ("dedup:\n  max_entries: 0\n", "max_entries"),
+        ("dedup:\n  retention_days: -1\n", "retention_days"),
+    ):
+        config = tmp_path / "bad.yml"
+        config.write_text(body, encoding="utf-8")
+        with pytest.raises(ValueError, match=match):
+            load_config(config_path=str(config))
+
+
+def test_llm_max_concurrency_validation(tmp_path):
+    import pytest
+    from hound_agent.config import load_config
+
+    for body, match in (
+        ("llm:\n  max_concurrency: 0\n", "max_concurrency"),
+        ("llm:\n  max_concurrency: 1000\n", "max_concurrency"),
+    ):
+        config = tmp_path / "bad-conc.yml"
+        config.write_text(body, encoding="utf-8")
+        with pytest.raises(ValueError, match=match):
+            load_config(config_path=str(config))
+
+
+def test_llm_max_concurrency_env(monkeypatch):
+    from hound_agent.config import load_config
+
+    monkeypatch.setenv("TH_MAX_CONCURRENCY", "6")
+    assert load_config().max_concurrency == 6
+
+
 def test_offline_ignores_invalid_ambient_integration_urls(monkeypatch):
     from hound_agent.config import load_config
 
@@ -473,18 +625,23 @@ def test_yaml_api_key_warns(tmp_path, capsys):
 def test_stale_lock_removed(tmp_path):
     import os
     import time
+    from pathlib import Path
+
     from hound_agent.triage.dedup import check_duplicate, fingerprint
 
     a = make_artifacts("pytest_fail.log")
-    rc = None
     state = str(tmp_path / "state.json")
-    lock = str(tmp_path / "state.json.lock")
+    # The real lock path is Path(state).with_suffix(".lock") → "state.lock"
+    # (with_suffix REPLACES ".json"); writing "state.json.lock" would create
+    # a file the code never reads and make this test vacuous.
+    lock = Path(state).with_suffix(".lock")
     # Simulate a stale lockfile: dead PID written long ago.
-    with open(lock, "w", encoding="utf-8") as fp:
-        fp.write("99999999")
+    lock.write_text("99999999", encoding="utf-8")
     os.utime(lock, (time.time() - 300, time.time() - 300))
-    t = check_duplicate(a, rc, state)
-    assert t.dedup_key == fingerprint(a, rc)
+    t = check_duplicate(a, state)
+    assert t.dedup_key == fingerprint(a)
+    # The dead-owner lock must be recovered (removed), not just bypassed.
+    assert not lock.exists()
 
 
 def test_path_matches_windows_separators():
@@ -610,6 +767,27 @@ def test_source_context_requires_explicit_opt_in(tmp_path):
     assert "PROPRIETARY_SOURCE" in with_context["failure"]["stacktrace"][0]["code"]
 
 
+def test_source_context_attaches_deployment_config_snippet(tmp_path):
+    from hound_agent.pipeline import analyze
+
+    repo = tmp_path / "repo"
+    manifest = repo / "manifests" / "deployment.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("apiVersion: v1\nkind: Deployment\nimage: api:v2\n", encoding="utf-8")
+    log = tmp_path / "deploy.log"
+    log.write_text(
+        "helm upgrade api chart\n"
+        "Error: manifests/deployment.yaml:3: invalid image value\n"
+        "release api failed\n",
+        encoding="utf-8",
+    )
+
+    doc = analyze(log, tmp_path / "out", repo_dir=repo, offline=True, no_dedup=True, source_context=True)
+
+    frame = next(item for item in doc["failure"]["stacktrace"] if item["file"] == "manifests/deployment.yaml")
+    assert "image: api:v2" in frame["code"]
+
+
 def test_source_context_skips_oversized_files(tmp_path, monkeypatch):
     from hound_agent.ingest import stacktrace
     from hound_agent.models import StackFrame
@@ -683,6 +861,16 @@ def test_clean_rejects_forged_marker_in_mixed_directory(tmp_path):
     important.write_text("keep", encoding="utf-8")
     assert main(["clean", "--out", str(target), "--yes"]) == 2
     assert important.read_text(encoding="utf-8") == "keep"
+
+
+def test_clean_accepts_leftover_server_snapshot(tmp_path):
+    from hound_agent.output.report import ensure_outdir
+
+    output = ensure_outdir(tmp_path / "out")
+    snapshot = output / ".incoming-0123456789abcdef0123456789abcdef.log"
+    snapshot.write_text("log bytes", encoding="utf-8")
+    assert main(["clean", "--out", str(output), "--yes"]) == 0
+    assert not output.exists()
 
 
 def test_default_dedup_state_rejects_preseeded_symlink(tmp_path):

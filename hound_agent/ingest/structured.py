@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
+
+from hound_agent.ingest.tests import MAX_FAILED_TESTS, MAX_TEST_FIELD_CHARS
 from hound_agent.models import FailedTest
 
 MAX_ARTIFACT_BYTES = 2 * 1024 * 1024
@@ -36,21 +39,53 @@ def _parse_junit(path: Path) -> tuple[str, str, str, str, list[FailedTest]] | No
         if raw is None or b"<!DOCTYPE" in raw.upper():
             return None
         root = ET.fromstring(raw)
-    except ET.ParseError:
+    except (DefusedXmlException, ET.ParseError):
         return None
     tests: list[FailedTest] = []
+    flaky_tests: list[FailedTest] = []
     for case in root.iter():
         if case.tag.rsplit("}", 1)[-1] != "testcase":
             continue
         failure = next((child for child in case if child.tag.rsplit("}", 1)[-1] in {"failure", "error"}), None)
         if failure is None:
+            # Surefire and compatible producers record an unsuccessful first
+            # attempt as flakyFailure/flakyError after a successful rerun.
+            # It is actionable evidence, but not a test_failure.
+            flaky = next(
+                (
+                    child
+                    for child in case
+                    if child.tag.rsplit("}", 1)[-1]
+                    in {"flakyFailure", "flakyError", "rerunFailure", "rerunError"}
+                ),
+                None,
+            )
+            if flaky is None or len(flaky_tests) >= MAX_FAILED_TESTS:
+                continue
+            file = case.attrib.get("file", case.attrib.get("classname", ""))
+            name = case.attrib.get("name", "unknown")
+            message = flaky.attrib.get("message", "") or (flaky.text or "").strip()
+            flaky_tests.append(FailedTest(
+                name=name[:MAX_TEST_FIELD_CHARS],
+                file=file[:MAX_TEST_FIELD_CHARS],
+                assertion=message[:MAX_TEST_FIELD_CHARS],
+            ))
             continue
         file = case.attrib.get("file", case.attrib.get("classname", ""))
         name = case.attrib.get("name", "unknown")
         message = failure.attrib.get("message", "") or (failure.text or "").strip()
-        tests.append(FailedTest(name=name, file=file, assertion=message[:500]))
+        tests.append(FailedTest(
+            name=name[:MAX_TEST_FIELD_CHARS],
+            file=file[:MAX_TEST_FIELD_CHARS],
+            assertion=message[:MAX_TEST_FIELD_CHARS],
+        ))
+        if len(tests) >= MAX_FAILED_TESTS:
+            break
     if not tests:
-        return None
+        if not flaky_tests:
+            return None
+        message = flaky_tests[0].assertion or f"{flaky_tests[0].name} was flaky"
+        return "test", "flaky", message[:200], message, flaky_tests
     message = tests[0].assertion or f"{tests[0].name} failed"
     return "test", "test_failure", message[:200], message, tests
 
@@ -105,7 +140,7 @@ def _parse_test_json(path: Path) -> tuple[str, str, str, str, list[FailedTest]] 
     if not tests:
         return None
     message = tests[0].assertion or f"{tests[0].name} failed"
-    return "test", "test_failure", message[:200], message, tests[:100]
+    return "test", "test_failure", message[:200], message, tests[:MAX_FAILED_TESTS]
 
 
 def _parse_go_json(path: Path) -> tuple[str, str, str, str, list[FailedTest]] | None:
@@ -123,10 +158,14 @@ def _parse_go_json(path: Path) -> tuple[str, str, str, str, list[FailedTest]] | 
         if not isinstance(row, dict):
             continue
         test = row.get("Test")
-        if isinstance(test, str) and isinstance(row.get("Output"), str):
+        if isinstance(test, str) and isinstance(row.get("Output"), str) and (test in output or len(output) < MAX_FAILED_TESTS):
             output.setdefault(test, []).append(row["Output"])
-        if row.get("Action") == "fail" and isinstance(test, str):
-            failed.append(FailedTest(name=test, file=str(row.get("Package", "")), assertion="".join(output.get(test, []))[:500]))
+        if row.get("Action") == "fail" and isinstance(test, str) and len(failed) < MAX_FAILED_TESTS:
+            failed.append(FailedTest(
+                name=test[:MAX_TEST_FIELD_CHARS],
+                file=str(row.get("Package", ""))[:MAX_TEST_FIELD_CHARS],
+                assertion="".join(output.get(test, []))[:MAX_TEST_FIELD_CHARS],
+            ))
     if not failed:
         return None
     message = failed[0].assertion or f"{failed[0].name} failed"
@@ -145,7 +184,11 @@ def _collect_json_failures(value: object, tests: list[FailedTest], depth: int = 
             detail = value.get("longrepr") or value.get("message") or value.get("error") or ""
             if isinstance(detail, dict):
                 detail = detail.get("message") or detail.get("stack") or ""
-            tests.append(FailedTest(name=name, file=file, assertion=str(detail)[:500]))
+            tests.append(FailedTest(
+                name=name[:MAX_TEST_FIELD_CHARS],
+                file=file[:MAX_TEST_FIELD_CHARS],
+                assertion=str(detail)[:MAX_TEST_FIELD_CHARS],
+            ))
         for child in value.values():
             _collect_json_failures(child, tests, depth + 1)
     elif isinstance(value, list):

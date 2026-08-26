@@ -41,7 +41,9 @@ def test_llm_merge(monkeypatch):
 
     def fake_llm(a, c):
         return {"hypothesis": "Tax rounding bug", "confidence": "high",
-                "evidence": ["money uses floats"], "fix_suggestion": "use Decimal"}, {"prompt_tokens": 10, "completion_tokens": 5}
+                "evidence_refs": ["ev-001"], "contradicting_evidence_refs": [],
+                "missing_information": [], "recommended_checks": ["inspect rounding"],
+                "fix_suggestion": "use Decimal"}, {"prompt_tokens": 10, "completion_tokens": 5}
 
     monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", fake_llm)
     rc = run_analysis(artifacts, config)
@@ -49,7 +51,8 @@ def test_llm_merge(monkeypatch):
     assert rc.model == f"{config.provider}:{config.model}"
     assert rc.hypothesis == "Tax rounding bug"
     assert rc.confidence == "high"
-    assert any("[llm] money uses floats" == e or e.endswith("money uses floats") for e in rc.evidence)
+    assert any(e.startswith("[llm-ref ev-001]") for e in rc.evidence)
+    assert rc.evidence_refs == ["ev-001"]
     assert any("log message" in e for e in rc.evidence)
     assert any(e.startswith("[rule] ") for e in rc.evidence)
 
@@ -64,6 +67,15 @@ def test_llm_failure_falls_back(monkeypatch):
     monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", bad_llm)
     rc = run_analysis(artifacts, config)
     assert rc.engine == "fallback"
+    assert rc.llm_status == "failed"
+    assert rc.fallback_reason == "provider_error"
+
+
+def test_require_llm_raises_when_provider_fails(monkeypatch):
+    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", lambda *_: (_ for _ in ()).throw(TimeoutError()))
+    artifacts = make_artifacts("pytest_fail.log")
+    with pytest.raises(RuntimeError, match="required LLM analysis failed"):
+        run_analysis(artifacts, Config(api_key="k", require_llm=True))
 
 
 def test_llm_bad_confidence_normalized(monkeypatch):
@@ -71,7 +83,9 @@ def test_llm_bad_confidence_normalized(monkeypatch):
     config = Config(api_key="k", offline=False)
 
     def weird_llm(a, c):
-        return {"hypothesis": "x", "confidence": "maybe", "evidence": [], "fix_suggestion": "f"}, {"prompt_tokens": 10, "completion_tokens": 5}
+        return {"hypothesis": "x", "confidence": "maybe", "evidence_refs": ["ev-001"],
+                "contradicting_evidence_refs": [], "missing_information": [],
+                "recommended_checks": [], "fix_suggestion": "f"}, {"prompt_tokens": 10, "completion_tokens": 5}
 
     monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", weird_llm)
     rc = run_analysis(artifacts, config)
@@ -83,9 +97,12 @@ def test_llm_bad_confidence_normalized(monkeypatch):
     "payload",
     [
         {},
-        {"hypothesis": "x", "confidence": "high", "evidence": "not-a-list", "fix_suggestion": "f"},
-        {"hypothesis": "x", "confidence": "high", "evidence": [1], "fix_suggestion": "f"},
-        {"hypothesis": "x", "confidence": "high", "evidence": [], "fix_suggestion": "f", "extra": True},
+        {"hypothesis": "x", "confidence": "high", "evidence_refs": "not-a-list",
+         "contradicting_evidence_refs": [], "missing_information": [], "recommended_checks": [], "fix_suggestion": "f"},
+        {"hypothesis": "x", "confidence": "high", "evidence_refs": ["ev-999"],
+         "contradicting_evidence_refs": [], "missing_information": [], "recommended_checks": [], "fix_suggestion": "f"},
+        {"hypothesis": "x", "confidence": "high", "evidence_refs": ["ev-001"],
+         "contradicting_evidence_refs": ["ev-001"], "missing_information": [], "recommended_checks": [], "fix_suggestion": "f"},
     ],
 )
 def test_malformed_llm_contract_falls_back(monkeypatch, payload):
@@ -103,6 +120,20 @@ def test_offline_ignores_key():
 def test_user_prompt_contains_stage():
     prompt = prompts.build_user_prompt(make_artifacts("pytest_fail.log"))
     assert '"stage": "test"' in prompt
+
+
+def test_large_user_prompt_keeps_valid_json_envelope():
+    artifacts = make_artifacts("pytest_fail.log")
+    artifacts.summary = "x" * 100_000
+    prompt = prompts.build_user_prompt(artifacts)
+    lines = prompt.splitlines()
+    boundary = next(line for line in lines if line.startswith("TRACEHOUND_BOUNDARY_"))
+    payload = prompt.split(boundary)[1].strip()
+    parsed = __import__("json").loads(payload)
+    assert parsed["stage"] == "test"
+    assert parsed["available_evidence"]
+    assert all(item["id"].startswith("ev-") for item in parsed["available_evidence"])
+    assert len(payload) <= prompts.PROMPT_LIMIT
 
 
 def test_system_prompt_constrains_cicd_scope_and_json_contract():

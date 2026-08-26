@@ -1,0 +1,8 @@
+=== RUN   TestComputeTotal
+--- FAIL: TestComputeTotal (0.00s)
+    cart_test.go:42: total = 10, want 11
+=== RUN   TestApplyDiscount
+--- PASS: TestApplyDiscount (0.00s)
+FAIL
+FAIL	example.com/shop/cart	0.012s
+FAIL

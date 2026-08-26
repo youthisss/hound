@@ -1,0 +1,2 @@
+pytest
+FAILED tests/test_cart.py::test_cart_total - AssertionError: expected 10, got 5

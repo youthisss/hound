@@ -1,0 +1,8 @@
+$ go test ./cart -count=2 -run TestComputeTotal
+=== RUN   TestComputeTotal
+--- FAIL: TestComputeTotal (0.00s)
+    cart_test.go:42: total = 10, want 11
+=== RUN   TestComputeTotal
+--- PASS: TestComputeTotal (0.00s)
+PASS
+ok  example.com/shop/cart  0.018s

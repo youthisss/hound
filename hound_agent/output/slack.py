@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from http.client import InvalidURL
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.parse import urlsplit
 
 from hound_agent.models import Ticket
@@ -12,6 +12,14 @@ from hound_agent.models import Ticket
 
 class SlackError(Exception):
     """Raised when Slack webhook delivery fails."""
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+urlopen = build_opener(_NoRedirect()).open
 
 
 def send_slack(ticket: Ticket, webhook_url: str) -> None:

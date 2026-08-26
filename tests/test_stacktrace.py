@@ -1,4 +1,5 @@
-from hound_agent.ingest.stacktrace import dedupe_repo_paths, parse_stacktrace
+from hound_agent.ingest.stacktrace import attach_snippets, dedupe_repo_paths, parse_stacktrace
+from hound_agent.models import StackFrame
 from tests.conftest import fixture
 
 
@@ -24,6 +25,21 @@ def test_no_duplicate_frames():
     assert len(frames) == 1
 
 
+def test_deployment_config_frames():
+    frames = parse_stacktrace(
+        "Error: manifests/deployment.yaml:17: missing required field\n"
+        "on infrastructure/service.tf line 9, in resource \"aws_instance\" \"api\":\n"
+    )
+    assert [(frame.file, frame.line, frame.function) for frame in frames] == [
+        ("manifests/deployment.yaml", 17, None),
+        ("infrastructure/service.tf", 9, None),
+    ]
+
+
+def test_config_frame_parser_ignores_urls():
+    assert parse_stacktrace("download https://example.test/charts/values.yaml:8") == []
+
+
 def test_dedupe_repo_paths(tmp_path):
     base = tmp_path / "repo"
     (base / "src").mkdir(parents=True)
@@ -34,3 +50,22 @@ def test_dedupe_repo_paths(tmp_path):
     out = dedupe_repo_paths(frames, str(base))
     assert out[0].file.replace("\\", "/") == "src/app.py"
     assert len(out) == 1
+
+
+def test_attach_snippets_allows_deployment_config_but_not_env(tmp_path):
+    repo = tmp_path / "repo"
+    manifests = repo / "manifests"
+    manifests.mkdir(parents=True)
+    (manifests / "deployment.yaml").write_text("apiVersion: v1\nimage: api:v2\n", encoding="utf-8")
+    (repo / "secrets.env").write_text("DATABASE_PASSWORD=private\n", encoding="utf-8")
+
+    frames = attach_snippets(
+        [
+            StackFrame(file="manifests/deployment.yaml", line=2),
+            StackFrame(file="secrets.env", line=1),
+        ],
+        str(repo),
+    )
+
+    assert "image: api:v2" in frames[0].code
+    assert frames[1].code == ""

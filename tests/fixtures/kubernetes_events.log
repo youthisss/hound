@@ -1,0 +1,8 @@
+deployment.apps/api configured
+Waiting for deployment "api" rollout to finish: 1 old replicas are pending termination...
+error: timed out waiting for the condition
+
+Events:
+  Type     Reason     Age   From               Message
+  ----     ------     ----  ----               -------
+  Warning  Unhealthy  8s    kubelet            Readiness probe failed: HTTP probe failed with statuscode: 503

@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/app/load.py", line 8, in load_config
+    return json.loads(open(path).read())
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/main.py", line 41, in bootstrap
+    config = load_config("config.yml")
+  File "/app/load.py", line 11, in load_config
+    raise RuntimeError(f"invalid configuration in {path}") from exc
+RuntimeError: invalid configuration in config.yml

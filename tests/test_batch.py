@@ -10,7 +10,9 @@ FIXTURES = __import__("pathlib").Path(__file__).parent / "fixtures"
 def _summary(out):
     paths = list(out.glob("summary-*.json"))
     assert len(paths) == 1
-    return json.loads(paths[0].read_text(encoding="utf-8"))
+    rows = json.loads(paths[0].read_text(encoding="utf-8"))
+    assert all(row["schema_version"] == "2.0" for row in rows)
+    return rows
 
 
 def _setup_logs(tmp_path, names):
@@ -94,6 +96,46 @@ def test_batch_reuse_keeps_unique_history(tmp_path):
     assert main(["batch", "--logs", str(logs), "--out", str(out), "--offline"]) == 1
     assert len(list(out.glob("summary-*.json"))) == 2
     assert len(list(out.glob("run-*/report.json"))) == 2
+
+
+def test_batch_jobs_parallel_matches_sequential(tmp_path):
+    d = _setup_logs(tmp_path, ["pytest_fail.log", "flaky.log"])
+    out_seq = tmp_path / "out-seq"
+    out_par = tmp_path / "out-par"
+    assert main(["batch", "--logs", str(d), "--out", str(out_seq), "--offline"]) == 1
+    assert main(["batch", "--logs", str(d), "--out", str(out_par), "--offline", "--jobs", "2"]) == 1
+    seq = _summary(out_seq)
+    par = _summary(out_par)
+    assert [s["log"] for s in seq] == [s["log"] for s in par]
+    assert [s["kind"] for s in seq] == [s["kind"] for s in par]
+    assert len(list(out_seq.glob("run-*/report.json"))) == len(list(out_par.glob("run-*/report.json")))
+
+
+def test_batch_jobs_parallel_shares_dedup(tmp_path):
+    d = tmp_path / "logs"
+    d.mkdir()
+    shutil.copy(FIXTURES / "pytest_fail.log", d / "a.log")
+    shutil.copy(FIXTURES / "pytest_fail.log", d / "b.log")
+    out = tmp_path / "out"
+    assert main(["batch", "--logs", str(d), "--out", str(out), "--offline", "--jobs", "2"]) == 1
+    summary = _summary(out)
+    assert len(summary) == 2
+    # In parallel execution the *winner* of the dedup race is non-deterministic,
+    # but exactly one run must be the first occurrence and the other a duplicate.
+    flags = [s["is_duplicate_of"] is None for s in summary]
+    assert sorted(flags) == [False, True]
+    assert len({s["dedup_key"] for s in summary}) == 1
+
+
+def test_analyze_jobs_parallel_directory(tmp_path):
+    d = _setup_logs(tmp_path, ["pytest_fail.log", "flaky.log"])
+    out = tmp_path / "out"
+    assert main(["analyze", str(d), "--out", str(out), "--offline", "--jobs", "2"]) == 1
+    assert len(list(out.glob("run-*/report.json"))) == 2
+    runs = sorted(out.glob("run-*/report.json"))
+    for report in runs:
+        import json
+        assert validate(json.loads(report.read_text(encoding="utf-8"))) is None
 
 
 def _read_report(path):

@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -15,8 +18,45 @@ jobs:
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - run: uv python install ${{ matrix.python }}
       - run: uv sync --frozen --extra dev
+      - run: uv run ruff check .
+      - run: uv run mypy hound_agent
+      - run: uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
+      - name: Audit locked production dependencies
+        if: matrix.python == '3.12'
+        run: |
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
+          uv run pip-audit --requirement audited-requirements.txt
+      - if: matrix.python == '3.12'
+        run: uv run python demo_project/run_demo.py --profile smoke
+      - if: matrix.python == '3.12'
+        run: uv build
+      - run: uv run python -m py_compile hound_agent/*.py hound_agent/analyze/*.py hound_agent/ingest/*.py hound_agent/output/*.py hound_agent/triage/*.py
+      - if: matrix.python == '3.12'
+        run: docker build -t hound:test .
+      - if: matrix.python == '3.12'
+        run: docker build -f Dockerfile.action -t hound-action:test .
+      - name: Scan source and dependencies
+        if: matrix.python == '3.12'
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
+      - run: uv sync --frozen --extra dev
+      - run: uv run ruff check .
       - run: uv run pytest -q
       - run: uv build
-      - run: uv run python -m py_compile hound_agent/*.py hound_agent/analyze/*.py hound_agent/ingest/*.py hound_agent/output/*.py hound_agent/triage/*.py
-      - run: docker build -t hound-agent:test .
-      - run: docker build -f Dockerfile.action -t hound-agent-action:test .
+      - shell: pwsh
+        run: |
+          uv venv wheel-smoke
+          $wheel = (Get-ChildItem dist\*.whl | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+          uv pip install --python wheel-smoke\Scripts\python.exe $wheel
+          wheel-smoke\Scripts\hound.exe --version
+          wheel-smoke\Scripts\hound.exe doctor --out wheel-smoke-output --json

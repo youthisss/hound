@@ -32,6 +32,57 @@ def test_pipeline_analyze_missing_log(tmp_path):
         analyze(tmp_path / "nope.log", tmp_path / "out")
 
 
+def test_pipeline_warns_when_reuse_snapshot_is_not_persisted(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "pytest_fail.log"
+    log.write_text(
+        (__import__("pathlib").Path(__file__).parent / "fixtures" / "pytest_fail.log").read_text(
+            encoding="utf-8"
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("hound_agent.pipeline.record_triage", lambda *_args, **_kwargs: False)
+
+    analyze(log, tmp_path / "out", offline=True)
+
+    assert "reuse snapshot was not persisted" in capsys.readouterr().err
+
+
+def test_pipeline_extracts_and_redacts_request_context(tmp_path):
+    log = tmp_path / "request.log"
+    log.write_text(
+        "pytest\n"
+        "request_id=req_checkout user_id=alice@example.test method=POST path=/api/checkout\n"
+        "FAILED tests/test_cart.py::test_total - AssertionError\n",
+        encoding="utf-8",
+    )
+
+    doc = analyze(log, tmp_path / "out", offline=True, no_dedup=True)
+
+    request = doc["context"]["request"]
+    assert request["request_id"] == "req_checkout"
+    assert request["user_id"] == "[REDACTED:email]"
+    assert request["users"] == ["[REDACTED:email]"]
+    assert (request["method"], request["path"]) == ("POST", "/api/checkout")
+    assert doc["meta"]["redacted"] is True
+    assert "alice@example.test" not in json.dumps(doc)
+
+
+def test_pipeline_legacy_log_has_empty_request_context(tmp_path):
+    log = tmp_path / "plain_fail.log"
+    log.write_text((__import__("pathlib").Path(__file__).parent / "fixtures" / "plain_fail.log").read_text(encoding="utf-8"), encoding="utf-8")
+
+    doc = analyze(log, tmp_path / "out", offline=True, no_dedup=True)
+
+    assert doc["context"]["request"] == {
+        "request_id": "",
+        "trace_id": "",
+        "session_id": "",
+        "user_id": "",
+        "users": [],
+        "method": "",
+        "path": "",
+    }
+    validate(doc)
 def test_offline_pipeline_deterministic(tmp_path):
     from hound_agent.triage.component import assign
     from hound_agent.triage.dedup import check_duplicate
@@ -43,7 +94,7 @@ def test_offline_pipeline_deterministic(tmp_path):
     a = make_artifacts("pytest_fail.log", changed_files=["app/cart.py"])
     rc = run_analysis(a, Config(offline=True))
     sev, pri = classify(a)
-    t = check_duplicate(a, rc, str(tmp_path / "state.json"))
+    t = check_duplicate(a, str(tmp_path / "state.json"))
     t.severity = sev
     t.priority = pri
     t.component = assign(a, {})
@@ -58,7 +109,6 @@ def test_offline_pipeline_deterministic(tmp_path):
 
 def test_cli_run_analyze_namespace(tmp_path, fake_repo):
     repo, path = fake_repo
-    from hound_agent.cli import build_parser
 
     log = tmp_path / "pytest_fail.log"
     log.write_text(

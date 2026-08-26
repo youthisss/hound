@@ -7,11 +7,8 @@ import pytest
 from hound_agent.ingest.logs import parse_log
 from hound_agent.pipeline import analyze
 from hound_agent.triage.severity import classify
-from hound_agent.triage.component import assign
-from hound_agent.models import build_doc, validate
+from hound_agent.models import validate
 from hound_agent.analyze.fallback import build_root_cause
-from hound_agent.output.tickets import build_ticket
-from hound_agent.output.report import write_json, write_md
 from tests.conftest import fixture, make_artifacts
 
 FIXTURE_ROOT = __import__("pathlib").Path(__file__).parent / "fixtures"

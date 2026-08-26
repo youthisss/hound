@@ -15,7 +15,12 @@ CONTEXT_LINES = 20
 TEST_MARKERS = re.compile(
     r"pytest|test session starts|===== FAILURES|===== ERRORS|"
     r"Ran \d+ test|Testsuite:|make test|npm test|go test|running \d+ tests|"
-    r"\b(?:rspec|junit|cargo test)\b|--- FAIL:|test result: FAILED|Failure/Error:",
+    r"\b(?:rspec|junit|cargo test)\b|--- FAIL:|test result: FAILED|Failure/Error:|"
+    # Jest/Vitest, .NET test, Maven Surefire, and JS test-file frames.
+    r"FAIL\s+\S+\.(?:test|spec)\.[jt]sx?\b|"
+    r"A total of \d+ test files? matched|Failed!\s+-\s*Failed:|"
+    r"Tests run:[^\n]*<<< FAILURE|"
+    r"\.test\.[jt]sx?:\d+:\d+",
     re.IGNORECASE,
 )
 # pytest prints FAILED uppercase (inline + short summary). Keeping this
@@ -52,11 +57,18 @@ COMPILE_RE = re.compile(
     re.IGNORECASE,
 )
 TIMEOUT_RE = re.compile(r"TimeoutError|timed?\s?out|timeout exceeded|deadline exceeded", re.IGNORECASE)
-FLAKY_RE = re.compile(r"\bflaky\b|\breruns?\b|\bretr(?:y|ied|ies|ying)\b", re.IGNORECASE)
-_TEST_RESULT = re.compile(r"(?P<name>\S+::\S+)\s+(?P<result>FAILED|PASSED|RERUN)\b")
+_TEST_RESULT = re.compile(
+    r"(?m)^\s*(?:"
+    r"(?P<suffix_name>\S+::\S+)\s+(?P<suffix_result>FAILED|PASSED|RERUN)\b|"
+    r"(?P<prefix_result>FAILED|PASSED|RERUN)\s+(?P<prefix_name>\S+::\S+)\b"
+    r")"
+)
+_GO_COUNT_RE = re.compile(r"\bgo test\b[^\n]*\s-count=(?:[2-9]|[1-9]\d+)\b", re.IGNORECASE)
+_GO_RESULT = re.compile(r"^--- (?P<result>PASS|FAIL):\s+(?P<name>\S+)(?:\s+\(|$)", re.MULTILINE)
 TEST_FAIL_RE = re.compile(
     r"(?-i:\bFAILED\b)|AssertionError|assert |===== FAILURES|\bERRORS\b|--- FAIL:|Failure/Error:|"
-    r"\b(?:Value|Type|Runtime|Key|Index)Error\b|\bException:\s",
+    r"\b(?:Value|Type|Runtime|Key|Index)Error\b|\bException:\s|"
+    r"(?m:^\s*[✕●×]\s+\S)|panicked at|Assert\.\w+\(\)\s+Failure",
     re.IGNORECASE,
 )
 CRASH_RE = re.compile(r"segmentation fault|segfault|SIGSEGV|SIGABRT|panic:", re.IGNORECASE)
@@ -82,10 +94,49 @@ CI_FAILURE_RE = re.compile(
 )
 CI_FOOTER_RE = re.compile(r"process completed with exit code\s*[1-9]\d*", re.IGNORECASE)
 
+# Cross-stage infrastructure signals (FR-28). Checked before generic failure
+# patterns so they are not swallowed by ci_failure.
+DEP_RES_RE = re.compile(
+    r"\bERESOLVE\b|unable to resolve dependency tree|could not resolve dependency|"
+    r"ResolutionImpossible|have conflicting dependencies|"
+    r"Fix the upstream dependency conflict|(?:peer )?dependency conflict between",
+    re.IGNORECASE,
+)
+DISK_FULL_RE = re.compile(
+    r"No space left on device|\[Errno 28\]|\bENOSPC\b|"
+    r"disk space.*exhausted|100%.*(?:disk|storage).*used",
+    re.IGNORECASE,
+)
+TLS_CERT_RE = re.compile(
+    r"certificate (?:has expired|verify failed)|SSL certificate problem|"
+    r"CERTIFICATE_VERIFY_FAILED|x509:\s*certificate|self signed certificate in certificate chain",
+    re.IGNORECASE,
+)
+RATE_LIMIT_RE = re.compile(
+    r"HTTP 429|429 Too Many Requests|secondary rate limit|rate limit exceeded|"
+    r"\btoomanyrequests\b|API rate limit",
+    re.IGNORECASE,
+)
+
 ERROR_LINE_RE = re.compile(r"error|failed|fail|exception|traceback|crash|panic", re.IGNORECASE)
 STRONG_ERROR_RE = re.compile(
     r"error:|\bAssertionError\b|E\s+assert|ModuleNotFoundError|ImportError|"
-    r"undefined reference|segmentation fault|panic:|No module named",
+    r"undefined reference|segmentation fault|panic:|No module named|npm ERR! code",
+    re.IGNORECASE,
+)
+# A chained traceback reports intermediate causes first; the FINAL exception
+# (after the marker) is the one that actually failed the run.
+_CHAINED_TRACEBACK_RE = re.compile(
+    r"During handling of the above exception|The above exception was the direct cause",
+    re.IGNORECASE,
+)
+_NPM_ERROR_CODE_RE = re.compile(r"^\s*npm ERR!\s+code\s+\S+", re.IGNORECASE)
+_NPM_ERROR_PREFIX_RE = re.compile(r"^\s*npm ERR!\s+", re.IGNORECASE)
+_NPM_ERROR_NOISE_RE = re.compile(r"^\s*npm ERR!\s+(?:code|errno)\b", re.IGNORECASE)
+_K8S_EVENTS_HEADER_RE = re.compile(r"^\s*Events:\s*$", re.IGNORECASE)
+_K8S_WARNING_EVENT_RE = re.compile(
+    r"^\s*Warning\b.*\b(?:failed|failure|back-off|oomkilled|unhealthy|"
+    r"errimagepull|imagepullbackoff|denied|deadline|timeout)\b",
     re.IGNORECASE,
 )
 
@@ -93,11 +144,17 @@ STRONG_ERROR_RE = re.compile(
 def detect_stage(text: str) -> str:
     if DEPLOY_MARKERS.search(text):
         return "deploy"
+    # Dependency conflicts happen during install/restore steps: build stage,
+    # even when the package manager output lacks generic build markers.
+    if DEP_RES_RE.search(text):
+        return "build"
     if TEST_MARKERS.search(text) or PYTEST_FAILED.search(text):
         return "test"
     if CI_FOOTER_RE.search(text):
         return "ci"
     if BUILD_MARKERS.search(text):
+        return "build"
+    if TLS_CERT_RE.search(text):
         return "build"
     if CI_MARKERS.search(text):
         return "ci"
@@ -138,6 +195,18 @@ def detect_kind(text: str, stage: str) -> str:
             return "readiness_timeout"
         if DEPLOY_FAILURE_RE.search(text):
             return "deployment_failed"
+    # Cross-stage signals first (FR-28): specific infrastructure patterns
+    # must win over the generic ci_failure/test_failure fallbacks. Rate
+    # limiting is excluded from deploy so registry pull limits stay
+    # classified as registry_auth_failure above.
+    if DEP_RES_RE.search(text):
+        return "dependency_resolution"
+    if DISK_FULL_RE.search(text):
+        return "disk_full"
+    if TLS_CERT_RE.search(text):
+        return "tls_certificate_error"
+    if RATE_LIMIT_RE.search(text) and stage != "deploy":
+        return "api_rate_limited"
     if IMPORT_RE.search(text):
         return "import_error"
     if CRASH_RE.search(text):
@@ -148,8 +217,10 @@ def detect_kind(text: str, stage: str) -> str:
         return "timeout"
     if COMPILE_RE.search(text):
         return "compilation_error"
+    if stage == "test" and _is_flaky_test(text):
+        return "flaky"
     if TEST_FAIL_RE.search(text):
-        return "flaky" if stage == "test" and _is_flaky_test(text) else "test_failure"
+        return "test_failure"
     if CI_FAILURE_RE.search(text):
         return "ci_failure"
     return "unknown"
@@ -161,6 +232,15 @@ def _candidate_lines(lines: list[str]) -> list[str]:
 
 def extract_message(text: str) -> str:
     lines = _candidate_lines(text.splitlines())
+    strong_hits = [ln.strip() for ln in lines if STRONG_ERROR_RE.search(ln)]
+    if _CHAINED_TRACEBACK_RE.search(text) and len(strong_hits) >= 2:
+        # Chained exception: the last strong error line is the root failure;
+        # earlier ones are intermediate causes being handled.
+        return strong_hits[-1]
+    if event_message := _kubernetes_event_message(lines):
+        return event_message
+    if npm_message := _npm_error_summary(lines):
+        return npm_message
     for ln in lines:
         if STRONG_ERROR_RE.search(ln):
             return ln.strip()
@@ -168,6 +248,29 @@ def extract_message(text: str) -> str:
         if ERROR_LINE_RE.search(ln):
             return ln.strip()
     return lines[-1].strip() if lines else ""
+
+
+def _npm_error_summary(lines: list[str]) -> str:
+    """Prefer npm's descriptive summary over its generic `code`/`errno` row."""
+    for index, line in enumerate(lines):
+        if not _NPM_ERROR_CODE_RE.match(line):
+            continue
+        for candidate in lines[index + 1:index + 6]:
+            if _NPM_ERROR_PREFIX_RE.match(candidate) and not _NPM_ERROR_NOISE_RE.match(candidate):
+                return candidate.strip()
+        return line.strip()
+    return ""
+
+
+def _kubernetes_event_message(lines: list[str]) -> str:
+    """Return the first actionable Warning from a bounded Kubernetes Events block."""
+    for index, line in enumerate(lines):
+        if not _K8S_EVENTS_HEADER_RE.match(line):
+            continue
+        for candidate in lines[index + 1:index + 33]:
+            if _K8S_WARNING_EVENT_RE.match(candidate):
+                return candidate.strip()
+    return ""
 
 
 def extract_summary(text: str, kind: str, message: str) -> str:
@@ -199,16 +302,46 @@ def parse_log(text: str) -> tuple[str, str, str, str]:
     return stage, kind, summary, message
 
 
+_JEST_FLAKY_FAIL = re.compile(r"^\s*[●✕]\s+(.+?)\s*$")
+_JEST_FLAKY_PASS = re.compile(r"^\s*✓\s+(.+?)\s*\([^)]*\)\s*$")
+_JEST_FLAKY_SUMMARY = re.compile(r"Tests?:[^\n]*\bflaky\b", re.IGNORECASE)
+
+
 def _is_flaky_test(text: str) -> bool:
-    """Require the same test to fail and later pass after an explicit rerun."""
+    """Require explicit rerun-then-pass evidence from the runner.
+
+    pytest: the same nodeid printed RERUN before PASSED. Jest: a test marked
+    failed (``●``/``✕``) that later appears as passed (``✓``), or an explicit
+    ``Tests: N flaky`` summary. Retry attempts that still fail are not flaky.
+    """
     outcomes: dict[str, list[str]] = {}
     for match in _TEST_RESULT.finditer(text):
-        outcomes.setdefault(match.group("name"), []).append(match.group("result"))
-    return any(
-        "RERUN" in values and "FAILED" in values and "PASSED" in values
-        and values.index("FAILED") < values.index("PASSED")
+        name = match.group("suffix_name") or match.group("prefix_name")
+        result = match.group("suffix_result") or match.group("prefix_result")
+        outcomes.setdefault(name, []).append(result)
+    if any(
+        "RERUN" in values and "PASSED" in values
+        and values.index("RERUN") < values.index("PASSED")
         for values in outcomes.values()
-    )
+    ):
+        return True
+    # ``go test -count=N`` has no dedicated rerun marker. Require the command
+    # flag and a fail-before-pass sequence for the same test to avoid treating
+    # identically named tests in different packages as flaky.
+    if _GO_COUNT_RE.search(text):
+        go_outcomes: dict[str, list[str]] = {}
+        for match in _GO_RESULT.finditer(text):
+            go_outcomes.setdefault(match.group("name"), []).append(match.group("result"))
+        if any(
+            "FAIL" in values and "PASS" in values and values.index("FAIL") < values.index("PASS")
+            for values in go_outcomes.values()
+        ):
+            return True
+    failed = {m.group(1).strip().lower() for m in _JEST_FLAKY_FAIL.finditer(text)}
+    for m in _JEST_FLAKY_PASS.finditer(text):
+        if m.group(1).strip().lower() in failed:
+            return True
+    return _JEST_FLAKY_SUMMARY.search(text) is not None
 
 
 def extract_events(text: str, primary_stage: str, primary_kind: str, primary_message: str) -> list[FailureEvent]:

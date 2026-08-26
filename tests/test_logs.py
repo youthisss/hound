@@ -1,4 +1,4 @@
-from hound_agent.ingest.logs import detect_kind, detect_stage, parse_log
+from hound_agent.ingest.logs import parse_log
 from tests.conftest import fixture
 
 IMPORT_TEXT = """Traceback (most recent call last):
@@ -24,6 +24,43 @@ def test_build_error_stage_kind():
 def test_flaky_kind():
     _, kind, _, _ = parse_log(fixture("flaky.log"))
     assert kind == "flaky"
+
+
+def test_pytest_rerun_then_pass_without_failed_line_is_flaky():
+    stage, kind, _, _ = parse_log(
+        "pytest\n"
+        "tests/test_cart.py::test_total RERUN\n"
+        "tests/test_cart.py::test_total PASSED\n"
+    )
+    assert (stage, kind) == ("test", "flaky")
+
+
+def test_prefixed_pytest_rerun_results_are_flaky():
+    stage, kind, _, _ = parse_log(
+        "pytest\n"
+        "RERUN tests/test_cart.py::test_total\n"
+        "PASSED tests/test_cart.py::test_total\n"
+    )
+    assert (stage, kind) == ("test", "flaky")
+
+
+def test_rerun_and_pass_for_different_tests_is_not_flaky():
+    stage, kind, _, _ = parse_log(
+        "pytest\n"
+        "tests/test_cart.py::test_total RERUN\n"
+        "tests/test_order.py::test_total PASSED\n"
+        "FAILED tests/test_cart.py::test_total - AssertionError\n"
+    )
+    assert (stage, kind) == ("test", "test_failure")
+
+
+def test_failed_then_pass_without_rerun_is_not_flaky():
+    stage, kind, _, _ = parse_log(
+        "pytest\n"
+        "FAILED tests/test_cart.py::test_total - AssertionError\n"
+        "PASSED tests/test_cart.py::test_total\n"
+    )
+    assert (stage, kind) == ("test", "test_failure")
 
 
 def test_cleanup_deploy_failure_does_not_replace_earlier_test_failure():

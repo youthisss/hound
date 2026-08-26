@@ -14,9 +14,9 @@ import time
 from typing import TextIO
 from uuid import uuid4
 
+from hound_agent.fsio import atomic_write
 from hound_agent.ingest.git import gather
 from hound_agent.ingest.redact import redact_text
-from hound_agent.output.report import _atomic_write
 
 
 DEFAULT_LOG_DIR = Path(".hound-agent") / "logs"
@@ -240,7 +240,7 @@ def _metadata(
 
 
 def _write_metadata(path: Path, metadata: dict) -> None:
-    _atomic_write(path, json.dumps(metadata, indent=2, ensure_ascii=False))
+    atomic_write(path, json.dumps(metadata, indent=2, ensure_ascii=False))
 
 
 def _open_log(path: Path):

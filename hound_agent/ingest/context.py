@@ -12,7 +12,19 @@ MAX_CONTEXT_BYTES = 64 * 1024
 MAX_CONTEXT_STRING = 1024
 
 def load_context(log_path: Path, text: str, explicit_path: str | None = None) -> tuple[RunContext, DeploymentContext]:
-    data = _load_json(Path(explicit_path)) if explicit_path else {}
+    """Load trusted CI/CD context.
+
+    Sources applied in order (later fills only empty fields):
+    1. explicit ``--context`` JSON when supplied;
+    2. the collector sidecar ``<log>.json`` written by ``hound log``,
+       auto-loaded only when no explicit path is given;
+    3. GitHub Actions environment when running inside Actions.
+    """
+    if explicit_path:
+        data = _load_json(Path(explicit_path))
+    else:
+        sidecar = log_path.with_suffix(".json")
+        data = _load_json(sidecar) if sidecar.is_file() else {}
     run = _run_from_mapping(data)
     deployment = _deployment_from_mapping(data)
     if os.environ.get("GITHUB_ACTIONS", "").lower() == "true":
@@ -93,7 +105,7 @@ def _detect_deployment(text: str) -> DeploymentContext:
     artifact = _match(r"(?:image|image:)\s*([\w./:@-]+)", text)
     recovery = "rollback_succeeded" if re.search(r"(?:rollback|rolled back).*(?:succeed|complete)", text, re.I) else ""
     outcome = "failed" if re.search(r"\b(?:failed|error|deadline exceeded|progress deadline)\b", text, re.I) else ""
-    revision = _match(r"(?:revision|version)\s*[=:]?\s*([A-Za-z0-9._-]+)", text)
+    revision = _match(r"(?:revision\s*(?:[=:]\s*|\s+)|version\s*[=:]\s*)([A-Za-z0-9._-]+)", text)
     return DeploymentContext(platform=platform, namespace=namespace, target=target, release=release, revision=revision, artifact=artifact, outcome=outcome, recovery=recovery)
 
 
