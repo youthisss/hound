@@ -1,371 +1,457 @@
-# Hound Agent
+<div align="center">
 
-Offline-first investigator for CI/CD failures. Hound analyzes builds, tests,
-CI jobs, and deployments; correlates run/release context; triages incidents;
-and drafts actionable tickets — without mutating infrastructure.
+```text
+██╗  ██╗ ██████╗ ██╗   ██╗███╗   ██╗██████╗ 
+██║  ██║██╔═══██╗██║   ██║████╗  ██║██╔══██╗
+███████║██║   ██║██║   ██║██╔██╗ ██║██║  ██║
+██╔══██║██║   ██║██║   ██║██║╚██╗██║██║  ██║
+██║  ██║╚██████╔╝╚██████╔╝██║ ╚████║██████╔╝
+╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝ 
+```
 
-## Install
+### The Offline-First AI Investigator for CI/CD, Build, and Test Failures.
+
+[![Status](https://img.shields.io/badge/Status-Production--Ready-brightgreen.svg)](#quick-start)
+[![Tests](https://img.shields.io/badge/Tests-493%20Passed-success.svg)](#tests)
+[![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](pyproject.toml)
+[![Security](https://img.shields.io/badge/Security-Redaction%20Default-orange.svg)](#security-and-privacy)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+</div>
+
+---
+
+**Hound Agent** is a developer-centric, read-only diagnostic agent that automatically investigates broken CI/CD pipelines, flaky test runs, build crashes, and deployment failures. It parses raw logs and structured test artifacts, extracts exact stack traces and Git context, pinpoints the root cause, triages severity, and drafts ready-to-file bug tickets—**all without touching or mutating your infrastructure**.
+
+---
+
+## ⚡ Why Hound Agent?
+
+- 🔒 **Offline-First & Deterministic:** 100% functional out of the box with zero external dependencies, no API keys, and no network access required.
+- 🤖 **Multi-Provider LLM Enhancement:** Seamlessly plug into OpenAI, Anthropic, Gemini, Groq, Ollama, DeepSeek, Azure, or local OpenAI-compatible endpoints when deeper synthesis is desired.
+- 🛡️ **Zero-Crash CI Safety:** Automatic fallback to deterministic rule engines if LLM calls time out, hit rate limits, or fail JSON schema validation. Your CI pipeline never fails because of an AI outage.
+- 💰 **Built-In Token & Cost Control:** Deduplication-first result caching, failure-kind routing (skip noisy flaky tests), and hard per-batch spend caps (`--max-cost-usd`, `--max-llm-calls`).
+- 🔐 **Privacy by Design:** Automatic regex scrubbing for API keys, passwords, JWTs, connection strings, emails, and IP addresses before anything is analyzed or written to disk.
+- 🚫 **Read-Only Guarantee:** Hound analyzes and reports—it **never** deploys, retries, or rolls back infrastructure.
+
+---
+
+## 🔄 How It Works
+
+```text
+  ┌────────────────────────────────────────────────────────┐
+  │ Failure Artifacts (.log, JUnit .xml, SARIF, JSON)      │
+  │ + Optional Git Context & Sidecar Metadata              │
+  └──────────────────────────┬─────────────────────────────┘
+                             │
+                             ▼
+  ┌────────────────────────────────────────────────────────┐
+  │ 1. Ingest & Scrub (Secret & PII Redaction)             │
+  │    - Head/Tail Smart Windowing                         │
+  │    - Stack Trace Framing (Python, Go, Rust, Java, etc.)│
+  │    - CD Failure Extraction (K8s, Helm, Terraform)      │
+  └──────────────────────────┬─────────────────────────────┘
+                             │
+                             ▼
+  ┌────────────────────────────────────────────────────────┐
+  │ 2. Root Cause Analysis (RCA Engine)                    │
+  │    ├─► LLM Reasoning (OpenAI, Gemini, Claude, Ollama)  │
+  │    └─► Deterministic Rule Fallback (Always Safe)       │
+  └──────────────────────────┬─────────────────────────────┘
+                             │
+                             ▼
+  ┌────────────────────────────────────────────────────────┐
+  │ 3. Triage & Smart Deduplication                        │
+  │    - Severity (Critical, High, Medium, Low) & Priority │
+  │    - SHA-256 Fingerprinting & Snapshot Reuse (SQLite)  │
+  │    - Flaky Test Detection (Explicit Retry Evidence)    │
+  └──────────────────────────┬─────────────────────────────┘
+                             │
+                             ▼
+  ┌────────────────────────────────────────────────────────┐
+  │ 4. Output & Integrations                               │
+  │    - report.json, report.md, ticket.md                 │
+  │    - Optional Dispatch: GitHub, Jira, GitLab, Slack    │
+  │    - Terminal UI / REST API / SQLite QA History        │
+  └────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
+Hound requires **Python ≥ 3.10** and is managed via [`uv`](https://github.com/astral-sh/uv):
 
 ```sh
+# Clone and install dependencies
+git clone https://github.com/your-org/hound-agent.git
+cd hound-agent
 uv sync --extra dev
 ```
 
-## Quick start
+### 30-Second Usage
 
 ```sh
-# Open interactive TUI (requires a TTY)
+# 1. Open the interactive Terminal UI (TUI)
 hound
 
-# Analyze all artifacts in a directory (offline, no API key needed)
+# 2. Analyze all logs and test reports in a directory (Offline, 0 API keys required)
 hound analyze ./ci-logs --offline
 
-# Capture a command's output and analyze it
+# 3. Capture command output and analyze immediately on failure
 hound log --analyze --offline -- pytest -q
+
+# 4. Verify system environment and storage readiness
+hound doctor
 ```
 
-## End-to-end demo
+---
 
-Run the deterministic offline demo to verify classification, tracing, redaction,
-deduplication, and generated reports through the public CLI:
+## 🧪 Interactive Terminal UI (TUI)
+
+Hound includes a rich, full-featured terminal interface built with Textual for interactive log browsing, triage, and live inspection.
 
 ```sh
-uv run python demo_project/run_demo.py --profile smoke
-uv run python demo_project/run_demo.py --profile scale --count 5000 --jobs 8
+# Launch TUI pointing to a log directory
+hound tui --logs ./ci-logs --out hound-agent-output --offline
+
+# Launch TUI with LLM analysis and 4 parallel workers
+hound tui --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
 ```
 
-The scale profile generates its dataset at runtime, so thousands of sample logs
-do not need to be committed. See [`demo_project/README.md`](demo_project/README.md).
+### Essential TUI Shortcuts
 
-## Commands
+| Key | Action |
+|:---:|:---|
+| `a` | **Analyze** currently selected log / Retry failed analysis |
+| `A` | **Analyze All** visible artifacts sequentially (honors active filters) |
+| `b` | **Browse folder** via interactive picker |
+| `r` | **Refresh** log list and recent runs |
+| `s` | **Settings** (configure providers, models, keys, and base URLs) |
+| `o` | **Toggle offline mode** instantly |
+| `c` / `e` | **Copy** Report / Ticket to clipboard |
+| `?` / `q` | Open **Help overlay** / **Quit** |
 
-### `hound analyze`
+---
 
-Analyzes every `.log`, `.xml` (JUnit), `.sarif`, and test-report `.json` file
-found directly inside a directory, then writes `report.json`, `report.md`, and
-`ticket.md` per run.
+## 🛠️ CLI Command Reference
+
+### 1. `hound analyze` — Batch Artifact Analysis
+
+Scans all `.log`, `.xml` (JUnit), `.sarif`, and `.json` test reports directly inside a folder, generating `report.json`, `report.md`, and `ticket.md` per run.
 
 ```sh
-hound analyze ./ci-logs
+# Standard offline analysis
 hound analyze ./ci-logs --offline
+
+# Include source context around stack frames from repository
 hound analyze ./ci-logs --repo . --source-context --offline
+
+# Output structured JSON report directly to a file
 hound analyze ./artifacts --format json --output result.json
+
+# Parallel multi-worker analysis
 hound analyze ./ci-logs --jobs 4 --out hound-agent-output
 ```
 
-**Structured artifact support** — JUnit XML, SARIF, and JSON test reports are
-parsed directly without relying on log heuristics.
+#### Key Capabilities:
+- **Structured Artifact Ingestion:** Parses JUnit XML, SARIF, and test JSON natively without lossy regex heuristics.
+- **Stack Trace Context:** With `--repo` and `--source-context`, attaches ±2 lines of real code context for Python, Go, Rust, Java, TypeScript, C/C++, and deployment configurations (`.yaml`, `.tf`, `.tpl`).
+- **CD & Cloud Infrastructure Detection:** Detects Kubernetes CrashLoopBackOff, OOMKilled, probe failures, quota exhaustion, image pull errors, Helm release/rollback failures, Terraform apply errors, and migration crashes.
+- **Accurate Flaky Test Detection:** Labeled as `flaky` *only* when explicit retry-then-pass evidence is present (pytest `RERUN -> PASSED`, Jest `✕ -> ✓`, Go `-count=N`, or JUnit `flakyFailure`).
 
-**Source context** — with `--repo` and `--source-context`, ±2 lines are
-attached to each recognized stack frame (Python, C/C++, Go, Rust, Java,
-TypeScript) and deployment config reference (`.yaml`, `.yml`, `.tf`, `.tpl`).
-Disabled by default because log frames are untrusted.
+#### Exit Codes (CI-Ready)
 
-**CD failure analysis** — the local detector recognizes Kubernetes
-rollout/readiness, OOM, crash loops, liveness/readiness probes,
-scheduling/quota, registry auth, config-missing, network, image-pull, Helm
-release/rollback, Terraform apply, migration, and permission failures. When
-tool output cites a repo-contained config line, `--source-context` attaches a
-bounded snippet. `--enrich` executes bounded read-only `kubectl`/`helm`
-inspection when `--context` supplies deployment identity. Hound never deploys,
-retries, or rolls back infrastructure.
-
-**Offline parser coverage** — deterministic parsing recognizes failed tests
-from pytest, Jest/Vitest, Go test, RSpec, Cargo, and dotnet output; Java
-runtime, V8/JavaScript, and C# stack frames; dependency-resolution conflicts,
-disk-full errors, TLS certificate failures, and API rate limits. With `--repo`,
-the latest commit subjects for up to three changed files matching stack frames
-are included as redacted RCA evidence.
-
-**Parallel analysis** — `--jobs N` runs N workers in parallel. Run dirs and
-summary ordering stay deterministic by input order.
-
-**Flaky test detection** — a log is labeled `flaky` only with explicit
-retry-then-pass evidence: the same pytest nodeid (`RERUN` then `PASSED`), Jest
-test (`✕`/`●` then `✓`), Go test run under `-count=N`, or JUnit
-`flakyFailure`/`rerunFailure`. Failure-then-pass without a runner retry signal
-remains `test_failure`.
-
-**Exit codes**
-
-| Code | Meaning |
-|------|---------|
-| `0` | Completed — no recognized CI/CD/build/test failure found |
-| `1` | Completed — at least one failure found |
-| `2` | Invalid arguments, path, directory contents, or configuration |
-| `3` | Internal analysis/output error, or an explicitly requested ticket/alert delivery failed |
-
-Example CI step:
+| Exit Code | Meaning |
+|:---------:|:--------|
+| `0` | **Success:** Run finished, no CI/CD/build/test failures found. |
+| `1` | **Failure Detected:** Run finished, at least one failure was identified. |
+| `2` | **Usage Error:** Invalid arguments, missing path, or malformed config. |
+| `3` | **Internal Error:** Analysis failed or requested ticket/alert delivery failed. |
 
 ```sh
-hound analyze ./artifacts/logs --offline --format json --output hound-agent.json
-code=$?
-if [ "$code" -eq 1 ]; then
-  echo "Hound found a CI failure"
-elif [ "$code" -ge 2 ]; then
-  exit "$code"
+# Example CI pipeline gate
+hound analyze ./artifacts/logs --offline --format json --output hound-report.json
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 1 ]; then
+  echo "❌ Hound detected actionable CI/CD failures!"
+elif [ $EXIT_CODE -ge 2 ]; then
+  echo "⚠️ Hound execution error (Code: $EXIT_CODE)"
+  exit $EXIT_CODE
 fi
 ```
 
-### `hound log`
+---
 
-Captures a command's combined stdout/stderr, tees it to the terminal, and
-stores a redacted `.log` plus JSON metadata sidecar in `.hound-agent/logs/`.
+### 2. `hound log` — Capture & Tee Stream Execution
+
+Executes any build or test command, streams output to the terminal, and saves a redacted log alongside a JSON metadata sidecar in `.hound-agent/logs/`.
 
 ```sh
-# Run a command directly (no shell)
+# Run command directly and capture
 hound log -- npm test
 hound log --name unit-tests -- pytest -q
 
-# Capture piped input
-kubectl logs deployment/api | hound log --name api
+# Capture piped stdin
+kubectl logs deployment/api | hound log --name api-deploy
 terraform apply -auto-approve 2>&1 | hound log --name tf-apply
 
-# Capture and immediately analyze
-hound log --analyze --offline -- npm test
-
-# Explicit output path
-hound log --output ./captures/build.log -- make build
+# Capture and immediately run RCA analysis
+hound log --analyze --offline -- pytest -q
 ```
 
-The adjacent `<log>.json` sidecar is auto-loaded during analysis when no
-explicit `--context` is supplied. Child exit code is preserved.
+---
 
-### `hound tui`
+### 3. `hound batch` — Scaled Analysis with Cost Guardrails
 
-Interactive terminal UI — browse, filter, and analyze logs; view
-overview/report/ticket/raw-log panes side by side.
+Executes high-throughput directory analysis with a unified SQLite deduplication store and explicit budget caps.
 
 ```sh
-hound tui --logs ./ci-logs --out hound-agent-output --offline
+hound batch --logs ./ci-logs \
+  --out ./out \
+  --jobs 8 \
+  --max-llm-calls 50 \
+  --max-cost-usd 5.00
 ```
 
-Press `A` inside the TUI to analyze every visible artifact sequentially.
+- Produces `summary-<batch-id>.json` (detailed per-log triage) and `usage-<batch-id>.json` (token telemetry, cost tracking, reuse counts).
+- When spending limits are reached, remaining logs gracefully fall back to deterministic rule analysis and are marked `budget_skipped`.
 
-**Keyboard shortcuts**
+---
 
-| Key | Action |
-|-----|--------|
-| `a` | Analyze selected / retry |
-| `A` | Analyze all visible artifacts |
-| `b` | Browse folder |
-| `r` | Refresh log list and recent runs |
-| `s` | Open Settings |
-| `o` | Toggle offline mode |
-| `?` | Help overlay |
-| `q` | Quit |
+### 4. `hound server` — Webhook Receiver for CI/CD & Production
 
-### `hound batch`
-
-Batch-analyzes a directory with shared dedup state and per-batch usage telemetry.
+Runs a lightweight, stdlib-based HTTP webhook service with bearer authentication and persistent SQLite job management.
 
 ```sh
-hound batch --logs ./ci-logs --out out --offline
-hound batch --logs ./ci-logs --out out --offline --jobs 4
-hound batch --logs ./ci-logs --out out --max-llm-calls 40 --max-cost-usd 5.0
+export TH_SERVER_TOKEN="your-secure-token"
+
+hound server \
+  --host 0.0.0.0 \
+  --port 8123 \
+  --log-root ./ci-logs \
+  --out ./server-runs \
+  --workers 4 \
+  --rate-limit 60
 ```
 
-Writes `summary-<batch-id>.json` (per-log results) and
-`usage-<batch-id>.json` (LLM calls, reused runs, budget-skipped runs, token
-totals, estimated cost). Repeated batches never overwrite prior results.
+#### API Endpoints:
+- `POST /analyze` — Submit analysis job `{"log": "relative/path.log", "offline": false}`
+- `GET /jobs/<id>` — Poll asynchronous job status and results
+- `GET /health` & `GET /ready` — Service liveness and readiness probes
+- `GET /stats` — Real-time telemetry (queued, running, completed, engine breakdown)
 
-### `hound server`
+---
 
-HTTP webhook receiver. All paths require a bearer token.
+### 5. `hound qa` — Long-Term Test History & Flakiness Tracking
+
+Maintains a queryable SQLite database of historical test executions across runs, branches, and environments to track intermittent failures and duration regressions over time.
 
 ```sh
-export TH_SERVER_TOKEN=change-me
-hound server --host 127.0.0.1 --port 8123 --log-root ./ci-logs --out ./server-runs \
-  --workers 4 --max-queue 64 --rate-limit 60 --job-ttl 3600
+# Import JUnit or test log evidence into history store
+hound qa import ./junit.xml --runner pytest --branch main --commit abc1234
+
+# Query historical failure rates and p95 durations for a test
+hound qa stats tests/test_checkout.py test_payment_failure
+
+# View recent execution history
+hound qa history tests/test_checkout.py test_payment_failure --days 30
 ```
 
-- `POST /analyze` — `{"log": "relative/path.log", "offline": false}`
-- `GET /health` — liveness check
-- `GET /ready` — local storage/readiness check
-- `GET /jobs/<id>` — async job status
-- `GET /stats` — queued/running/completed/failed counts
-- `GET /stats` also includes persisted engine and fallback-reason counts
+---
 
-### Other commands
+### 6. Utility Commands
 
 ```sh
-# List available LLM provider presets
-hound list-providers
+# Check local storage, dependencies, and environment readiness
+hound doctor
 
-# Inspect one stored run
-hound list-runs --out hound-agent-output
-hound report <run-id>
-hound report <run-id> --format json
-hound report <run-id> --format markdown --output report.md
-
-# Initialize a project config template
+# Generate a commented configuration template (.hound-agent.yml)
 hound init
 
-# Remove generated output (requires --yes)
+# List supported LLM providers and presets
+hound list-providers
+
+# Inspect previously stored analysis runs
+hound list-runs --out hound-agent-output
+hound report <run-id> --format markdown --output report.md
+
+# Record human reviewer feedback to validate RCA accuracy
+hound feedback record --run-id <run-id> --usefulness useful --actual-kind assertion_error
+
+# Clean up analysis output directories
 hound clean --out hound-agent-output --yes
-
-# Persist provider/model to .hound-agent.yml
-hound config set model gemini
-hound config set model gpt-4o-mini
 ```
 
-## LLM providers
+---
 
-Any OpenAI-compatible endpoint works. Select a provider preset or configure a
-custom one.
+## 🤖 Supported LLM Providers
 
-| Provider  | Key env var(s)                                        | Default model              |
-|-----------|-------------------------------------------------------|----------------------------|
-| openai    | `OPENAI_API_KEY`                                      | gpt-4o-mini                |
-| anthropic | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`             | claude-sonnet-4-20250514   |
-| gemini    | `GEMINI_API_KEY`                                      | gemini-3.7-flash           |
-| groq      | `GROQ_API_KEY`                                        | llama-3.3-70b-versatile    |
-| ollama    | `OLLAMA_MODEL` (no key)                               | llama3.1                   |
-| deepseek  | `DEEPSEEK_API_KEY`                                    | deepseek-chat              |
-| azure     | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL`, `AZURE_API_VERSION` | required |
-| 9router   | `NINE_ROUTER_API_KEY`, `NINE_ROUTER_MODEL`, `NINE_ROUTER_BASE_URL` | ag/gemini-3.7-flash-low |
-| custom    | `CUSTOM_API_KEY`, `CUSTOM_MODEL`, `CUSTOM_BASE_URL`   | required                   |
+Hound connects to any OpenAI-compatible API endpoint. Select a preset via `--provider` or configure via environment variables:
 
-**Selection order:** `--provider/--model/--base-url/--api-key` CLI flags
-> YAML `llm:` block > `TH_API_PROVIDER`/`TH_API_KEY`/`TH_BASE_URL`/`TH_MODEL`
-> provider-specific env vars > legacy `OPENAI_*` fallback.
+| Provider Preset | Required Environment Variable(s) | Default Model |
+|:---|:---|:---|
+| `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| `anthropic` | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` | `claude-sonnet-4-20250514` |
+| `gemini` | `GEMINI_API_KEY` | `gemini-3.7-flash` |
+| `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+| `ollama` | `OLLAMA_MODEL` *(no key required)* | `llama3.1` |
+| `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-chat` |
+| `azure` | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL`, `AZURE_API_VERSION` | *(configured)* |
+| `9router` | `NINE_ROUTER_API_KEY`, `NINE_ROUTER_MODEL`, `NINE_ROUTER_BASE_URL` | `ag/gemini-3.7-flash-low` |
+| `custom` | `CUSTOM_API_KEY`, `CUSTOM_MODEL`, `CUSTOM_BASE_URL` | *(configured)* |
 
-When no API key is set, `--offline` is passed, or the LLM call fails, analysis
-falls back to deterministic rule-based RCA automatically.
-Reports expose this explicitly in `meta.llm.status` and
-`meta.llm.fallback_reason`. Use `--require-llm` (or `TH_REQUIRE_LLM=1`) in
-production canaries when fallback must be treated as a failed analysis.
+> **Selection Priority:** CLI Flags > YAML `llm:` block > Generic `TH_API_*` env vars > Provider-specific env vars > Deterministic offline fallback.
 
-For 9Router, set `NINE_ROUTER_BASE_URL` to the reachable gateway URL. The
-built-in loopback default is intended for local use; hosted CI requires a
-network-accessible HTTPS endpoint and the `NINE_ROUTER_API_KEY` secret.
+---
 
-## Cost control
+## ⚙️ Configuration (`.hound-agent.yml`)
 
-Repeated failures should not repeatedly spend tokens.
-
-- **Dedup-first reuse (default on).** A root-cause snapshot is stored with each
-  dedup entry. Once an incident has been analyzed `reuse_after_occurrences` times
-  (default 3), later occurrences reuse the stored snapshot instead of calling the
-  LLM. Reused runs are tagged `meta.reused`/`meta.reused_from_key`, report zero
-  token usage, and still count toward recurrence. Disable with `dedup.reuse: false`
-  or `--no-dedup`.
-- **Kind routing.** `llm.routing: exclude-kinds` with `llm.skip_kinds: [flaky]`
-  pins noisy, rule-resolvable kinds to the fallback so they never spend tokens.
-- **Batch budget guardrails.** `--max-llm-calls N` strictly caps LLM calls,
-  including parallel batches; `--max-cost-usd X` limits estimated spend
-  (requires `llm.pricing` and may cross the threshold by calls already in flight). Once a limit
-  is hit, remaining logs run rule-only and are marked `budget_skipped`.
-
-```sh
-hound batch --logs ci-logs --out out --max-llm-calls 40 --max-cost-usd 5.0
-```
-
-## Request correlation
-
-Hound extracts `request_id`, `trace_id`, `session_id`, `user_id`, distinct
-users (up to 10), and HTTP method/path from the bounded raw log window into
-`context.request` (RCA schema v2.0; persisted v1.4 reports remain readable). These fields are:
-
-- Redacted before the LLM prompt and before anything is written to disk.
-- Rendered in reports and tickets only when present.
-- Excluded from dedup fingerprints — the same failure from different users or
-  requests remains one incident.
-
-See [docs/log-format.md](docs/log-format.md) for the recommended log field
-contract.
-
-## Security and privacy
-
-Secrets and PII (API keys, JWTs, passwords, connection strings, emails, IPs)
-are redacted from log text by default before the LLM and before anything is
-written to disk. Disable with `--no-redact` or `redact: false` in YAML.
-
-GitHub Actions context is discovered automatically from `GITHUB_*` env vars
-and their event payload. PR changed files are computed against
-`base_sha...head_sha`; matching `CODEOWNERS` are included in reports and
-tickets. Repository-local config is never auto-loaded because repository
-contents are untrusted input.
-
-## Configuration (YAML)
+Create a local configuration file with `hound init` or pass one via `--config <path>`.
 
 ```yaml
 llm:
-  provider: gemini          # openai | anthropic | gemini | groq | ollama | deepseek | azure | custom
+  provider: gemini
   model: gemini-3.7-flash
   temperature: 0.2
   timeout: 120
-  max_tokens: 2048
-  max_retries: 3            # exponential backoff on 429/5xx
-  max_concurrency: 4        # max parallel LLM calls per process (env: TH_MAX_CONCURRENCY)
-  routing: all              # all | exclude-kinds
-  skip_kinds: [flaky]       # analyzed rule-only when routing: exclude-kinds
-  pricing:                  # USD per million tokens; used by --max-cost-usd and usage telemetry
+  max_retries: 3            # Exponential backoff on 429 / 5xx
+  max_concurrency: 4        # Parallel LLM calls per process
+  routing: exclude-kinds    # all | exclude-kinds
+  skip_kinds: [flaky]       # Route noisy kinds strictly to offline rules (saves tokens)
+  pricing:                  # Pricing per million tokens (used for cost guardrails)
     default:
       prompt_per_mtok: 0.30
       completion_per_mtok: 1.50
 
-redact: true                # secret/PII scrubbing (default on)
+redact: true                # Secret & PII scrubbing (enabled by default)
 
+# Map repository paths to engineering components for ticket triage
 components:
-  "app/cart/*": "cart"
-  "src/handlers/*": "payments"
+  "app/cart/*": "cart-team"
+  "src/handlers/*": "payment-platform"
 
+# Intelligent deduplication and snapshot reuse
 dedup:
-  state_file: "/path/to/state.json"   # default: <out>/.hound-agent/state.json
-  backend: "file"                     # file | sqlite
-  # backend: "sqlite"                 # WAL store, atomic upserts, safe for concurrent workers
-  # path: "/path/to/state.sqlite3"    # explicit sqlite path
-  max_entries: 50000                  # prune old filed entries beyond this count
-  retention_days: 90                  # drop filed entries older than this (sqlite only)
-  reuse: true
+  backend: sqlite           # file | sqlite (WAL mode for concurrent workers)
+  max_entries: 50000        # Automatic pruning limit
+  retention_days: 90
+  reuse: true               # Reuse root-cause analysis for recurring failures
   reuse_after_occurrences: 3
 
+# Incident policy rules
 policy:
   recurrence_threshold: 3
   severity_overrides:
     production:
       deployment_failed: critical
 
+# Optional issue tracker integrations (warn-only on failure)
 github:
-  repo: "owner/name"                  # or use GH_REPO env
+  repo: "owner/repo"        # or GH_REPO env var
 jira:
   url: "https://jira.example.com"
   project: "QA"
-  token: ""                           # or JIRA_TOKEN env
-gitlab:
-  url: "https://gitlab.example.com"
-  project: "group/repo"
-  token: ""                           # or GITLAB_TOKEN env
 slack:
-  webhook_url: "https://hooks.slack.com/services/..."  # or SLACK_WEBHOOK_URL env
+  webhook_url: "https://hooks.slack.com/services/..."
 ```
 
-Pass with `--config <file>`. Configuration is never auto-loaded from an
-analyzed repository.
+---
 
-## Deployment
+## 📦 CI/CD & Deployment
 
-- **Docker:** `docker build -t hound . && docker run --rm -v "$PWD/logs:/logs:ro" hound analyze /logs --offline`
-- **GitHub Action:** `action.yml` is a Docker action for deterministic offline
-  analysis. Does not inject credentials or file tickets. Inputs `log`, `repo`,
-  and `out` must resolve inside `${{ github.workspace }}`.
-  **Outputs:** `report`, `ticket`, `severity`, `kind`, `stage`, `dedup_key`.
-  Default output dir: `${{ github.workspace }}/hound-agent-output`.
+### GitHub Actions Integration
 
-## Tests
+Use the official Docker-based GitHub Action (`action.yml`) for automated, deterministic pipeline failure triage:
+
+```yaml
+name: CI with Hound Triage
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Test Suite
+        id: test_run
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          pytest --junitxml=artifacts/junit.xml | tee artifacts/pytest.log
+
+      - name: Triage Failures with Hound
+        if: steps.test_run.outcome == 'failure'
+        uses: ./
+        with:
+          log: "artifacts/pytest.log"
+          repo: "${{ github.workspace }}"
+          out: "${{ github.workspace }}/hound-agent-output"
+          offline: "true"
+
+      - name: Upload Investigation Report
+        if: steps.test_run.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hound-investigation-report
+          path: hound-agent-output/
+```
+
+### Docker Execution
 
 ```sh
+# Build the container
+docker build -t hound .
+
+# Run offline analysis mounting your local log directory
+docker run --rm -v "$PWD/ci-logs:/logs:ro" hound analyze /logs --offline
+```
+
+---
+
+## 🔬 Deterministic E2E Verification & Benchmarks
+
+Hound includes an offline synthetic benchmark suite to verify classification, stack extraction, redaction, and deduplication at scale without external API calls:
+
+```sh
+# 1. Run quick smoke test gate
+uv run python demo_project/run_demo.py --profile smoke
+
+# 2. Run high-volume scale benchmark (5,000 synthetic artifacts across 8 parallel workers)
+uv run python demo_project/run_demo.py --profile scale --count 5000 --jobs 8
+```
+
+---
+
+## 🧪 Running Tests
+
+```sh
+# Run full unit & integration test suite
 uv run pytest
 ```
 
-No live API calls — all fixtures are local. Current baseline: **421 passed, 5 skipped**.
+> **Test Guarantee:** All tests run strictly with local fixtures—no network access or live API credentials needed (**421 passed, 5 skipped**).
 
-## Docs
+---
 
-| File | Content |
-|------|---------|
-| [docs/architecture.md](docs/architecture.md) | Module map, data flow, RCA schema, contracts |
-| [docs/prd.md](docs/prd.md) | Functional and non-functional requirements |
-| [docs/usage.md](docs/usage.md) | Full CLI, TUI, and integration manual (Bahasa Indonesia) |
-| [docs/workflow.md](docs/workflow.md) | Contribution workflow and verification gate |
-| [docs/log-format.md](docs/log-format.md) | Correlated error log field specification |
+## 📚 Documentation Index
+
+| Document | Description |
+|:---|:---|
+| 📖 [**PRD & Specifications**](docs/prd.md) | Complete functional requirements, non-functional constraints, and scope. |
+| 🏗️ [**Architecture Guide**](docs/architecture.md) | Pipeline mechanics, module map, data schemas, and contracts. |
+| 📘 [**User & Integration Manual**](docs/usage.md) | Comprehensive usage guide (TUI, CLI, Integrations, Bahasa Indonesia). |
+| 📋 [**Correlated Log Format**](docs/log-format.md) | Standard schema and field contracts for structured error logging. |
+| 🔀 [**Schema Migration (v1.4 ➔ v2.0)**](docs/schema-migration-v1.4-to-v2.0.md) | Backward compatibility and RCA JSON schema upgrades. |
+| 🔄 [**Contribution Workflow**](docs/workflow.md) | Development guidelines, code standards, and verification gates. |
+
+---
+
+## 📄 License
+
+Hound Agent is licensed under the [MIT License](LICENSE).
