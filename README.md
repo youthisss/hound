@@ -1,15 +1,15 @@
-<div align="center" style="text-align: center; width: 100%;">
+<div align="center">
 
-```text
+<pre>
 ██╗  ██╗ ██████╗ ██╗   ██╗███╗   ██╗██████╗ 
 ██║  ██║██╔═══██╗██║   ██║████╗  ██║██╔══██╗
 ███████║██║   ██║██║   ██║██╔██╗ ██║██║  ██║
 ██╔══██║██║   ██║██║   ██║██║╚██╗██║██║  ██║
 ██║  ██║╚██████╔╝╚██████╔╝██║ ╚████║██████╔╝
 ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝ 
-```
+</pre>
 
-### An Offline-First CLI & TUI Tool for Investigating CI/CD, Build, and Test Failures.
+<h3>An Offline-First CLI & TUI Tool for Investigating CI/CD, Build, and Test Failures.</h3>
 
 <p align="center">
   <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Production--Ready-brightgreen.svg" alt="Status"></a>
