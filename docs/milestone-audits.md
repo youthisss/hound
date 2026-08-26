@@ -126,3 +126,49 @@ Verification evidence:
   `confidence_calibration` per band.
 - `uv run ruff check .`: clean.
 - `uv run mypy hound_agent`: clean across 37 source files.
+
+## M4 — Normalized Test Results and Historical Store
+
+- Exit status: passed on 2026-08-26.
+- Code-review lane: `APPROVE`. The history store is isolated from dedup and
+  feedback state (`<out>/.hound-agent/history.sqlite3`), uses WAL plus atomic
+  `ON CONFLICT` upserts keyed by `(suite, test, run_id, attempt)`, and never
+  stores raw logs — rows reference `run_id`/`evidence_id` instead. Import is
+  bounded and rejects DOCTYPE XML and symlinked sources.
+- Architecture lane: `CLEAR`. The `(suite, leaf test)` identity is runner-
+  agnostic (pytest `path::test`, JUnit `class.method`, Go package-level tests,
+  and JSON reports all reduce to the same leaf), and JUnit flaky/rerun metadata
+  expands into attempt-numbered rows so aggregates stay comparable.
+- Final synthesis: `APPROVE` for M4. Insufficient-history behavior is explicit
+  (`insufficient_history`, `failure_rate=None`); later M5/M6 consumers depend on
+  that contract.
+
+Findings fixed:
+
+1. `HIGH` - the history schema used the SQLite reserved keyword `commit` as a
+   column name, breaking every write with `near "commit": syntax error`. The
+   column is renamed `commit_sha` across schema, upsert, query, export, and
+   import paths.
+2. `MEDIUM` - JUnit tests with dotted full names (for example
+   `tests.test_checkout.test_cart_total`) did not reduce to the same leaf as
+   pytest text output. `stable_test_identity` now strips `.`, `::`, `#`, `/`,
+   and `\` separators, keeping cross-runner identity consistent.
+3. `MEDIUM` - Vitest reports were not detected because the runner marker is a
+   `RUN vX.Y.Z` header rather than the literal string "vitest". Detection now
+   matches the header pattern.
+
+Verification evidence:
+
+- `uv run pytest tests/test_tests.py tests/test_qa_history.py -q`: passed.
+- Full suite: 493 passed, 5 skipped.
+- `uv run hound qa --help`: exit 0; `import`, `history`, `tests`, `stats`,
+  `export` subcommands available.
+- `uv run hound qa import tests/fixtures/junit_flaky.xml --out <tmp>`: exit 0;
+  flaky test recorded as failed(1) + passed(2); `stats` reports `failure_rate`
+  0.5 with attempt metadata.
+- Concurrent-write test: 4 threads upsert 200 rows into one WAL store with no
+  lost updates (verified in `tests/test_qa_history.py`).
+- Retention test: deleting rows older than the window leaves recomputed
+  aggregates intact (0.75 before, 0.50 after pruning).
+- `uv run ruff check .`: clean.
+- `uv run mypy hound_agent`: clean across 41 source files.

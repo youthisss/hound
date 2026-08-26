@@ -43,7 +43,7 @@ def normalize_runner(runner: str) -> str:
 def stable_test_identity(suite: str, test: str) -> str:
     """Runner-agnostic leaf identity used for cross-run comparison."""
     leaf = str(test or "").strip()
-    for separator in ("::", "#"):
+    for separator in ("::", "#", ".", "/", "\\"):
         leaf = leaf.split(separator)[-1].strip()
     leaf = leaf[:MAX_IDENTITY_CHARS] or "unknown"
     return leaf

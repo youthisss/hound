@@ -69,6 +69,7 @@ log + repo context → parse → root cause analysis → triage → report + tic
 | FR-30 | Structured feedback: rate root-cause usefulness, kind/severity/owner/duplicate correctness, and confirmed actual outcome; store separately from dedup state with audit metadata and redaction; CLI record/export (`hound feedback`); reviewed feedback exports explicit regression-fixture candidate manifests without mutating classifiers |
 | FR-31 | Trust policy: source classes `trusted_branch`/`fork_pr`/`local_artifact` gate source context, enrichment, LLM, and delivery (`--source-class`, YAML `trust.source_class`, `TH_SOURCE_CLASS`, CI detection); untrusted fork analysis defaults to offline with no source enrichment and no delivery |
 | FR-32 | Confidence calibration: deterministic `high`/`medium`/`low` bands calibrated against the evaluation set; evaluator reports support, empirical accuracy, mean deterministic score, and gap per band with documented meaning |
+| FR-33 | QA test history: normalized `(suite, leaf test)` identity across pytest/JUnit/Jest/Vitest/Go/RSpec/Cargo/dotnet evidence; SQLite store (`hound qa`) with WAL atomic upserts keyed by `(suite, test, run_id, attempt)`, retention, migrations, queries (counts, failure-rate windows, first/last seen, duration median/p95, environment breakdown), explicit `insufficient_history` instead of guessing, and sanitized import/export without storing raw logs |
 
 ## 5. Non-functional Requirements
 

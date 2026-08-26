@@ -15,7 +15,11 @@ hound-agent/
 │   ├── eval.py               # offline labeled-corpus evaluator, baseline metrics, confidence calibration
 │   ├── feedback.py           # auditable feedback store (separate from dedup state) + candidate-fixture exports
 │   ├── trust.py              # fail-closed trust profiles by source class (trusted_branch/fork_pr/local_artifact)
-│   ├── cli.py                # argparse; subcommands: analyze, batch, tui, server, list-providers, feedback
+│   ├── qa/
+│   │   ├── model.py          # NormalizedTestResult; stable (suite, leaf) identity; failure signatures
+│   │   ├── history.py        # SQLite test-history store (WAL, atomic upserts, retention, import/export, queries)
+│   │   └── normalize.py      # runner evidence -> history rows (JUnit/JSON/log; flaky->attempts)
+│   ├── cli.py                # argparse; subcommands: analyze, batch, tui, server, list-providers, feedback, qa
 │   ├── server.py             # stdlib HTTP webhook receiver: /analyze + /health + /stats; configurable workers/queue/rate-limit/job-ttl; SQLite job store
 │   ├── tui.py                # Textual terminal UI: log browser, analyze, report/ticket/raw panes
 │   ├── ingest/
@@ -218,6 +222,22 @@ score, and the gap between them. Bands with zero support are provisional, and
 classification correctness is a proxy until reviewed outcomes (M3 feedback)
 become available. The committed `tests/eval/baseline-v1.0.json` records the
 calibration snapshot.
+
+## QA history store
+
+`hound qa import/history/tests/stats/export` maintain a cross-run test history
+in `<out>/.hound-agent/history.sqlite3`, separate from dedup and feedback
+state. Rows are keyed by `(suite, leaf test, run_id, attempt)` with atomic
+`ON CONFLICT DO UPDATE` upserts under WAL; concurrent writers cannot lose
+updates. The `qa/model.py` identity is runner-agnostic: pytest `path::test`,
+JUnit `class.method`, and JSON reports all reduce to the same leaf, so the same
+logical test is tracked consistently across runners. JUnit flaky/rerun metadata
+expands into attempt-numbered rows (`failed(1)` + `passed(2)`). Raw logs are
+never stored — rows reference `run_id`/`evidence_id`. Retention prunes whole
+rows only, so aggregates recompute without corruption; queries return
+`insufficient_history` (`failure_rate=None`) until enough samples exist. Import
+rejects DOCTYPE XML and symlinked sources, and import/export round-trips
+sanitized records for CI cache / shared-volume workflows.
 
 ## Test strategy
 
