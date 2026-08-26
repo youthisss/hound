@@ -1,4 +1,4 @@
-<div align="center">
+<div align="center" style="text-align: center; width: 100%;">
 
 ```text
 ██╗  ██╗ ██████╗ ██╗   ██╗███╗   ██╗██████╗ 
@@ -11,11 +11,13 @@
 
 ### An Offline-First CLI & TUI Tool for Investigating CI/CD, Build, and Test Failures.
 
+<p align="center">
 [![Status](https://img.shields.io/badge/Status-Production--Ready-brightgreen.svg)](#quick-start)
-[![Tests](https://img.shields.io/badge/Tests-421%20Passed-success.svg)](#tests)
+[![Tests](https://img.shields.io/badge/Tests-493%20Passed-success.svg)](#tests)
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](pyproject.toml)
 [![Security](https://img.shields.io/badge/Security-Redaction%20Default-orange.svg)](#security-and-privacy)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+</p>
 
 </div>
 
@@ -435,7 +437,7 @@ uv run python demo_project/run_demo.py --profile scale --count 5000 --jobs 8
 uv run pytest
 ```
 
-> **Test Guarantee:** All tests run strictly with local fixtures—no network access or live API credentials needed (**421 passed, 5 skipped**).
+> **Test Guarantee:** All tests run strictly with local fixtures—no network access or live API credentials needed (**493 passed, 5 skipped**).
 
 ---
 
