@@ -1,0 +1,2 @@
+pytest
+FAILED tests/test_legacy.py::test_total - AssertionError: expected 5, got 3

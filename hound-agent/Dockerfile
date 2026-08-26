@@ -14,4 +14,10 @@ RUN uv sync --frozen --no-dev \
 
 USER hound-agent
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+LABEL org.opencontainers.image.title="Hound Agent" \
+      org.opencontainers.image.licenses="MIT"
+
 ENTRYPOINT ["/app/.venv/bin/hound"]

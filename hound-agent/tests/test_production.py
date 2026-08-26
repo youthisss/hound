@@ -3,7 +3,6 @@ pluggable dedup store, tracker integrations, config discovery, webhook server.""
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -39,6 +38,25 @@ class TestRedact:
         out, hits = redact_text(text)
         assert hits == 1
         assert "MIIEow" not in out
+
+    def test_redacts_unterminated_private_key(self):
+        from hound_agent.ingest.redact import redact_text
+
+        text = "before\n-----BEGIN PRIVATE KEY-----\nMIIEow\nremaining log text"
+        out, hits = redact_text(text)
+        assert hits == 1
+        assert "MIIEow" not in out
+        assert "remaining log text" not in out
+
+    def test_redacts_quoted_json_credentials_and_short_bearer(self):
+        from hound_agent.ingest.redact import redact_text
+
+        text = '{"clientSecret":"top-secret","accessToken":"short-token"}\nAuthorization: Bearer abc'
+        out, hits = redact_text(text)
+        assert hits == 3
+        assert "top-secret" not in out
+        assert "short-token" not in out
+        assert "Bearer abc" not in out
 
     def test_redacts_deployment_credentials(self):
         from hound_agent.ingest.redact import redact_text
@@ -87,7 +105,6 @@ class TestRedact:
         assert doc["meta"]["redacted"] is False
 
     def test_ticket_file_uses_redacted_document(self, tmp_path, monkeypatch):
-        from hound_agent.analyze.rca import run_analysis
         from hound_agent.models import RootCause
         from hound_agent.pipeline import analyze
 
@@ -105,7 +122,7 @@ class TestRedact:
 class TestSnippets:
     def test_attach_snippets_repo_file(self, fake_repo):
         repo, path = fake_repo
-        from hound_agent.ingest.stacktrace import attach_snippets, dedupe_repo_paths
+        from hound_agent.ingest.stacktrace import attach_snippets
         from hound_agent.models import StackFrame
 
         frames = [StackFrame(file="app/cart.py", line=2)]
@@ -127,12 +144,22 @@ class TestSnippets:
         repo, path = fake_repo
         from hound_agent.analyze.prompts import build_user_prompt
         from hound_agent.ingest.stacktrace import attach_snippets
-        from hound_agent.models import Artifacts, GitInfo
 
         artifacts = make_artifacts("pytest_fail.log")
         artifacts.frames = attach_snippets(artifacts.frames[:1], str(path))
         if artifacts.frames and artifacts.frames[0].code:
             assert artifacts.frames[0].code in build_user_prompt(artifacts)
+
+    def test_prompt_includes_request_context(self):
+        from hound_agent.analyze.prompts import build_user_prompt
+        from hound_agent.models import RequestContext
+
+        artifacts = make_artifacts("pytest_fail.log")
+        artifacts.request = RequestContext(request_id="req_123", user_id="u_123")
+
+        prompt = build_user_prompt(artifacts)
+        assert '"request_id": "req_123"' in prompt
+        assert '"user_id": "u_123"' in prompt
 
 
 # -------------------------------------------------------------- smart window
@@ -145,7 +172,7 @@ class TestWindow:
         assert read_log_window(p) == "line1\nline2\n"
 
     def test_big_file_keeps_head_and_tail(self, tmp_path):
-        from hound_agent.ingest.logs import HEAD_LINES, read_log_window
+        from hound_agent.ingest.logs import read_log_window
 
         p = tmp_path / "big.log"
         p.write_text("".join(f"line{i}\n" for i in range(5000)), encoding="utf-8")
@@ -260,7 +287,7 @@ class TestHttpStore:
             failed_tests=[], git=GitInfo(),
         )
         state = tmp_path / "state.json"
-        check_duplicate(artifacts, None, str(state))
+        check_duplicate(artifacts, str(state))
         assert state.exists()
 
 

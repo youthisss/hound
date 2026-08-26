@@ -1,0 +1,18 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-chained-failure",
+  "artifact": "chained-failure.log",
+  "expected": {
+    "stage": "ci",
+    "kind": "timeout",
+    "primary_event": {"stage": "ci", "kind": "timeout"},
+    "failed_tests": [],
+    "stack_frames": [
+      {"file": "app/client.py", "line": 8, "function": "fetch"},
+      {"file": "app/main.py", "line": 22, "function": "run"}
+    ],
+    "severity_range": ["medium"],
+    "duplicate_group": null,
+    "redactions": []
+  }
+}

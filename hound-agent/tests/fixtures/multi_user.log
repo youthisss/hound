@@ -1,0 +1,4 @@
+ts=2026-08-24T10:15:20Z level=info request_id=req_100 trace_id=trace_checkout session_id=sess_100 user_id=u_100 method=POST path=/api/checkout msg="checkout started"
+ts=2026-08-24T10:15:25Z level=info request_id=req_200 trace_id=trace_checkout session_id=sess_200 user_id=u_200 method=POST path=/api/checkout msg="checkout started"
+ts=2026-08-24T10:15:26Z level=error request_id=req_200 trace_id=trace_checkout session_id=sess_200 user_id=u_200 method=POST path=/api/checkout msg="cart persistence failed: deadline exceeded"
+ts=2026-08-24T10:15:27Z level=info request_id=req_health user_id=system method=GET path=/health msg="healthy"

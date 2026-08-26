@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from hound_agent.models import Artifacts, RootCause, Ticket, Triage
+from hound_agent.models import Artifacts, RootCause, Ticket, Triage, build_evidence_items
 from hound_agent.output.report import _atomic_write, ensure_outdir
 from hound_agent.output.markdown import escape_code, escape_text
 
@@ -106,6 +106,16 @@ def build_ticket(
             if value:
                 body.append(f"- **{key.title()}**: {escape_text(value)}")
 
+    if any(vars(artifacts.request).values()):
+        details = []
+        for key in ("request_id", "trace_id", "session_id", "user_id", "method", "path"):
+            value = getattr(artifacts.request, key)
+            if value:
+                details.append(f"{key}={escape_text(value)}")
+        if artifacts.request.users:
+            details.append(f"users={', '.join(escape_text(user) for user in artifacts.request.users)}")
+        body += ["", "### Request context", f"- **Request**: {'; '.join(details)}"]
+
     if triage.flaky_suspect:
         body += [
             "",
@@ -115,10 +125,26 @@ def build_ticket(
     if triage.recurring_incident:
         body += ["", f"> **Recurring incident**: seen {triage.occurrence_count} times."]
 
+    evidence_by_id = {item["id"]: item for item in build_evidence_items(artifacts)}
+    resolved_refs = [ref for ref in root_cause.evidence_refs if ref in evidence_by_id]
+    support_status = "supported" if resolved_refs else (
+        "insufficient_evidence" if artifacts.kind == "unknown" or not evidence_by_id else "unsupported"
+    )
     body += [
         "",
         "## Root cause",
         f"**Hypothesis**: {escape_text(root_cause.hypothesis)}",
+        f"**Support**: {support_status}",
+        "",
+        "### Structured evidence",
+    ]
+    if resolved_refs:
+        for ref in resolved_refs[:10]:
+            item = evidence_by_id[ref]
+            body.append(f"- `{ref}` **{escape_text(item['kind'])}**: {escape_text(item['value'])}")
+    else:
+        body.append(f"- ({support_status}; no resolved evidence reference)")
+    body += [
         "",
         "**Fix suggestion**:",
         escape_text(root_cause.fix_suggestion),

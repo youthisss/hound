@@ -1,7 +1,7 @@
 """Deterministic rule-based root cause analysis (no network)."""
 from __future__ import annotations
 
-from hound_agent.models import Artifacts, RootCause
+from hound_agent.models import Artifacts, RootCause, build_evidence_items
 from hound_agent.pathutil import path_matches
 
 FIX_BY_KIND = {
@@ -27,6 +27,10 @@ FIX_BY_KIND = {
     "network_failure": "Inspect service DNS, network policies, endpoints, and the target dependency before retrying.",
     "registry_auth_failure": "Verify the registry credential and image-pull secret assigned to the workload identity.",
     "config_missing": "Restore the required ConfigMap, Secret, or environment variable and verify the release manifest.",
+    "dependency_resolution": "Resolve the dependency conflict: align the conflicting pins/peer requirements, then refresh the lockfile.",
+    "disk_full": "Free disk space on the runner (caches, old artifacts, images) and size the volume before retrying the job.",
+    "tls_certificate_error": "Renew or trust the expired/self-signed certificate on the registry or mirror, then rerun the download.",
+    "api_rate_limited": "Back off and retry after the rate-limit window; use an authenticated token or raise the service quota if persistent.",
     "unknown": "Investigate manually: reproduce the failure locally with the reported log.",
 }
 
@@ -53,6 +57,10 @@ HYPOTHESIS_BY_KIND = {
     "network_failure": "The deployed workload could not reach a required network dependency.",
     "registry_auth_failure": "The workload could not authenticate to the container registry.",
     "config_missing": "The deployment referenced missing configuration or a required environment variable.",
+    "dependency_resolution": "The package manager could not resolve a consistent dependency graph for the requested versions.",
+    "disk_full": "The job ran out of disk space while downloading or writing artifacts.",
+    "tls_certificate_error": "A TLS certificate presented by the registry/mirror is expired, self-signed, or untrusted.",
+    "api_rate_limited": "A remote API rejected the request with HTTP 429; the run hit a rate limit.",
     "unknown": "No strong automated signal; requires manual investigation.",
 }
 
@@ -71,6 +79,8 @@ def build_root_cause(artifacts: Artifacts) -> RootCause:
         evidence.append("failed tests: " + ", ".join(t.name for t in artifacts.failed_tests[:5]))
     if changed:
         evidence.append("changed files: " + ", ".join(sorted(changed)[:8]))
+    for commit in artifacts.git.correlated_commits[:3]:
+        evidence.append("changed frame commit: " + commit)
     if artifacts.enrichment:
         evidence.append(f"read-only deployment evidence collected: {len(artifacts.enrichment)} command results")
 
@@ -100,4 +110,10 @@ def build_root_cause(artifacts: Artifacts) -> RootCause:
         evidence=evidence,
         fix_suggestion=fix,
         engine="fallback",
+        evidence_refs=[item["id"] for item in build_evidence_items(artifacts)],
+        missing_information=(
+            ["No direct stack frame, failed test, or change intersection was observed."]
+            if confidence == "low" else []
+        ),
+        recommended_checks=[fix],
     )

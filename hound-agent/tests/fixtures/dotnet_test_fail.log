@@ -1,0 +1,12 @@
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+  Failed CartServiceTests.Total_WithTax_ReturnsGrandTotal [31 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: 11
+Actual:   10
+  Stack Trace:
+     at CartServiceTests.Total_WithTax_ReturnsGrandTotal() in /src/tests/CartServiceTests.cs:line 18
+
+Failed! - Failed:     1, Passed:     5, Total:     6

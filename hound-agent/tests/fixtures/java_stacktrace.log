@@ -1,0 +1,10 @@
+[INFO] Building shop 2.1.0
+[INFO] --- maven-surefire-plugin:3.0.0:test (default-test) @ shop ---
+[INFO] Tests run: 3, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.41 s -- in com.example.cart <<< FAILURE!
+java.lang.NullPointerException: Cannot invoke "Cart.total()" because "cart" is null
+	at com.example.shop.cart.CartService.compute(CartService.java:57)
+	at com.example.shop.cart.CartController.get(CartController.java:23)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+[INFO] BUILD FAILURE
+[INFO] Total time:  4.211 s
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.0.0:test (default-test) on project shop: There are test failures.

@@ -6,7 +6,7 @@ import anyio
 import pytest
 
 from hound_agent import service
-from hound_agent.cli import main
+from hound_agent.cli import build_parser, main
 from hound_agent.models import RootCause, Ticket, Triage, build_doc
 from tests.conftest import make_artifacts
 
@@ -51,6 +51,37 @@ def test_no_args_non_tty_is_actionable(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "hound analyze <log-directory>" in captured.err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["analyze", "logs", "--jobs", "0"],
+        ["batch", "--logs", "logs", "--max-llm-calls", "0"],
+        ["batch", "--logs", "logs", "--max-cost-usd", "-1"],
+        ["tui", "--max-retries", "-1"],
+    ],
+)
+def test_numeric_options_reject_invalid_values(argv):
+    with pytest.raises(SystemExit) as exc:
+        build_parser().parse_args(argv)
+    assert exc.value.code == 2
+
+
+def test_config_show_masks_secrets(monkeypatch, capsys):
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    assert main(["config", "show", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["api_key"] == "configured"
+    assert "secret-value" not in json.dumps(payload)
+
+
+def test_doctor_json_is_machine_readable(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    assert main(["doctor", "--out", str(tmp_path / "out"), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["config"]["api_key"] == "configured"
 
 
 @pytest.mark.parametrize("path_kind", ["missing", "file", "empty"])
@@ -242,6 +273,8 @@ def test_offline_rejects_network_integrations(tmp_path, capsys):
 
 
 def test_config_set_model_preserves_config(tmp_path, capsys):
+    from hound_agent.config import PROVIDERS
+
     config = tmp_path / ".hound-agent.yml"
     config.write_text("redact: true\ncomponents:\n  src/*: core\n", encoding="utf-8")
 
@@ -249,7 +282,7 @@ def test_config_set_model_preserves_config(tmp_path, capsys):
     text = config.read_text(encoding="utf-8")
     assert "components:" in text
     assert "provider: gemini" in text
-    assert "model: gemini-2.0-flash" in text
+    assert f"model: {PROVIDERS['gemini']['default_model']}" in text
     assert "API" not in capsys.readouterr().out
 
 

@@ -4,22 +4,29 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hound-agent"
-version = "0.2.0"
+version = "0.4.0"
 description = "Hound Agent: all-in-one QA/QC agent that auto-investigates CI/build/test failures, finds root cause, triages, and drafts tickets."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 license-files = ["LICENSE"]
 dependencies = [
+    "defusedxml>=0.7.1",
     "openai",
     "gitpython",
     "pyyaml",
     "textual>=0.86",
+    "keyring>=25",
+    "platformdirs>=4",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "mypy>=1.17",
+    "pip-audit>=2.9",
     "pytest",
+    "pytest-cov>=6",
+    "ruff>=0.12",
 ]
 
 [project.scripts]
@@ -33,3 +40,16 @@ exclude = ["/demo", "/dist"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 140
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+exclude = "(?x)(hound_agent[\\\\/]analyze[\\\\/](llm|rca)\\.py|hound_agent[\\\\/](collector|pipeline|server|tui)\\.py|hound_agent[\\\\/]ingest[\\\\/]context\\.py)"

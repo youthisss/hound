@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import re
 
+_PRIVATE_KEY_HEADER = r"-----BEGIN (?:ENCRYPTED |RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"
+_PRIVATE_KEY_FOOTER = r"-----END (?:ENCRYPTED |RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"
+
 #: Ordered (kind, compiled pattern) list. All matching substrings are replaced
 #: with ``[REDACTED:<kind>]``. Order matters: token patterns are tried before
 #: the generic email/IP fallbacks so a token URL can't mask an embedded key.
@@ -16,12 +19,14 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "private_key",
         re.compile(
-            r"-----BEGIN (?:ENCRYPTED |RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"
-            r".*?-----END (?:ENCRYPTED |RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----",
+            _PRIVATE_KEY_HEADER + r".*?" + _PRIVATE_KEY_FOOTER,
             re.DOTALL,
         ),
     ),
-    ("basic_auth", re.compile(r"\bAuthorization\s*:\s*Basic\s+[A-Za-z0-9+/=]+", re.IGNORECASE)),
+    # A log window can end before a key footer. Redact the rest rather than
+    # risk sending an incomplete private key to a provider or report file.
+    ("unterminated_private_key", re.compile(_PRIVATE_KEY_HEADER + r"[\s\S]*\Z")),
+    ("authorization", re.compile(r"\bAuthorization\s*:\s*[^\r\n]+", re.IGNORECASE)),
     ("cookie", re.compile(r"\b(?:Set-Cookie|Cookie)\s*:[^\r\n]+", re.IGNORECASE)),
     ("jwt", re.compile(r"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}")),
     ("bearer", re.compile(r"\bBearer [A-Za-z0-9._~+/=-]{16,}", re.IGNORECASE)),
@@ -39,7 +44,7 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("npm_token", re.compile(r"\bnpm_[A-Za-z0-9]{36,}\b")),
     ("pypi_token", re.compile(r"\bpypi-[A-Za-z0-9_-]{20,}\b")),
     ("vault_token", re.compile(r"\bhvs\.[A-Za-z0-9_-]{20,}\b")),
-    ("password", re.compile(r"(?<![A-Za-z0-9_])(?:[A-Za-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|credential|auth)\s*[:=]\s*(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s\"']+)", re.IGNORECASE)),
+    ("password", re.compile(r"(?<![A-Za-z0-9_])(?:[\"'])?(?:[A-Za-z0-9]+[_-])*(?:(?:client|access|refresh|id)[_-]?(?:secret|token)|password|passwd|pwd|secret|token|api[_-]?key|credential|auth)(?:[\"'])?\s*[:=]\s*(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s\"']+)", re.IGNORECASE)),
     (
         "connection_string",
         re.compile(

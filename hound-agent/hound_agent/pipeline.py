@@ -1,40 +1,113 @@
 """Core analysis pipeline. Single entry point for CLI and TUI."""
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from hound_agent.analyze.rca import run_analysis
 from hound_agent.config import Config, load_config
 from hound_agent.ingest.context import load_context
+from hound_agent.ingest.entity import extract_entity_context
 from hound_agent.ingest.enrich import collect_deployment_evidence
-from hound_agent.ingest.git import gather
+from hound_agent.ingest.git import correlated_commit_subjects, gather
 from hound_agent.ingest.logs import extract_events, parse_log, read_log_window
 from hound_agent.ingest.owners import resolve_owners
 from hound_agent.ingest.redact import redact_text
 from hound_agent.ingest.structured import parse_structured_artifact
 from hound_agent.ingest.stacktrace import attach_snippets, dedupe_repo_paths, parse_stacktrace
 from hound_agent.ingest.tests import parse_failed_tests
-from hound_agent.models import Artifacts, build_doc, validate
+from hound_agent.models import ENGINES, Artifacts, GitInfo, RootCause, Triage, build_doc, validate
 from hound_agent.output.report import ensure_outdir, write_json, write_md
 from hound_agent.output.tickets import build_ticket, write_ticket
 from hound_agent.triage.component import assign
-from hound_agent.triage.dedup import check_duplicate, record_triage
+from hound_agent.triage.dedup import check_duplicate, configure_store, fingerprint, lookup_incident, record_triage
 from hound_agent.triage.severity import classify
 
 
-def default_state_path(out: Path, config_state: str | None, no_dedup: bool) -> str | None:
+def default_state_path(out: Path, config_state: str | None, no_dedup: bool, backend: str = "file") -> str | None:
     if no_dedup:
         return None
     if config_state:
         return str(Path(config_state).resolve())
     state_dir = out / ".hound-agent"
-    state_file = state_dir / "state.json"
+    state_file = state_dir / ("state.sqlite3" if backend == "sqlite" else "state.json")
     # A checked-out output directory is attacker-controlled in CI. Never let
     # the default state location follow a pre-seeded symlink outside `out`.
     if state_dir.is_symlink() or state_file.is_symlink():
         raise ValueError("refusing symlinked default dedup state path")
     return str(state_file.resolve())
+
+
+def _root_cause_snapshot(root_cause: RootCause) -> dict:
+    """Serialize an RCA for the dedup store (cost-control reuse). Usage is
+    deliberately excluded: a reused run spends zero tokens right now."""
+    return {
+        "hypothesis": root_cause.hypothesis,
+        "confidence": root_cause.confidence,
+        "evidence": list(root_cause.evidence),
+        "fix_suggestion": root_cause.fix_suggestion,
+        "engine": root_cause.engine,
+        "model": root_cause.model,
+        "evidence_refs": list(root_cause.evidence_refs),
+        "contradicting_evidence_refs": list(root_cause.contradicting_evidence_refs),
+        "missing_information": list(root_cause.missing_information),
+        "recommended_checks": list(root_cause.recommended_checks),
+    }
+
+
+def _root_cause_from_snapshot(snapshot: dict) -> RootCause | None:
+    """Rebuild a RootCause from a persisted snapshot, or None when corrupt."""
+    try:
+        confidence = snapshot.get("confidence")
+        engine = snapshot.get("engine")
+        model = snapshot.get("model")
+        missing_information = list(dict.fromkeys([
+            *[str(item) for item in snapshot.get("missing_information", [])],
+            "Stored hypothesis was reused; evidence references are scoped to the original run.",
+        ]))
+        return RootCause(
+            hypothesis=str(snapshot.get("hypothesis", "")),
+            confidence=confidence if confidence in {"high", "medium", "low"} else "low",
+            evidence=[str(item) for item in snapshot.get("evidence", [])],
+            fix_suggestion=str(snapshot.get("fix_suggestion", "")),
+            engine=engine if engine in ENGINES else "fallback",
+            model=str(model) if isinstance(model, str) and model else None,
+            usage={},
+            llm_status="reused",
+            # Evidence IDs are scoped to the report that created the snapshot.
+            # Reusing them in a later run could silently cite a different item
+            # that happens to receive the same counter ID.
+            evidence_refs=[],
+            contradicting_evidence_refs=[],
+            missing_information=missing_information,
+            recommended_checks=[str(item) for item in snapshot.get("recommended_checks", [])],
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _analyze_with_reuse(artifacts: Artifacts, config: Config, state_path: str | None) -> tuple[RootCause, str | None]:
+    """Dedup-first analysis: reuse a stored root cause for a well-established
+    recurring incident instead of spending another LLM call. Returns
+    ``(root_cause, reused_from_key)`` where the key is None for fresh analysis.
+
+    Logs without a recognized failure kind never touch the store: they are
+    not recorded as occurrences and therefore cannot be "reused" either."""
+    if config.reuse and state_path and artifacts.kind != "unknown":
+        key = fingerprint(artifacts)
+        entry = lookup_incident(state_path, key)
+        if entry is not None:
+            try:
+                count = int(entry.get("count", 0))
+            except (TypeError, ValueError):
+                count = 0
+            snapshot = entry.get("root_cause")
+            if count >= config.reuse_after_occurrences and isinstance(snapshot, dict):
+                reused = _root_cause_from_snapshot(snapshot)
+                if reused is not None:
+                    return reused, key
+    return run_analysis(artifacts, config), None
 
 
 def analyze(
@@ -53,9 +126,11 @@ def analyze(
     api_key: str | None = None,
     redact: bool | None = None,
     max_retries: int | None = None,
+    require_llm: bool | None = None,
     source_context: bool = False,
     context_path: str | None = None,
     enrich: bool = False,
+    source_class: str | None = None,
     _config: Config | None = None,
 ) -> dict:
     """Run the full pipeline for one log. Returns the validated RCA document."""
@@ -73,10 +148,20 @@ def analyze(
         api_key=api_key,
         redact=redact,
         max_retries=max_retries,
+        require_llm=require_llm,
+        source_class=source_class,
     )
-    if config.state_backend not in {"", "file"}:
+    if config.state_backend not in {"", "file", "sqlite"}:
         raise ValueError("HTTP dedup backend is disabled until it supports conditional writes")
+    configure_store(
+        backend=config.state_backend or "file",
+        max_entries=config.dedup_max_entries,
+        retention_days=config.dedup_retention_days,
+    )
+    if state_path is None:
+        state_path = default_state_path(out, config.state_file, no_dedup, backend=config.state_backend)
     text = read_log_window(log_path)
+    request = extract_entity_context(text)
 
     redacted = False
     if config.redact:
@@ -90,18 +175,25 @@ def analyze(
         stage, kind, summary, message = parse_log(text)
         failed_tests = parse_failed_tests(text)
     run, deployment = load_context(log_path, text, context_path)
+    trusted_repo = repo_dir if config.allow_source_context else None
+    allow_enrichment = enrich and config.allow_enrichment
     # Log-derived deployment names are untrusted. Enrichment requires an
     # operator-supplied context file, which establishes the query boundary.
-    enrichment = collect_deployment_evidence(deployment) if enrich and context_path and stage == "deploy" else []
+    enrichment = collect_deployment_evidence(deployment) if allow_enrichment and context_path and stage == "deploy" else []
     if enrichment:
         text = text + "\n\n--- read-only deployment evidence ---\n" + "\n\n".join(enrichment)
     frames = parse_stacktrace(text)
-    git = gather(str(repo_dir) if repo_dir else None, run.base_sha, run.head_sha)
-    if repo_dir:
-        git.owners = resolve_owners(repo_dir, [frame.file for frame in frames] + git.changed_files)
-        frames = dedupe_repo_paths(frames, str(repo_dir))
-    if repo_dir and source_context:
-        frames = attach_snippets(frames, str(repo_dir))
+    git = gather(str(trusted_repo), run.base_sha, run.head_sha) if trusted_repo else GitInfo()
+    if trusted_repo:
+        git.owners = resolve_owners(trusted_repo, [frame.file for frame in frames] + git.changed_files)
+        frames = dedupe_repo_paths(frames, str(trusted_repo))
+        git.correlated_commits = correlated_commit_subjects(
+            str(trusted_repo),
+            [frame.file for frame in frames],
+            git.changed_files,
+        )
+    if trusted_repo and source_context:
+        frames = attach_snippets(frames, str(trusted_repo))
         if config.redact:
             for frame in frames:
                 if frame.code:
@@ -119,6 +211,7 @@ def analyze(
         git=git,
         run=run,
         deployment=deployment,
+        request=request,
         events=extract_events(text, stage, kind, message),
         enrichment=enrichment,
         log_path=str(log_path.resolve()),
@@ -128,7 +221,7 @@ def analyze(
         artifact_hits = _redact_artifacts(artifacts)
         artifacts.redacted = artifacts.redacted or artifact_hits > 0
 
-    root_cause = run_analysis(artifacts, config)
+    root_cause, reused_from_key = _analyze_with_reuse(artifacts, config, state_path)
 
     severity, priority = classify(artifacts)
     environment_overrides = config.severity_overrides.get(artifacts.deployment.environment, {})
@@ -137,9 +230,12 @@ def analyze(
             severity = override
             priority = {"critical": 1, "high": 2, "medium": 3, "low": 4}[severity]
     component = assign(artifacts, config.components)
-    if state_path is None:
-        state_path = default_state_path(out, config.state_file, no_dedup)
-    triage = check_duplicate(artifacts, root_cause, state_path, config.recurrence_threshold)
+    # Healthy/unrecognized logs must not consume dedup slots: recording them
+    # would evict real incidents under MAX_STATE_ENTRIES pressure (rev-6 G3).
+    if artifacts.kind == "unknown":
+        triage = Triage(dedup_key=fingerprint(artifacts))
+    else:
+        triage = check_duplicate(artifacts, state_path, config.recurrence_threshold)
     triage.severity = severity
     triage.priority = priority
     triage.component = component
@@ -149,7 +245,20 @@ def analyze(
         triage.priority = 5
 
     ticket = build_ticket(artifacts, root_cause, triage)
-    record_triage(state_path, triage, component, ticket.title)
+    if artifacts.kind != "unknown":
+        persisted = record_triage(
+            state_path,
+            triage,
+            component,
+            ticket.title,
+            root_cause=_root_cause_snapshot(root_cause),
+            artifacts=artifacts,
+        )
+        if state_path and not persisted:
+            sys.stderr.write(
+                "Warning: root-cause reuse snapshot was not persisted; "
+                "a later matching incident may require fresh analysis.\n"
+            )
 
     doc = build_doc(
         artifacts,
@@ -157,6 +266,15 @@ def analyze(
         triage,
         ticket,
         generated_at=datetime.now(timezone.utc).isoformat(),
+        reused=bool(reused_from_key),
+        reused_from_key=reused_from_key,
+        trust_context={
+            "source_class": config.source_class,
+            "source_context": config.allow_source_context,
+            "enrichment": config.allow_enrichment,
+            "llm": config.allow_llm,
+            "delivery": config.allow_delivery,
+        },
     )
     if config.redact:
         doc, output_hits = _redact_document(doc)
@@ -228,8 +346,12 @@ def _redact_artifacts(artifacts: Artifacts) -> int:
     artifacts.git.head = scrub(artifacts.git.head)
     artifacts.git.changed_files = [scrub(path) for path in artifacts.git.changed_files]
     artifacts.git.owners = [scrub(owner) for owner in artifacts.git.owners]
-    for context in (artifacts.run, artifacts.deployment):
+    artifacts.git.correlated_commits = [scrub(commit) for commit in artifacts.git.correlated_commits]
+    for context in (artifacts.run, artifacts.deployment, artifacts.request):
         for key, value in vars(context).items():
             if isinstance(value, str):
                 setattr(context, key, scrub(value))
+            elif isinstance(value, list):
+                scrubbed = [scrub(item) for item in value if isinstance(item, str)]
+                setattr(context, key, list(dict.fromkeys(scrubbed)))
     return hits

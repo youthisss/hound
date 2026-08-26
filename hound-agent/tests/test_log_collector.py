@@ -88,11 +88,12 @@ def test_log_metadata_redacts_sensitive_arguments(tmp_path):
 def test_log_analyze_uses_shared_service(tmp_path, monkeypatch, capsys):
     output = tmp_path / "analyze.log"
     calls = []
-    document = {
-        "failure": {"stage": "test", "kind": "test_failure"},
-        "root_cause": {"hypothesis": "failure", "confidence": "high", "fix_suggestion": "fix it"},
-        "triage": {"severity": "high"},
-    }
+    document = json.loads(
+        (Path(__file__).parent / "golden" / "rca-v2.0.json").read_text(encoding="utf-8")
+    )
+    document["failure"].update(stage="test", kind="test_failure")
+    document["root_cause"].update(hypothesis="failure", confidence="high", fix_suggestion="fix it")
+    document["triage"]["severity"] = "high"
 
     def fake_analyze(log_path, output_dir, **kwargs):
         calls.append((Path(log_path), Path(output_dir), kwargs))

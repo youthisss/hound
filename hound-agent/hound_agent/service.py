@@ -1,6 +1,7 @@
 """Shared application service used by CLI and TUI adapters."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -59,9 +60,13 @@ def find_logs(log_directory: str | Path) -> list[Path]:
     return logs
 
 
-def _is_sidecar(path: Path) -> bool:
+def is_sidecar(path: Path) -> bool:
     """Collector writes `<log>.json`; it is context, never an input artifact."""
     return path.suffix.lower() == ".json" and path.with_suffix(".log").is_file()
+
+
+# Back-compat alias (used to be private; CLI/TUI import the public name now).
+_is_sidecar = is_sidecar
 
 
 def analyze_log(log_path: str | Path, output_dir: str | Path, **kwargs) -> dict:
@@ -74,7 +79,13 @@ def analyze_directory(
     output_root: str | Path,
     **kwargs,
 ) -> list[AnalysisRun]:
-    """Analyze supported logs in one directory using isolated run directories."""
+    """Analyze supported logs in one directory using isolated run directories.
+
+    ``jobs`` controls parallel analysis workers (default 1 = sequential).
+    Run IDs are derived from input order, so results stay deterministic
+    regardless of completion order.
+    """
+    jobs = max(1, int(kwargs.pop("jobs", 1) or 1))
     logs = find_logs(log_directory)
     root = ensure_outdir(output_root)
     config = load_config(
@@ -86,14 +97,23 @@ def analyze_directory(
         api_key=kwargs.get("api_key"),
         redact=kwargs.get("redact"),
         max_retries=kwargs.get("max_retries"),
+        require_llm=kwargs.get("require_llm"),
+        source_class=kwargs.get("source_class"),
     )
-    state_path = default_state_path(root, config.state_file, bool(kwargs.get("no_dedup", False)))
-    runs: list[AnalysisRun] = []
-    for log_path in logs:
-        run_id = f"run-{uuid4().hex[:12]}"
+    state_path = default_state_path(root, config.state_file, bool(kwargs.get("no_dedup", False)), backend=config.state_backend)
+
+    def _one(item: tuple[int, Path]) -> AnalysisRun:
+        index, log_path = item
+        run_id = f"run-{uuid4().hex[:12]}-{index:04d}"
         run_output = root / run_id
         document = analyze_log(log_path, run_output, state_path=state_path, _config=config, **kwargs)
-        runs.append(AnalysisRun(run_id, log_path, run_output, document))
+        return AnalysisRun(run_id, log_path, run_output, document)
+
+    if jobs > 1:
+        with ThreadPoolExecutor(max_workers=jobs, thread_name_prefix="hound_analyze") as executor:
+            runs = list(executor.map(_one, enumerate(logs)))
+    else:
+        runs = [_one(item) for item in enumerate(logs)]
     return runs
 
 

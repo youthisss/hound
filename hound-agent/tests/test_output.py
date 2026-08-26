@@ -1,5 +1,5 @@
 from hound_agent.models import build_doc, validate
-from hound_agent.output.report import write_json, write_md
+from hound_agent.output.report import render_md, write_json, write_md
 from hound_agent.output.tickets import build_ticket, write_ticket
 from tests.conftest import make_artifacts
 
@@ -24,6 +24,8 @@ def test_doc_roundtrip(tmp_path):
     text = mpath.read_text(encoding="utf-8")
     assert "## Root cause" in text
     assert "cart" in text
+    assert text == render_md(doc)
+    assert text.index("## Root cause") < text.index("## Technical details")
 
 
 def test_ticket_content():
@@ -37,6 +39,37 @@ def test_ticket_content():
     assert t.title.startswith("[cart]")
     assert "## Root cause" in t.body_md
     assert "severity:high" in t.body_md
+
+
+def test_request_context_is_rendered_in_outputs(tmp_path):
+    from hound_agent.analyze.fallback import build_root_cause
+    from hound_agent.formatters import format_document
+    from hound_agent.models import RequestContext, Triage
+
+    artifacts = make_artifacts("pytest_fail.log")
+    artifacts.request = RequestContext(
+        request_id="req123",
+        trace_id="trace_123",
+        user_id="u_123",
+        users=["u_100", "u_123"],
+        method="POST",
+        path="/api/checkout",
+    )
+    root_cause = build_root_cause(artifacts)
+    triage = Triage(severity="high", component="cart", priority=2, dedup_key="abc")
+    ticket = build_ticket(artifacts, root_cause, triage)
+    doc = build_doc(artifacts, root_cause, triage, ticket, "2026-01-01T00:00:00Z")
+
+    report = write_md(doc, tmp_path).read_text(encoding="utf-8")
+    assert "## Request context" in report
+    assert "**Request Id**" in report
+    assert "req123" in report
+    assert "### Request context" in ticket.body_md
+    assert "request_id=req123" in ticket.body_md
+    assert "request: request_id=req123" in format_document(doc)
+    markdown = format_document(doc, "markdown")
+    assert "**Request:**" in markdown
+    assert "req123" in markdown
 
 
 def test_write_ticket(tmp_path):

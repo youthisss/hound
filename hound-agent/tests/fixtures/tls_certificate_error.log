@@ -1,0 +1,6 @@
++ curl -fsSL https://registry.internal/packages/shop-2.1.0.tgz -o shop.tgz
+* Trying 10.20.30.40:443...
+* TLSv1.3 handshake
+* SSL certificate problem: certificate has expired
+curl: (60) SSL certificate problem: self signed certificate in certificate chain
+More details here: https://curl.se/docs/sslcerts.html

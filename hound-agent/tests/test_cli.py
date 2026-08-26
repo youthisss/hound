@@ -2,9 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from hound_agent.cli import main, run_analyze
+from hound_agent.cli import main
 from hound_agent.models import validate
-from tests.conftest import fixture, make_artifacts
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
 

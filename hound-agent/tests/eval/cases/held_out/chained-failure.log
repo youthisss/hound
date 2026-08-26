@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "app/client.py", line 8, in fetch
+    raise TimeoutError("upstream timed out")
+TimeoutError: upstream timed out
+
+During handling of the above exception, another exception occurred:
+Traceback (most recent call last):
+  File "app/main.py", line 22, in run
+    fetch()
+RuntimeError: checkout failed

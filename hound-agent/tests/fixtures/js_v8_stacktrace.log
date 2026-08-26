@@ -1,0 +1,4 @@
+TypeError: Cannot read properties of undefined (reading 'total')
+    at computeTotal (/home/ci/src/cart/totals.js:14:19)
+    at Object.<anonymous> (/home/ci/src/cart/cart.test.js:13:22)
+    at Module._compile (node:internal/modules/cjs/loader:1105:14)

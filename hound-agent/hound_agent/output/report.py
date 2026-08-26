@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
 
+from hound_agent.fsio import atomic_write as _atomic_write  # noqa: F401 (back-compat alias)
 from hound_agent.output.markdown import escape_code, escape_text
 
 OUTPUT_MARKER = ".hound-agent-owned"
@@ -36,36 +35,18 @@ def ensure_outdir(outdir: str | Path) -> Path:
     return p
 
 
-def _atomic_write(path: Path, content: str) -> None:
-    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            stream.write(content)
-        try:
-            os.chmod(temporary, 0o600)
-        except OSError:
-            pass
-        os.replace(temporary, path)
-    except Exception:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-        temporary.unlink(missing_ok=True)
-        raise
-
-
 def write_json(doc: dict, outdir: str | Path) -> Path:
     path = ensure_outdir(outdir) / "report.json"
     _atomic_write(path, json.dumps(doc, indent=2, ensure_ascii=False))
     return path
 
 
-def write_md(doc: dict, outdir: str | Path) -> Path:
-    path = ensure_outdir(outdir) / "report.md"
+def render_md(doc: dict) -> str:
+    """Render the canonical Markdown report from a report document."""
     f = doc["failure"]
     rc = doc["root_cause"]
+    analysis = doc.get("analysis") if isinstance(doc.get("analysis"), dict) else None
+    hypothesis = analysis["hypotheses"][0] if analysis and analysis.get("hypotheses") else None
     tr = doc["triage"]
     t = doc["ticket"]
 
@@ -91,6 +72,44 @@ def write_md(doc: dict, outdir: str | Path) -> Path:
         f"- **Kind**: {f['kind']}",
         f"- **Summary**: {escape_text(f['summary'])}",
         "",
+        "## Root cause",
+        f"- **Hypothesis**: {escape_text(rc['hypothesis'])}",
+        f"- **Confidence**: {rc['confidence']}",
+        *(
+            [
+                f"- **Evidence score**: {hypothesis['confidence']['score']:.2f}",
+                f"- **Support status**: {hypothesis['support_status']}",
+                f"- **Evidence refs**: {', '.join(hypothesis['supporting_evidence_refs']) or '(none)'}",
+            ]
+            if hypothesis else []
+        ),
+        f"- **Fix suggestion**: {escape_text(rc['fix_suggestion'])}",
+        "",
+        "### Evidence",
+    ]
+    if hypothesis:
+        assert analysis is not None
+        evidence_by_id = {item["id"]: item for item in analysis["evidence"]}
+        for ref in hypothesis["supporting_evidence_refs"]:
+            item = evidence_by_id[ref]
+            lines.append(f"- `{ref}` **{escape_text(item['kind'])}**: {escape_text(item['value'])}")
+        if not hypothesis["supporting_evidence_refs"]:
+            lines.append(f"- ({hypothesis['support_status']})")
+        if hypothesis["missing_information"]:
+            lines += ["", "### Missing information"]
+            lines += [f"- {escape_text(value)}" for value in hypothesis["missing_information"]]
+        if hypothesis["recommended_checks"]:
+            lines += ["", "### Recommended checks"]
+            lines += [f"- {escape_text(value)}" for value in hypothesis["recommended_checks"]]
+    elif rc["evidence"]:
+        for ev in rc["evidence"]:
+            lines.append(f"- {escape_text(ev)}")
+    else:
+        lines.append("- (none)")
+    lines += [
+        "",
+        "## Technical details",
+        "",
         "### Message",
         "```",
         f["message"].replace("```", "'''") if f.get("message") else "",
@@ -101,6 +120,7 @@ def write_md(doc: dict, outdir: str | Path) -> Path:
     context = doc["context"]
     run = context["run"]
     deployment = context["deployment"]
+    request = context.get("request", {})
     if any(run.values()):
         lines += ["", "## CI context"]
         for key in ("provider", "run_id", "run_url", "job_name", "step_name", "attempt", "conclusion", "pr_number", "base_sha", "head_sha"):
@@ -111,6 +131,14 @@ def write_md(doc: dict, outdir: str | Path) -> Path:
         for key, value in deployment.items():
             if value:
                 lines.append(f"- **{key.title()}**: {escape_text(value)}")
+    if isinstance(request, dict) and any(request.values()):
+        lines += ["", "## Request context"]
+        for key in ("request_id", "trace_id", "session_id", "user_id", "users", "method", "path"):
+            value = request.get(key)
+            if isinstance(value, list):
+                value = ", ".join(value)
+            if value:
+                lines.append(f"- **{key.replace('_', ' ').title()}**: {escape_text(str(value))}")
     if context["owners"]:
         lines += ["", "## Ownership", f"- **CODEOWNERS**: {', '.join(escape_text(owner) for owner in context['owners'])}"]
     if f["stacktrace"]:
@@ -134,20 +162,6 @@ def write_md(doc: dict, outdir: str | Path) -> Path:
         lines.append("")
 
     lines += [
-        "## Root cause",
-        f"- **Hypothesis**: {escape_text(rc['hypothesis'])}",
-        f"- **Confidence**: {rc['confidence']}",
-        "",
-        "### Evidence",
-    ]
-    if rc["evidence"]:
-        for ev in rc["evidence"]:
-            lines.append(f"- {escape_text(ev)}")
-    else:
-        lines.append("- (none)")
-    lines += ["", f"**Fix suggestion**: {escape_text(rc['fix_suggestion'])}", ""]
-
-    lines += [
         "## Triage",
         f"- **Severity**: {tr['severity']}",
         f"- **Component**: {escape_text(tr['component'])}",
@@ -165,5 +179,10 @@ def write_md(doc: dict, outdir: str | Path) -> Path:
         lines.append(f"> {ln}" if ln else ">")
     lines.append("")
 
-    _atomic_write(path, "\n".join(lines))
+    return "\n".join(lines)
+
+
+def write_md(doc: dict, outdir: str | Path) -> Path:
+    path = ensure_outdir(outdir) / "report.md"
+    _atomic_write(path, render_md(doc))
     return path

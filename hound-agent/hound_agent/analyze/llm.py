@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 
 from hound_agent.config import Config
@@ -11,6 +12,34 @@ from hound_agent.analyze import prompts
 
 class LlmError(Exception):
     """Raised when the LLM call fails or returns unusable output."""
+
+
+#: Shared concurrency throttle across all threads in this process. Replaced
+#: (not mutated) so in-flight workers keep a consistent view; soft bound only.
+_sem_lock = threading.Lock()
+_configured_concurrency = 4
+_llm_semaphore = threading.BoundedSemaphore(4)
+
+
+def set_llm_concurrency(limit: int) -> None:
+    """Set the maximum number of simultaneous LLM requests in this process.
+
+    Replaces the shared semaphore so existing holders are unaffected and the
+    new limit applies to subsequent acquisitions. Idempotent when unchanged.
+    """
+    global _configured_concurrency, _llm_semaphore
+    limit = max(1, int(limit))
+    if limit == _configured_concurrency:
+        return
+    with _sem_lock:
+        if limit != _configured_concurrency:
+            _configured_concurrency = limit
+            _llm_semaphore = threading.BoundedSemaphore(limit)
+
+
+def _semaphore_for(config: Config) -> threading.BoundedSemaphore:
+    set_llm_concurrency(getattr(config, "max_concurrency", 4))
+    return _llm_semaphore
 
 
 def _make_client(config: Config):
@@ -57,23 +86,23 @@ def analyze_with_llm(artifacts: Artifacts, config: Config) -> tuple[dict, dict]:
     # response_format is not supported by every OpenAI-compatible backend
     # (Ollama, some gateways). Ask for JSON in the prompt, fallback without response_format if rejected.
     resp = None
-    last_exc: Exception | None = None
-    for attempt in range(config.max_retries + 1):
-        try:
+    semaphore = _semaphore_for(config)
+    with semaphore:
+        for attempt in range(config.max_retries + 1):
             try:
-                resp = client.chat.completions.create(**kwargs, response_format={"type": "json_object"})
+                try:
+                    resp = client.chat.completions.create(**kwargs, response_format={"type": "json_object"})
+                except Exception as exc:
+                    if "response_format" not in str(exc).lower() and "unsupported" not in str(exc).lower():
+                        raise
+                    resp = client.chat.completions.create(**kwargs)
+                break
             except Exception as exc:
-                if "response_format" not in str(exc).lower() and "unsupported" not in str(exc).lower():
-                    raise
-                resp = client.chat.completions.create(**kwargs)
-            break
-        except Exception as exc:
-            last_exc = exc
-            status = getattr(exc, "status_code", None)
-            retryable = status in {429, 500, 502, 503, 504} or status is None
-            if attempt >= config.max_retries or not retryable:
-                raise LlmError(str(exc)) from exc
-            time.sleep(min(2 ** attempt, 8.0))
+                status = getattr(exc, "status_code", None)
+                retryable = status in {429, 500, 502, 503, 504} or status is None
+                if attempt >= config.max_retries or not retryable:
+                    raise LlmError(str(exc)) from exc
+                time.sleep(min(2 ** attempt, 8.0))
 
     usage: dict = {}
     try:

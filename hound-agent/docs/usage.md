@@ -39,6 +39,7 @@ TUI juga dapat dibuka eksplisit:
 
 ```sh
 uv run hound tui --logs ./ci-logs --out hound-agent-output --offline
+uv run hound tui --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
 ```
 
 Jika `--logs` tidak diberikan, TUI memakai `.hound-agent/logs` bila directory
@@ -46,15 +47,27 @@ hasil collector tersebut tersedia; selain itu TUI membuka current directory.
 
 ### Workflow TUI
 
-1. Tombol `Settings [s]` berada paling atas sidebar, sebelum `WORKFLOW`.
+TUI dibuka pada halaman **Home** dengan wordmark HOUND, readiness directory dan
+provider, quick start, shortcut utama, serta rekomendasi setup. `Overview` kini
+merupakan tab hasil pertama sejajar dengan `Report`, `Ticket`, dan `Raw log`.
+
+1. Tombol `Settings [s]` berada di sidebar setelah daftar Recent Runs dan dapat dibuka kapan saja dengan `s`.
 2. Pilih directory melalui tombol `Browse folder` atau tekan `b`; path juga dapat diketik manual.
 3. Tekan `Load directory` setelah mengetik path manual.
 4. Gunakan filter nama log bila perlu.
+   Filter jenis (`Deploy`, `Build`, `Test`, `CI`, `Unknown`) dan sort berdasarkan
+   waktu, jenis, atau nama dapat digabungkan. `Analyze all visible` hanya
+   memproses artifact yang lolos filter aktif.
 5. Pilih file `.log` dan jalankan `Analyze` atau tekan `a`.
 
 UI menampilkan jumlah file dan path aktif. Analyze disabled jika directory atau
 log tidak valid. Saat analisis berjalan, tombol menampilkan progress estimate
 dan submit ganda diblokir.
+
+`Analyze all visible` mendukung bounded parallelism melalui `--jobs`. Dalam mode
+online, gunakan `--max-llm-calls` sebagai batas panggilan keras dan
+`--max-cost-usd` sebagai guardrail estimasi biaya. Ringkasan batch TUI menampilkan
+jumlah panggilan, artifact yang dilewati budget, dan estimasi biaya.
 
 Tab tetap tersedia:
 
@@ -89,6 +102,14 @@ menampilkan opsi retry.
 | `q` | Quit |
 
 Shortcut bar bawah berubah mengikuti tab/konteks aktif.
+
+### Provider dan Model
+
+Settings mendukung 9Router lokal pada `http://127.0.0.1:20128/v1` dan custom
+provider OpenAI-compatible. `Connect & discover` menguji endpoint `/models`,
+menyimpan API key ke keyring sistem operasi, dan memuat katalog model. Definisi
+custom provider bersifat global; project YAML hanya memilih provider dan model.
+HTTP hanya diterima untuk endpoint loopback, sedangkan endpoint remote wajib HTTPS.
 
 ## 3. Mengumpulkan Log
 
@@ -166,8 +187,20 @@ hound analyze ./ci-logs --offline
 hound analyze ./ci-logs --repo ./repo --out hound-agent-output
 ```
 
-Scan hanya level langsung, tidak recursive. Saat ini format input yang didukung
-hanya `.log`. Directory harus ada, readable, dan berisi minimal satu `.log`.
+Gunakan `hound doctor` untuk memeriksa Python, konfigurasi, provider, output
+directory, Git, dan tool operasional lokal tanpa menampilkan nilai credential:
+
+```sh
+hound doctor
+hound doctor --json
+hound config show --json
+```
+
+`config show` hanya melaporkan credential sebagai `configured` atau `missing`.
+
+Scan hanya level langsung, tidak recursive. Format input yang didukung: `.log`,
+JUnit `.xml`, SARIF, dan test-report `.json`. Directory harus ada, readable, dan
+berisi minimal satu artifact yang didukung.
 
 Legacy `analyze --log <file>` masih diterima untuk compatibility, tetapi tidak
 ditampilkan dalam help dan bukan syntax yang direkomendasikan.
@@ -314,7 +347,9 @@ menghasilkan report.
 | `--format` | `text`, `json`, atau `markdown` |
 | `--output` | File untuk formatted CLI output |
 | `--offline` | Rule-based local analysis tanpa network |
+| `--source-class` | Trust profile: `trusted_branch`, `fork_pr`, atau `local_artifact` (fail-closed) |
 | `--config` | YAML config opsional |
+| `--jobs` | Jumlah worker paralel (default 1 = sekuensial) |
 | `--no-dedup` | Matikan persistensi dedup |
 | `--no-redact` | Matikan redaction secret/PII |
 | `--provider` | Provider preset |
@@ -336,8 +371,18 @@ llm:
   timeout: 120
   max_tokens: 2048
   max_retries: 3
+  max_concurrency: 4
+  routing: all             # all | exclude-kinds (lewati LLM untuk kind di skip_kinds)
+  skip_kinds: [flaky]
+  pricing:                 # USD per juta token; dipakai --max-cost-usd dan telemetry
+    default:
+      prompt_per_mtok: 0.30
+      completion_per_mtok: 1.50
 
 redact: true
+
+trust:
+  source_class: local_artifact   # trusted_branch | fork_pr | local_artifact
 
 components:
   "app/cart/*": "cart"
@@ -345,7 +390,12 @@ components:
 
 dedup:
   state_file: "/path/ke/state.json"
-  backend: "file"       # satu-satunya backend yang didukung
+  backend: "file"          # file | sqlite
+  # backend: "sqlite"      # WAL store, atomic upsert, aman untuk worker paralel
+  max_entries: 50000
+  retention_days: 90
+  reuse: true              # reuse root cause tersimpan untuk insiden berulang (default on)
+  reuse_after_occurrences: 3
 
 github:
   repo: "owner/name"
@@ -381,6 +431,7 @@ Simpan secret dalam environment variable, bukan YAML.
 | `TH_MAX_TOKENS` | Token output maksimum |
 | `TH_MAX_RETRIES` | Retry maksimum |
 | `TH_NO_REDACT=1` | Matikan redaction |
+| `TH_SOURCE_CLASS` | Trust profile override (`trusted_branch`/`fork_pr`/`local_artifact`) |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` / `OPENAI_BASE_URL` | OpenAI preset |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` / `GEMINI_BASE_URL` | Gemini preset |
 | `GROQ_API_KEY` / `GROQ_MODEL` / `GROQ_BASE_URL` | Groq preset |
@@ -400,12 +451,18 @@ Command batch lama tetap tersedia:
 ```sh
 hound batch --logs ./ci-logs --out hound-agent-output --offline
 hound batch --logs ./single.log --out hound-agent-output --offline
+hound batch --logs ./ci-logs --out out --jobs 4 --max-llm-calls 40 --max-cost-usd 5.0
 ```
 
-Batch memakai shared dedup state dan menulis `summary-<batch-id>.json`. Run dan
-summary lama dipertahankan sebagai history tanpa ditimpa. Untuk automation
-baru, gunakan `hound analyze <log-directory>` karena format output dan exit
-code-nya lebih jelas.
+Batch memakai shared dedup state dan menulis `summary-<batch-id>.json` serta
+`usage-<batch-id>.json` (jumlah panggilan LLM, run yang di-reuse, run yang
+di-skip karena budget, total token, estimasi biaya). `--max-llm-calls` membatasi
+jumlah panggilan LLM secara ketat termasuk saat paralel. `--max-cost-usd`
+membatasi estimasi biaya dan dapat melewati ambang oleh request yang sudah berjalan (butuh
+`llm.pricing`); begitu batas tercapai, log berikutnya memakai analisis rule-based
+dan ditandai `budget_skipped`. Run dan summary lama dipertahankan sebagai history
+tanpa ditimpa. Untuk automation baru, gunakan `hound analyze <log-directory>`
+karena format output dan exit code-nya lebih jelas.
 
 ## 12. Server Webhook
 
@@ -421,7 +478,78 @@ TH_SERVER_TOKEN='replace-with-a-strong-token' hound server \
 Server memakai bearer token dan hanya menerima bind loopback. Jika diteruskan
 melalui reverse proxy, gunakan TLS dan jangan expose token melalui log.
 
-## 13. Arsitektur Singkat
+## 13. Feedback
+
+Feedback engineer untuk suatu run disimpan ke store terpisah dari dedup state,
+direkam dengan audit metadata, dan **tidak pernah mengubah klasifikasi otomatis**.
+Feedback yang sudah di-review dapat diekspor menjadi kandidat fixture regresi
+melalui proses eksplisit.
+
+```sh
+# Rekam feedback untuk stored run (wajib --run-id)
+hound feedback record --out hound-agent-output --run-id run-a1b2c3d4e5f6 \
+  --usefulness useful \
+  --kind-correct correct --severity-correct incorrect \
+  --owner-correct correct --duplicate-correct correct \
+  --actual-kind test_failure --actual-severity high \
+  --actual-owner "@qa-team" --actual-outcome root_cause_confirmed \
+  --review-status reviewed --reviewer "engineer@example.com"
+
+# Ekspor semua feedback yang sudah di-sanitize
+hound feedback export --out hound-agent-output
+
+# Ekspor hanya yang di-review, format JSONL ke file
+hound feedback export --out hound-agent-output --reviewed-only \
+  --format jsonl --output reviewed.jsonl
+
+# Ekspor kandidat fixture regresi (manifest manual, bukan auto-mutasi rule)
+hound feedback export --out hound-agent-output --candidate-fixtures
+```
+
+Store feedback berada di `<out>/.hound-agent/feedback.sqlite3` (terpisah dari
+`state.sqlite3`/`state.json` milik dedup). Setiap record menyimpan `run_id`,
+`report_sha256`, `dedup_key`, rating usefulness/kind/severity/owner/duplicate,
+`actual_*` outcome, `review_status`, `reviewer`, dan `created_at`. Nilai yang
+dikenali sebagai secret di-redact sebelum disimpan. Export kandidat fixture
+menandai `requires_manual_sanitized_artifact: true` — feedback tidak pernah
+mengubah rule atau klasifikasi secara otomatis.
+
+## 14. Trust Policy
+
+Setiap analisis diberi **source class** yang menentukan kapabilitas mana yang
+boleh berjalan. Tujuannya fail-closed: sumber yang tidak tepercaya tidak boleh
+memicu source reading, enrichment, LLM, atau delivery.
+
+| Source class | Source context | Enrichment | LLM | Delivery |
+|---|---|---|---|---|
+| `trusted_branch` | Ya | Ya | Ya | Ya |
+| `local_artifact` | Ya | Ya | Ya | Ya |
+| `fork_pr` | Tidak | Tidak | Tidak | Tidak |
+
+Pilih secara eksplisit dengan `--source-class <name>`, YAML
+`trust.source_class: <name>`, atau env `TH_SOURCE_CLASS`. Jika tidak diberikan,
+Hound mendeteksi dari environment CI: event `pull_request`/
+`pull_request_target` GitHub dengan head repo berbeda dari base repo, dan GitLab
+merge request lintas project (`CI_MERGE_REQUEST_SOURCE_PROJECT_ID !=
+CI_PROJECT_ID`) diklasifikasikan sebagai `fork_pr`. Event PR yang hilang atau
+tidak lengkap juga dianggap tidak tepercaya.
+
+Profil `fork_pr` memaksa offline (`llm.require` ditolak), redaction selalu aktif
+(`redact: false` diabaikan), dan kapabilitas terlarang diblokir sebelum
+pemanggilan connector mana pun. Contoh:
+
+```sh
+# Fork PR: semua kapabilitas opsional otomatis nonaktif
+hound analyze ./ci-logs --source-class fork_pr --offline
+
+# Eksplisit tepercaya
+hound analyze ./ci-logs --source-class trusted_branch --repo . --source-context
+```
+
+Hasil keputusan tercatat di `meta.trust` pada report: `source_class`,
+`source_context`, `enrichment`, `llm`, `delivery`.
+
+## 15. Arsitektur Singkat
 
 ```text
 command / piped stdin
@@ -440,7 +568,7 @@ CLI / TUI / server
 ke satu core `pipeline.analyze()`, sehingga parsing, redaction, AI analysis,
 triage, dedup, dan report generation tidak diduplikasi.
 
-## 14. Contoh End-to-End
+## 16. Contoh End-to-End
 
 ```sh
 # Install
@@ -460,7 +588,7 @@ uv run hound analyze .hound-agent/logs --offline --format json \
 uv run hound report <run-id> --format text
 ```
 
-## 15. Testing dan Build
+## 17. Testing dan Build
 
 ```sh
 uv run pytest
@@ -469,13 +597,13 @@ uv run python -m py_compile hound_agent/cli.py hound_agent/tui.py \
 uv build
 ```
 
-Baseline saat dokumen diperbarui: `246 passed, 1 skipped` pada Windows. Skip
+Baseline saat dokumen diperbarui: `421 passed, 5 skipped` pada Windows. Skip
 khusus verifikasi permission bit POSIX. Test tidak melakukan live API call.
 
-## 16. Dokumentasi Lain
+## 18. Dokumentasi Lain
 
 - `README.md`: ringkasan dan quick start.
-- `PRD.md`: product requirements.
-- `ARCHITECTURE.md`: struktur modul dan data flow.
-- `TODO.md`: roadmap.
-- `WORKFLOW.md`: definition of done dan verification gate.
+- `docs/prd.md`: product requirements.
+- `docs/architecture.md`: struktur modul dan data flow.
+- `docs/todo.md`: roadmap.
+- `docs/workflow.md`: definition of done dan verification gate.

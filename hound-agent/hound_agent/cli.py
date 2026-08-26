@@ -6,33 +6,62 @@ import json
 import re
 import shutil
 import sys
+import threading
+from dataclasses import replace
 from uuid import uuid4
 from pathlib import Path
 
 from hound_agent import __version__
 from hound_agent import service
+from hound_agent.analyze.cost import estimate_cost
 from hound_agent.collector import CollectionInputError, collect_command, collect_stdin
 from hound_agent.config import PROVIDERS, load_config, set_model_config
 from hound_agent.formatters import format_document, format_runs
-from hound_agent.models import Ticket
+from hound_agent.models import KINDS, SCHEMA_VERSION, Ticket
 from hound_agent.pipeline import default_state_path
+from hound_agent.service import SUPPORTED_LOG_SUFFIXES, is_sidecar
+from hound_agent.triage.dedup import configure_store
+from hound_agent.trust import SOURCE_CLASSES
 
 DEFAULT_OUT = "hound-agent-output"
 CONFIG_FILENAMES = (".hound-agent.yml", ".hound-agent.yaml")
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
+def _non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be at least 0")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return parsed
 
 
 def _add_llm_args(parser: argparse.ArgumentParser) -> None:
     group = parser.add_argument_group("LLM provider options")
     group.add_argument("--provider", default=None,
                        help="LLM provider preset: openai, anthropic, gemini, groq, "
-                            "ollama, deepseek, azure, custom (default: $TH_API_PROVIDER or openai)")
+                            "ollama, deepseek, azure, 9router, custom (default: $TH_API_PROVIDER or openai)")
     group.add_argument("--model", default=None, help="model name (default: provider preset or $TH_MODEL)")
     group.add_argument("--base-url", default=None, help="API base URL override (default: $TH_BASE_URL)")
     group.add_argument("--api-key", default=None,
                        help="API key override (default: $TH_API_KEY or provider env). "
                         "NOTE: appears in process list; prefer env vars or YAML.")
-    group.add_argument("--max-retries", type=int, default=None,
+    group.add_argument("--max-retries", type=_non_negative_int, default=None,
                        help="maximum retry count for transient LLM errors")
+    group.add_argument("--require-llm", action="store_true",
+                       help="fail instead of using deterministic fallback when the LLM fails")
 
 
 def _add_common(parser: argparse.ArgumentParser, *, batch: bool = False) -> None:
@@ -44,12 +73,20 @@ def _add_common(parser: argparse.ArgumentParser, *, batch: bool = False) -> None
     parser.add_argument("--repo", default=None, help="path to the local git checkout")
     parser.add_argument("--out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
     parser.add_argument("--offline", action="store_true", help="force rule-based analysis, no LLM")
+    parser.add_argument("--jobs", type=_positive_int, default=1,
+                        help="parallel analysis workers (default: 1 = sequential)")
     parser.add_argument("--config", default=None, help="optional YAML config (components, dedup)")
     parser.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
     parser.add_argument("--no-redact", action="store_true", help="disable secret/PII redaction")
     parser.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     parser.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
     parser.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
+    parser.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
+                        help="trust profile for this artifact source")
+    parser.add_argument("--max-llm-calls", type=_positive_int, default=None,
+                        help="strict cap on LLM calls for the whole batch, including parallel workers")
+    parser.add_argument("--max-cost-usd", type=_positive_float, default=None,
+                        help="soft cap on estimated spend for the whole batch (requires llm.pricing in YAML)")
     parser.add_argument("--gh", action="store_true",
                         help="file the ticket as a GitHub issue (needs GH_TOKEN/GH_REPO)")
     parser.add_argument("--jira", action="store_true",
@@ -68,23 +105,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"Hound Agent {__version__}")
     sub = parser.add_subparsers(dest="command")
-    analyze_cmd = sub.add_parser("analyze", help="analyze supported logs in a directory")
+    analyze_cmd = sub.add_parser("analyze", help="analyze artifacts and emit formatted results")
     analyze_cmd.add_argument("log_directory", nargs="?", help="directory containing supported .log files")
     analyze_cmd.add_argument("--log", dest="legacy_log", default=None, help=argparse.SUPPRESS)
     analyze_cmd.add_argument("--format", choices=("text", "json", "markdown"), default="text")
     analyze_cmd.add_argument("--output", default=None, help="write formatted result to this file")
     _add_analyze_options(analyze_cmd)
-    batch = sub.add_parser("batch", help="analyze every log in a directory")
+    batch = sub.add_parser("batch", help="analyze artifacts with budgets and usage telemetry")
     _add_common(batch, batch=True)
     tui = sub.add_parser("tui", help="interactive terminal UI")
     tui.add_argument("--logs", default=None, help="log directory to browse (default: cwd)")
     tui.add_argument("--repo", default=None, help="path to the local git checkout")
     tui.add_argument("--out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
-    tui.add_argument("--offline", action="store_true", help="force rule-based analysis, no LLM")
+    tui_mode = tui.add_mutually_exclusive_group()
+    tui_mode.add_argument("--offline", action="store_true", default=None, help="force rule-based analysis, no LLM")
+    tui_mode.add_argument("--online", dest="offline", action="store_false", help="force LLM analysis")
     tui.add_argument("--config", default=None, help="optional YAML config")
     tui.add_argument("--no-redact", action="store_true", help="disable secret/PII redaction")
     tui.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
     tui.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
+    tui.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
+    tui.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
+    tui.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
+                     help="trust profile for these artifacts")
+    tui.add_argument("--jobs", type=_positive_int, default=1, help="parallel workers for Analyze all (default: 1)")
+    tui.add_argument("--max-llm-calls", type=_positive_int, default=None, help="strict LLM call cap for Analyze all")
+    tui.add_argument("--max-cost-usd", type=_positive_float, default=None, help="estimated cost guardrail for Analyze all")
     _add_llm_args(tui)
     server_cmd = sub.add_parser("server", help="run the HTTP webhook receiver (POST /analyze, GET /health)")
     server_cmd.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
@@ -99,6 +145,16 @@ def build_parser() -> argparse.ArgumentParser:
     server_cmd.add_argument("--no-redact", action="store_true", help="disable secret/PII redaction")
     server_cmd.add_argument("--source-context", action="store_true", help="attach source near frames from trusted logs")
     server_cmd.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
+    server_cmd.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
+                            help="trust profile for submitted artifacts")
+    server_cmd.add_argument("--workers", type=int, default=None,
+                            help="parallel analysis workers (default: 4; env TH_SERVER_WORKERS)")
+    server_cmd.add_argument("--max-queue", type=int, default=None,
+                            help="maximum queued+running jobs before HTTP 429 (default: 64; env TH_SERVER_MAX_QUEUE)")
+    server_cmd.add_argument("--rate-limit", type=int, default=None,
+                            help="max requests per client per minute (default: 60; env TH_SERVER_RATE_LIMIT)")
+    server_cmd.add_argument("--job-ttl", type=int, default=None,
+                            help="retention seconds for finished jobs (default: 3600; env TH_SERVER_JOB_TTL)")
     _add_llm_args(server_cmd)
     providers_cmd = sub.add_parser("list-providers", help="list built-in LLM provider presets")
     providers_cmd.add_argument("--json", action="store_true", help="output as JSON")
@@ -121,6 +177,48 @@ def build_parser() -> argparse.ArgumentParser:
     config_set.add_argument("key", choices=("model",))
     config_set.add_argument("value", help="provider preset or model name")
     config_set.add_argument("--config", default=str(CONFIG_FILENAMES[0]), help="YAML config path")
+    config_show = config_sub.add_parser("show", help="show effective non-secret configuration")
+    config_show.add_argument("--config", default=None, help="optional YAML config path")
+    config_show.add_argument("--json", action="store_true", help="output JSON")
+    feedback_cmd = sub.add_parser("feedback", help="record or export reviewed analysis feedback")
+    feedback_sub = feedback_cmd.add_subparsers(dest="feedback_command", required=True)
+    feedback_record = feedback_sub.add_parser("record", help="record structured feedback for a stored run")
+    feedback_record.add_argument("--run-id", required=True, help="stored run ID under --out")
+    feedback_record.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
+    feedback_record.add_argument("--store", default=None, help="feedback SQLite path (separate from dedup state)")
+    feedback_record.add_argument(
+        "--usefulness", choices=("useful", "partial", "not_useful", "unknown"), default="unknown"
+    )
+    for name in ("kind", "severity", "owner", "duplicate"):
+        feedback_record.add_argument(
+            f"--{name}-correct", choices=("correct", "incorrect", "unknown"), default="unknown"
+        )
+    feedback_record.add_argument("--actual-kind", choices=sorted(KINDS))
+    feedback_record.add_argument("--actual-severity", choices=("critical", "high", "medium", "low"))
+    feedback_record.add_argument("--actual-owner", default="")
+    feedback_record.add_argument(
+        "--actual-outcome",
+        choices=("root_cause_confirmed", "alternative_cause", "false_positive", "resolved", "unresolved", "unknown"),
+        default="unknown",
+    )
+    feedback_record.add_argument(
+        "--review-status", choices=("pending", "reviewed", "rejected"), default="pending"
+    )
+    feedback_record.add_argument("--reviewer", default="", help="reviewer identifier; secrets are redacted")
+    feedback_export = feedback_sub.add_parser("export", help="export sanitized feedback or candidate manifests")
+    feedback_export.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
+    feedback_export.add_argument("--store", default=None, help="feedback SQLite path")
+    feedback_export.add_argument("--output", default=None, help="write export to a file")
+    feedback_export.add_argument("--format", choices=("json", "jsonl"), default="json")
+    feedback_export.add_argument("--reviewed-only", action="store_true")
+    feedback_export.add_argument(
+        "--candidate-fixtures", action="store_true",
+        help="export reviewed records as manual regression-fixture candidates",
+    )
+    doctor_cmd = sub.add_parser("doctor", help="check local Hound readiness without exposing secrets")
+    doctor_cmd.add_argument("--config", default=None, help="optional YAML config path")
+    doctor_cmd.add_argument("--out", default=DEFAULT_OUT, help="output directory to check")
+    doctor_cmd.add_argument("--json", action="store_true", help="output JSON")
     log_cmd = sub.add_parser(
         "log",
         help="capture a command or piped stdin as a reusable .log file",
@@ -138,6 +236,8 @@ def build_parser() -> argparse.ArgumentParser:
     log_cmd.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     log_cmd.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
     log_cmd.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
+    log_cmd.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
+                         help="trust profile for the captured artifact")
     _add_llm_args(log_cmd)
     log_cmd.add_argument("command_args", nargs=argparse.REMAINDER, metavar="COMMAND")
     return parser
@@ -148,12 +248,16 @@ def _add_analyze_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--out", default=DEFAULT_OUT, help="artifact directory (default: hound-agent-output)")
     parser.add_argument("--offline", action="store_true", help="local rule-based analysis; no network")
     parser.add_argument("--offline-value", choices=("true", "false"), default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--jobs", type=_positive_int, default=1,
+                        help="parallel analysis workers (default: 1 = sequential)")
     parser.add_argument("--config", default=None, help="optional YAML config")
     parser.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
     parser.add_argument("--no-redact", action="store_true", help="disable secret/PII redaction")
     parser.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     parser.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
     parser.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
+    parser.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
+                        help="trust profile for this artifact source")
     parser.add_argument("--gh", action="store_true", help="file GitHub issue")
     parser.add_argument("--jira", action="store_true", help="file Jira issue")
     parser.add_argument("--gitlab", action="store_true", help="file GitLab issue")
@@ -195,12 +299,17 @@ def run_analyze(args: argparse.Namespace) -> int:
             "api_key": getattr(args, "api_key", None),
             "redact": redact,
             "max_retries": getattr(args, "max_retries", None),
+            "jobs": getattr(args, "jobs", 1),
             "source_context": getattr(args, "source_context", False),
             "context_path": getattr(args, "context", None),
             "enrich": getattr(args, "enrich", False),
+            "source_class": getattr(args, "source_class", None),
         }
+        common["require_llm"] = getattr(args, "require_llm", False) or None
         if legacy_file:
-            document = service.analyze_log(path, args.out, **common)
+            legacy_common = dict(common)
+            legacy_common.pop("jobs", None)
+            document = service.analyze_log(path, args.out, **legacy_common)
             runs = [service.AnalysisRun(path.stem, path, Path(args.out), document)]
         else:
             runs = service.analyze_directory(path, args.out, **common)
@@ -302,6 +411,59 @@ def run_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_feedback(args: argparse.Namespace) -> int:
+    from sqlite3 import DatabaseError
+
+    from hound_agent.feedback import (
+        default_feedback_store,
+        export_feedback,
+        record_feedback,
+        resolve_report,
+    )
+
+    store = Path(args.store) if args.store else default_feedback_store(args.out)
+    try:
+        if args.feedback_command == "record":
+            report = resolve_report(args.out, args.run_id)
+            payload = record_feedback(
+                store,
+                report,
+                args.run_id,
+                usefulness=args.usefulness,
+                kind_correct=args.kind_correct,
+                severity_correct=args.severity_correct,
+                owner_correct=args.owner_correct,
+                duplicate_correct=args.duplicate_correct,
+                actual_kind=args.actual_kind,
+                actual_severity=args.actual_severity,
+                actual_owner=args.actual_owner,
+                actual_outcome=args.actual_outcome,
+                review_status=args.review_status,
+                reviewer=args.reviewer,
+            )
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return 0
+
+        payload = export_feedback(
+            store,
+            reviewed_only=args.reviewed_only,
+            candidates=args.candidate_fixtures,
+        )
+        if args.format == "jsonl":
+            key = "candidates" if args.candidate_fixtures else "records"
+            rendered = "\n".join(json.dumps(row, ensure_ascii=False) for row in payload[key])
+        else:
+            rendered = json.dumps(payload, indent=2, ensure_ascii=False)
+        _emit_output(rendered, args.output)
+        return 0
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except (DatabaseError, OSError) as exc:
+        print(f"error: feedback operation failed: {exc}", file=sys.stderr)
+        return 3
+
+
 def run_list_runs(args: argparse.Namespace) -> int:
     root = Path(args.out)
     if not root.is_dir():
@@ -367,20 +529,21 @@ def _is_owned_output_tree(root: Path, marker_name: str, marker_content: str) -> 
                 return False
             if child.is_dir():
                 if child.name == ".hound-agent":
+                    allowed = re.compile(
+                        r"state\.json|state\.sqlite3|state\.lock|jobs\.sqlite3|"
+                        r"feedback\.sqlite3|state\.json\.corrupt-\d+|"
+                        r"state\.sqlite3-(wal|shm)|jobs\.sqlite3-(wal|shm)|feedback\.sqlite3-(wal|shm)"
+                    )
                     if any(
-                        item.is_symlink() or item.is_dir() or not (
-                            item.name == "state.json"
-                            or item.name == "state.lock"
-                            or re.fullmatch(r"state\.json\.corrupt-\d+", item.name) is not None
-                        )
+                        item.is_symlink() or item.is_dir() or allowed.fullmatch(item.name) is None
                         for item in child.iterdir()
                     ):
                         return False
                 elif not _is_owned_output_tree(child, marker_name, marker_content):
                     return False
             elif child.name not in {"report.json", "report.md", "ticket.md", "summary.json"} and re.fullmatch(
-                r"summary-[0-9a-f]{12}\.json", child.name
-            ) is None:
+                r"(?:summary|usage)-[0-9a-f]{12}\.json", child.name
+            ) is None and not child.name.startswith(".incoming-"):
                 return False
     except OSError:
         return False
@@ -392,7 +555,12 @@ def run_init(args: argparse.Namespace) -> int:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("x", encoding="utf-8") as stream:
-            stream.write("# Hound Agent CI/CD analysis configuration\nllm:\n  provider: openai\n  model: gpt-4o-mini\nredact: true\ncomponents: {}\n")
+            stream.write(
+                "# Hound Agent CI/CD analysis configuration\n"
+                "llm:\n  provider: openai\n  model: gpt-4o-mini\n"
+                "trust:\n  source_class: local_artifact\n"
+                "redact: true\ncomponents: {}\n"
+            )
     except FileExistsError:
         print(f"error: config already exists: {path}", file=sys.stderr)
         return 2
@@ -439,6 +607,7 @@ def run_log(args: argparse.Namespace) -> int:
                 api_key=getattr(args, "api_key", None),
                 redact=False if getattr(args, "no_redact", False) else None,
                 max_retries=getattr(args, "max_retries", None),
+                source_class=getattr(args, "source_class", None),
             )
             run_dir = output_root / collected.log_file.stem
             document = service.analyze_log(
@@ -453,12 +622,13 @@ def run_log(args: argparse.Namespace) -> int:
                 base_url=getattr(args, "base_url", None),
                 api_key=getattr(args, "api_key", None),
                 redact=False if getattr(args, "no_redact", False) else None,
-                state_path=default_state_path(output_root, analysis_config.state_file, getattr(args, "no_dedup", False)),
+                state_path=default_state_path(output_root, analysis_config.state_file, getattr(args, "no_dedup", False), backend=analysis_config.state_backend),
                 _config=analysis_config,
                 max_retries=getattr(args, "max_retries", None),
                 source_context=getattr(args, "source_context", False),
                 context_path=getattr(args, "context", None),
                 enrich=getattr(args, "enrich", False),
+                source_class=getattr(args, "source_class", None),
             )
             print(format_document(document, "text"), file=sys.stderr)
             print(f"Hound Agent: report saved to {run_dir}", file=sys.stderr)
@@ -484,8 +654,16 @@ def _maybe_file(args: argparse.Namespace, doc: dict, cfg_path: str | None) -> bo
         base_url=getattr(args, "base_url", None),
         api_key=getattr(args, "api_key", None),
         max_retries=getattr(args, "max_retries", None),
+        source_class=getattr(args, "source_class", None),
     )
-    state_path = default_state_path(Path(args.out), config.state_file, args.no_dedup)
+    if not config.allow_delivery:
+        print(
+            f"warning: external delivery is forbidden for source class {config.source_class}",
+            file=sys.stderr,
+        )
+        return False
+    configure_store(backend=config.state_backend or "file", max_entries=config.dedup_max_entries, retention_days=config.dedup_retention_days)
+    state_path = default_state_path(Path(args.out), config.state_file, args.no_dedup, backend=config.state_backend)
     key = doc["triage"]["dedup_key"]
 
     valid = True
@@ -578,6 +756,62 @@ def _maybe_file(args: argparse.Namespace, doc: dict, cfg_path: str | None) -> bo
     return valid
 
 
+class _BatchBudget:
+    """Thread-safe budget guardrail for batch LLM usage.
+
+    ``reserve_llm`` atomically reserves a call slot before work starts;
+    ``record`` accounts for what actually happened and releases the slot.
+    The call cap is strict, while the cost cap remains an estimate because
+    actual token usage is only known after a response.
+    """
+
+    def __init__(self, max_calls: int | None, max_cost: float | None):
+        self.max_calls = max_calls
+        self.max_cost = max_cost
+        self.calls = 0
+        self.reserved_calls = 0
+        self.cost = 0.0
+        self.reused_runs = 0
+        self.skipped_runs = 0
+        self.tokens = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        self._lock = threading.Lock()
+
+    def reserve_llm(self) -> bool:
+        with self._lock:
+            if self.max_calls and self.calls + self.reserved_calls >= self.max_calls:
+                return False
+            if self.max_cost and self.cost >= self.max_cost:
+                return False
+            self.reserved_calls += 1
+            return True
+
+    def record(self, llm_called: bool, cost: float, reused: bool, skipped: bool, usage: dict) -> None:
+        with self._lock:
+            if not skipped:
+                self.reserved_calls -= 1
+            if llm_called:
+                self.calls += 1
+            self.cost += max(0.0, cost)
+            if reused:
+                self.reused_runs += 1
+            if skipped:
+                self.skipped_runs += 1
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                self.tokens[key] += int(usage.get(key, 0) or 0)
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {
+                "schema_version": SCHEMA_VERSION,
+                "llm_calls": self.calls,
+                "estimated_cost_usd": round(self.cost, 6),
+                "reused_runs": self.reused_runs,
+                "budget_skipped_runs": self.skipped_runs,
+                "total_tokens": dict(self.tokens),
+                "limits": {"max_llm_calls": self.max_calls, "max_cost_usd": self.max_cost},
+            }
+
+
 def run_batch(args: argparse.Namespace) -> int:
     from hound_agent.output.report import ensure_outdir
     from hound_agent.ingest.redact import redact_text
@@ -585,14 +819,27 @@ def run_batch(args: argparse.Namespace) -> int:
     out = Path(args.out)
     logs_path = Path(args.logs)
     if logs_path.is_dir():
-        logs = sorted(p for p in logs_path.iterdir() if p.is_file() and p.suffix == ".log")
+        # Accept the same artifact shapes as `hound analyze` (.log/.xml/.sarif/.json),
+        # skipping collector sidecars, so batch and analyze stay consistent.
+        logs = sorted(
+            p
+            for p in logs_path.iterdir()
+            if p.is_file()
+            and not p.is_symlink()
+            and p.suffix.lower() in SUPPORTED_LOG_SUFFIXES
+            and not is_sidecar(p)
+        )
     elif logs_path.is_file():
         logs = [logs_path]
     else:
         print(f"error: not a file or directory: {logs_path}", file=sys.stderr)
         return 2
     if not logs:
-        print(f"error: no *.log files found in {logs_path}", file=sys.stderr)
+        print(
+            f"error: no supported artifacts found in {logs_path}; "
+            "add .log, JUnit .xml, SARIF .sarif, or test-report .json files",
+            file=sys.stderr,
+        )
         return 2
 
     if args.offline and any(getattr(args, flag, False) for flag in ("gh", "jira", "gitlab", "slack_webhook")):
@@ -608,6 +855,8 @@ def run_batch(args: argparse.Namespace) -> int:
             api_key=getattr(args, "api_key", None),
             redact=False if getattr(args, "no_redact", False) else None,
             max_retries=getattr(args, "max_retries", None),
+            require_llm=getattr(args, "require_llm", False) or None,
+            source_class=getattr(args, "source_class", None),
         )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -620,17 +869,27 @@ def run_batch(args: argparse.Namespace) -> int:
     except OSError as exc:
         print(f"error: could not initialize output: {exc}", file=sys.stderr)
         return 3
-    shared_state = default_state_path(out, config.state_file, args.no_dedup)
+    shared_state = default_state_path(out, config.state_file, args.no_dedup, backend=config.state_backend)
+    configure_store(backend=config.state_backend or "file", max_entries=config.dedup_max_entries, retention_days=config.dedup_retention_days)
     cfg_path = _discover_config(args.config, args.repo)
     redact = False if getattr(args, "no_redact", False) else None
     summary = []
     processing_errors = 0
     detected_failures = False
-    batch_id = __import__("uuid").uuid4().hex[:12]
-    for index, log in enumerate(logs, 1):
+    batch_id = uuid4().hex[:12]
+    jobs = max(1, int(getattr(args, "jobs", 1) or 1))
+    budget = _BatchBudget(
+        max_calls=int(getattr(args, "max_llm_calls", None) or 0) or None,
+        max_cost=float(getattr(args, "max_cost_usd", None) or 0.0) or None,
+    )
+
+    def _process_one(item: tuple[int, Path]) -> tuple[int, dict | None, str | None, bool]:
+        index, log = item
         stem = f"run-{batch_id}-{index:04d}"
         sub_out = out / stem
-        print(f"== {redact_text(log.name)[0]} ==")
+        print(f"== {redact_text(log.name)[0]} ==", flush=True)
+        allow_llm = budget.reserve_llm()
+        run_config = replace(config, offline=True) if not allow_llm else config
         try:
             doc = service.analyze_log(
                 log,
@@ -649,47 +908,89 @@ def run_batch(args: argparse.Namespace) -> int:
                 source_context=getattr(args, "source_context", False),
                 context_path=getattr(args, "context", None),
                 enrich=getattr(args, "enrich", False),
-                _config=config,
+                source_class=getattr(args, "source_class", None),
+                _config=run_config,
             )
         except FileNotFoundError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            processing_errors += 1
-            continue
+            budget.record(False, 0.0, False, not allow_llm, {})
+            print(f"error: {exc}", file=sys.stderr, flush=True)
+            return index, None, None, True
         except Exception as exc:
-            print(f"error: pipeline failed for {log.name}: {exc}", file=sys.stderr)
-            processing_errors += 1
-            continue
+            budget.record(False, 0.0, False, not allow_llm, {})
+            print(f"error: pipeline failed for {log.name}: {exc}", file=sys.stderr, flush=True)
+            return index, None, None, True
 
+        meta = doc["meta"]
         tr = doc["triage"]
-        detected_failures = detected_failures or doc["failure"]["kind"] != "unknown"
-        summary.append(
-            {
-                "log": doc["meta"]["log_file"],
-                "stage": doc["failure"]["stage"],
-                "kind": doc["failure"]["kind"],
-                "severity": tr["severity"],
-                "component": tr["component"],
-                "engine": doc["meta"]["engine"],
-                "dedup_key": tr["dedup_key"],
-                "is_duplicate_of": tr["is_duplicate_of"],
-                "flaky_suspect": tr["flaky_suspect"],
-                "ticket_title": doc["ticket"]["title"],
-                "report": str(sub_out / "report.json"),
-            }
+        usage = meta.get("usage") or {}
+        reused = bool(meta.get("reused", False))
+        llm_called = allow_llm and not reused and meta.get("engine") in {"llm", "merged"}
+        budget.record(
+            llm_called=llm_called,
+            cost=estimate_cost(usage, config),
+            reused=reused,
+            skipped=not allow_llm,
+            usage=usage,
         )
+        row = {
+            "schema_version": SCHEMA_VERSION,
+            "log": meta["log_file"],
+            "stage": doc["failure"]["stage"],
+            "kind": doc["failure"]["kind"],
+            "severity": tr["severity"],
+            "component": tr["component"],
+            "engine": meta["engine"],
+            "dedup_key": tr["dedup_key"],
+            "is_duplicate_of": tr["is_duplicate_of"],
+            "flaky_suspect": tr["flaky_suspect"],
+            "reused": reused,
+            "budget_skipped": not allow_llm,
+            "usage": usage,
+            "ticket_title": doc["ticket"]["title"],
+            "report": str(sub_out / "report.json"),
+        }
         _print_result(doc, sub_out)
-        if not _maybe_file(args, doc, cfg_path):
+        delivery_ok = _maybe_file(args, doc, cfg_path)
+        return index, row, doc["failure"]["kind"], not delivery_ok
+
+    if jobs > 1:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=jobs, thread_name_prefix="hound_batch") as executor:
+            results = list(executor.map(_process_one, enumerate(logs, 1)))
+    else:
+        results = [_process_one(item) for item in enumerate(logs, 1)]
+
+    for index, row, kind, failed in sorted(results, key=lambda item: item[0]):
+        if failed:
             processing_errors += 1
+        if row is not None:
+            summary.append(row)
+            detected_failures = detected_failures or (kind != "unknown")
 
     spath = out / f"summary-{batch_id}.json"
     try:
-        from hound_agent.output.report import _atomic_write
+        from hound_agent.fsio import atomic_write
 
-        _atomic_write(spath, json.dumps(summary, indent=2, ensure_ascii=False))
+        atomic_write(spath, json.dumps(summary, indent=2, ensure_ascii=False))
     except OSError as exc:
         print(f"error: could not write batch summary: {exc}", file=sys.stderr)
         return 3
+    usage_path = out / f"usage-{batch_id}.json"
+    usage_block = budget.snapshot()
+    try:
+        from hound_agent.fsio import atomic_write
+
+        atomic_write(usage_path, json.dumps(usage_block, indent=2, ensure_ascii=False))
+    except OSError as exc:
+        print(f"error: could not write batch usage telemetry: {exc}", file=sys.stderr)
+        return 3
     print(f"summary : {spath} ({len(summary)} logs, {processing_errors} processing errors)")
+    print(
+        f"usage   : {usage_block['llm_calls']} LLM calls, {usage_block['reused_runs']} reused, "
+        f"{usage_block['budget_skipped_runs']} budget-skipped, "
+        f"${usage_block['estimated_cost_usd']:.4f} estimated ({usage_path.name})"
+    )
     if processing_errors:
         return 3
     return 1 if detected_failures else 0
@@ -710,8 +1011,13 @@ def run_tui(args: argparse.Namespace) -> int:
         base_url=getattr(args, "base_url", None),
         api_key=getattr(args, "api_key", None),
         max_retries=getattr(args, "max_retries", None),
-            source_context=getattr(args, "source_context", False),
-            context_path=getattr(args, "context", None),
+        source_context=getattr(args, "source_context", False),
+        context_path=getattr(args, "context", None),
+        enrich=getattr(args, "enrich", False),
+        source_class=getattr(args, "source_class", None),
+        jobs=getattr(args, "jobs", 1),
+        max_llm_calls=getattr(args, "max_llm_calls", None),
+        max_cost_usd=getattr(args, "max_cost_usd", None),
         redact=False if getattr(args, "no_redact", False) else None,
         no_dedup=getattr(args, "no_dedup", False),
     )
@@ -738,9 +1044,15 @@ def run_server(args: argparse.Namespace) -> int:
             base_url=args.base_url,
             api_key=args.api_key,
             max_retries=args.max_retries,
+            require_llm=args.require_llm or None,
             source_context=args.source_context,
             context_path=args.context,
+            source_class=getattr(args, "source_class", None),
             redact=False if args.no_redact else None,
+            workers=args.workers,
+            max_queue=args.max_queue,
+            rate_limit=args.rate_limit,
+            job_ttl=args.job_ttl,
         )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -770,6 +1082,105 @@ def run_list_providers(args: argparse.Namespace) -> int:
     return 0
 
 
+def _safe_config(config) -> dict:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "provider": config.provider,
+        "model": config.model,
+        "base_url": config.base_url,
+        "offline": config.offline,
+        "llm_enabled": config.llm_enabled,
+        "api_key": "configured" if config.api_key else "missing",
+        "redact": config.redact,
+        "max_retries": config.max_retries,
+        "max_concurrency": config.max_concurrency,
+        "state_backend": config.state_backend,
+        "dedup_retention_days": config.dedup_retention_days,
+        "trust": {
+            "source_class": config.source_class,
+            "source_context": config.allow_source_context,
+            "enrichment": config.allow_enrichment,
+            "llm": config.allow_llm,
+            "delivery": config.allow_delivery,
+        },
+        "integrations": {
+            "github": bool(config.gh_repo and config.gh_token),
+            "jira": bool(config.jira_url and config.jira_project and config.jira_token),
+            "gitlab": bool(config.gitlab_url and config.gitlab_project and config.gitlab_token),
+            "slack": bool(config.slack_webhook),
+        },
+    }
+
+
+def run_config_show(args: argparse.Namespace) -> int:
+    try:
+        config = load_config(config_path=args.config)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    payload = _safe_config(config)
+    if args.json:
+        print(json.dumps(payload, indent=2))
+    else:
+        for key in ("provider", "model", "base_url", "offline", "llm_enabled", "api_key", "redact", "state_backend"):
+            print(f"{key:<18} {payload[key]}")
+        print(f"trust.source_class {payload['trust']['source_class']}")
+        for name, ready in payload["integrations"].items():
+            print(f"integration.{name:<7} {'ready' if ready else 'not configured'}")
+    return 0
+
+
+def run_doctor(args: argparse.Namespace) -> int:
+    checks: list[dict] = []
+    config = None
+
+    def add(name: str, ok: bool, detail: str) -> None:
+        checks.append({"name": name, "ok": ok, "detail": detail})
+
+    add("python", sys.version_info >= (3, 10), f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    add("hound", True, __version__)
+    try:
+        config = load_config(config_path=args.config)
+    except (OSError, ValueError) as exc:
+        add("config", False, str(exc))
+    else:
+        add("config", True, args.config or "defaults and environment")
+        add(
+            "llm",
+            True,
+            "offline" if config.offline else (
+                f"ready: {config.provider}/{config.model}"
+                if config.llm_enabled else "not configured; deterministic fallback available"
+            ),
+        )
+    output = Path(args.out).expanduser()
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        probe = output / ".hound-doctor-probe"
+        probe.write_text("ok", encoding="ascii")
+        probe.unlink()
+    except OSError as exc:
+        add("output", False, str(exc))
+    else:
+        add("output", True, str(output.resolve()))
+    for executable in ("git", "docker", "kubectl"):
+        location = shutil.which(executable)
+        add(executable, location is not None, location or "not installed (optional)")
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "ok": all(check["ok"] for check in checks if check["name"] not in {"docker", "kubectl"}),
+        "checks": checks,
+        "config": _safe_config(config) if config is not None else None,
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2))
+    else:
+        for check in checks:
+            marker = "ok" if check["ok"] else "missing"
+            print(f"{marker:<8} {check['name']:<10} {check['detail']}")
+    return 0 if payload["ok"] else 2
+
+
 def _ticket_from_doc(doc: dict) -> Ticket:
     t = doc["ticket"]
     return Ticket(title=t["title"], body_md=t["body_md"], labels=t.get("labels", []))
@@ -780,7 +1191,8 @@ def _print_result(doc: dict, out_dir: str | Path) -> None:
     tr = doc["triage"]
     sev = tr["severity"]
 
-    # Simple ANSI colors for CLI output
+    # Simple ANSI colors for CLI output; suppressed when redirected so logs,
+    # pipes, and CI step summaries never contain escape sequences.
     COLOR_MAP = {
         "critical": "\033[91;1m",  # bold red
         "high": "\033[91m",        # red
@@ -790,14 +1202,22 @@ def _print_result(doc: dict, out_dir: str | Path) -> None:
     }
     RESET = "\033[0m"
     BOLD = "\033[1m"
-    sev_color = COLOR_MAP.get(sev.lower(), "")
+    colors = sys.stdout.isatty()
+    sev_color = COLOR_MAP.get(sev.lower(), "") if colors else ""
+    reset = RESET if colors else ""
+    bold = BOLD if colors else ""
+    dup_color = "\033[93m" if colors else ""
+    dup_reset = RESET if colors else ""
 
-    print(f"{BOLD}stage={RESET}{f['stage']} {BOLD}kind={RESET}{f['kind']} {BOLD}severity={RESET}{sev_color}{sev}{RESET} "
-          f"{BOLD}component={RESET}{tr['component']} {BOLD}engine={RESET}{doc['meta']['engine']}")
+    print(f"{bold}stage={reset}{f['stage']} {bold}kind={reset}{f['kind']} {bold}severity={reset}{sev_color}{sev}{reset} "
+          f"{bold}component={reset}{tr['component']} {bold}engine={reset}{doc['meta']['engine']}")
+    llm = doc["meta"].get("llm") or {}
+    if llm.get("status") == "failed":
+        print(f"warning: LLM failed ({llm.get('fallback_reason') or 'provider_error'}); deterministic fallback used")
     if tr["is_duplicate_of"]:
-        print(f"\033[93mduplicate of known failure (key {tr['dedup_key'][:12]})\033[0m")
+        print(f"{dup_color}duplicate of known failure (key {tr['dedup_key'][:12]}){dup_reset}")
     if tr["flaky_suspect"]:
-        print("\033[93mflaky suspect (recurring 3+ times)\033[0m")
+        print(f"{dup_color}flaky suspect (recurring 3+ times){dup_reset}")
     print(f"report : {Path(out_dir) / 'report.json'}")
     print(f"report : {Path(out_dir) / 'report.md'}")
     print(f"ticket : {Path(out_dir) / 'ticket.md'}")
@@ -832,7 +1252,7 @@ def main(argv: list[str] | None = None) -> int:
             logs=None,
             repo=None,
             out=DEFAULT_OUT,
-            offline=False,
+            offline=None,
             config=None,
             no_redact=False,
             provider=None,
@@ -842,6 +1262,10 @@ def main(argv: list[str] | None = None) -> int:
             max_retries=None,
             source_context=False,
             context=None,
+            enrich=False,
+            jobs=1,
+            max_llm_calls=None,
+            max_cost_usd=None,
             no_dedup=False,
         ))
     parser = build_parser()
@@ -865,7 +1289,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init":
         return run_init(args)
     if args.command == "config":
+        if args.config_command == "show":
+            return run_config_show(args)
         return run_config(args)
+    if args.command == "feedback":
+        return run_feedback(args)
+    if args.command == "doctor":
+        return run_doctor(args)
     if args.command == "log":
         return run_log(args)
     parser.print_help()
