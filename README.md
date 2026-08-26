@@ -9,10 +9,10 @@
 ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝ 
 ```
 
-### The Offline-First AI Investigator for CI/CD, Build, and Test Failures.
+### An Offline-First CLI & TUI Tool for Investigating CI/CD, Build, and Test Failures.
 
 [![Status](https://img.shields.io/badge/Status-Production--Ready-brightgreen.svg)](#quick-start)
-[![Tests](https://img.shields.io/badge/Tests-493%20Passed-success.svg)](#tests)
+[![Tests](https://img.shields.io/badge/Tests-421%20Passed-success.svg)](#tests)
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](pyproject.toml)
 [![Security](https://img.shields.io/badge/Security-Redaction%20Default-orange.svg)](#security-and-privacy)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -21,7 +21,7 @@
 
 ---
 
-**Hound Agent** is a developer-centric, read-only diagnostic agent that automatically investigates broken CI/CD pipelines, flaky test runs, build crashes, and deployment failures. It parses raw logs and structured test artifacts, extracts exact stack traces and Git context, pinpoints the root cause, triages severity, and drafts ready-to-file bug tickets—**all without touching or mutating your infrastructure**.
+**Hound Agent** is an offline-first diagnostic **developer tool** (CLI & TUI) designed to automatically investigate broken CI/CD pipelines, flaky test runs, build crashes, and deployment failures. It inspects raw execution logs and structured test artifacts, correlates stack traces with repository context, determines root causes, triages issue severity, and generates actionable incident reports and ticket drafts—**in a strictly read-only mode without mutating infrastructure**.
 
 ---
 
