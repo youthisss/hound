@@ -215,6 +215,44 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-fixtures", action="store_true",
         help="export reviewed records as manual regression-fixture candidates",
     )
+    qa_cmd = sub.add_parser("qa", help="QA capabilities: test history store, import/export, and queries")
+    qa_sub = qa_cmd.add_subparsers(dest="qa_command", required=True)
+    qa_import = qa_sub.add_parser("import", help="import test evidence (JUnit/JSON/log) into the history store")
+    qa_import.add_argument("path", help="artifact file or directory of artifacts")
+    qa_import.add_argument("--runner", default=None, help="explicit runner label (auto-detected for logs)")
+    qa_import.add_argument("--run-id", default="", help="run identifier for the imported evidence")
+    qa_import.add_argument("--commit", default="", help="commit SHA for the imported evidence")
+    qa_import.add_argument("--branch", default="", help="branch name for the imported evidence")
+    qa_import.add_argument("--environment", default="", help="environment dimensions, e.g. os=linux;python=3.11")
+    qa_import.add_argument("--store", default=None, help="history SQLite path (default: <out>/.hound-agent/history.sqlite3)")
+    qa_import.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory (default store location)")
+    qa_import.add_argument("--retention-days", type=_positive_int, default=None,
+                           help="retain only this many days after import")
+    qa_history = qa_sub.add_parser("history", help="show recent history rows for a test")
+    qa_history.add_argument("suite", help="suite identifier, e.g. tests/test_checkout.py")
+    qa_history.add_argument("test", help="test leaf identity, e.g. test_checkout")
+    qa_history.add_argument("--store", default=None)
+    qa_history.add_argument("--out", default=DEFAULT_OUT)
+    qa_history.add_argument("--days", type=_positive_int, default=None, help="only rows within this many days")
+    qa_history.add_argument("--limit", type=_positive_int, default=200)
+    qa_history.add_argument("--json", action="store_true", help="output JSON")
+    qa_tests = qa_sub.add_parser("tests", help="list tracked tests in the history store")
+    qa_tests.add_argument("--store", default=None)
+    qa_tests.add_argument("--out", default=DEFAULT_OUT)
+    qa_tests.add_argument("--suite-prefix", default="", help="filter suites by prefix")
+    qa_tests.add_argument("--limit", type=_positive_int, default=100)
+    qa_tests.add_argument("--json", action="store_true", help="output JSON")
+    qa_stats = qa_sub.add_parser("stats", help="aggregate stats (rate, durations, environments) for a test")
+    qa_stats.add_argument("suite")
+    qa_stats.add_argument("test")
+    qa_stats.add_argument("--store", default=None)
+    qa_stats.add_argument("--out", default=DEFAULT_OUT)
+    qa_stats.add_argument("--days", type=_positive_int, default=None, help="window in days")
+    qa_stats.add_argument("--json", action="store_true", help="output JSON")
+    qa_export = qa_sub.add_parser("export", help="export sanitized history to a JSON file")
+    qa_export.add_argument("--store", default=None)
+    qa_export.add_argument("--out", default=DEFAULT_OUT)
+    qa_export.add_argument("--output", default=None, help="destination JSON file")
     doctor_cmd = sub.add_parser("doctor", help="check local Hound readiness without exposing secrets")
     doctor_cmd.add_argument("--config", default=None, help="optional YAML config path")
     doctor_cmd.add_argument("--out", default=DEFAULT_OUT, help="output directory to check")
@@ -461,6 +499,134 @@ def run_feedback(args: argparse.Namespace) -> int:
         return 2
     except (DatabaseError, OSError) as exc:
         print(f"error: feedback operation failed: {exc}", file=sys.stderr)
+        return 3
+
+
+def _render_qa_tests(tests: list[dict]) -> str:
+    if not tests:
+        return "no tests in history"
+    return "\n".join(
+        f"{item['suite']} :: {item['test']}  (runner={item['runner']}, samples={item['samples']}, "
+        f"failures={item['failures']})"
+        for item in tests
+    )
+
+
+def _render_qa_history(rows: list[dict], suite: str, test: str) -> str:
+    if not rows:
+        return f"no history for {suite} :: {test}"
+    lines = [f"{suite} :: {test}"]
+    for row in rows:
+        duration = f"{row['duration_ms']}ms" if row.get("duration_ms") is not None else "-"
+        lines.append(
+            f"  {row['recorded_at']}  {row['status']:<7} attempt={row['attempt']} "
+            f"{duration:<10} runner={row['runner']} run={row['run_id']}"
+        )
+    return "\n".join(lines)
+
+
+def run_qa(args: argparse.Namespace) -> int:
+    import sqlite3
+
+    from hound_agent.qa.history import (
+        count_by_status,
+        default_history_store,
+        duration_stats,
+        environment_breakdown,
+        export_history,
+        failure_rate,
+        first_last_seen,
+        history_for_test,
+        list_tests,
+        retain,
+        upsert_results,
+    )
+    from hound_agent.qa.normalize import import_artifact
+
+    store = Path(args.store) if getattr(args, "store", None) else default_history_store(args.out)
+    try:
+        if args.qa_command == "import":
+            source = Path(args.path)
+            results: list = []
+            imported_any = False
+            if source.is_dir():
+                for item in sorted(source.rglob("*")):
+                    if not item.is_file() or item.suffix.lower() not in {".xml", ".json", ".log", ".txt"}:
+                        continue
+                    try:
+                        results.extend(
+                            import_artifact(
+                                item, args.run_id, args.commit, args.branch,
+                                args.environment, runner=args.runner,
+                            )
+                        )
+                        imported_any = True
+                    except ValueError as exc:
+                        print(f"warning: skipped {item}: {exc}", file=sys.stderr)
+                if not imported_any:
+                    print(f"error: no supported artifacts found under {source}", file=sys.stderr)
+                    return 2
+            else:
+                results = import_artifact(
+                    source, args.run_id, args.commit, args.branch,
+                    args.environment, runner=args.runner,
+                )
+            written = upsert_results(store, results)
+            if getattr(args, "retention_days", None):
+                retain(store, args.retention_days)
+            print(json.dumps({"imported": written, "store": str(store)}, indent=2, ensure_ascii=False))
+            return 0
+
+        if args.qa_command == "export":
+            output = Path(args.output) if args.output else store.with_suffix(".export.json")
+            manifest = export_history(store, output)
+            print(json.dumps({"count": manifest["count"], "output": str(output)}, indent=2, ensure_ascii=False))
+            return 0
+
+        if args.qa_command == "tests":
+            tests = list_tests(store, suite_prefix=args.suite_prefix, limit=args.limit)
+            payload = {"count": len(tests), "tests": tests}
+            if args.json:
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+            else:
+                print(_render_qa_tests(tests))
+            return 0
+
+        if args.qa_command == "stats":
+            counts = count_by_status(store, args.suite, args.test, days=args.days)
+            rate = failure_rate(store, args.suite, args.test, days=args.days)
+            durations = duration_stats(store, args.suite, args.test, days=args.days)
+            first, last = first_last_seen(store, args.suite, args.test)
+            payload = {
+                "suite": args.suite,
+                "test": args.test,
+                "counts": counts,
+                "failure_rate": rate,
+                "insufficient_history": rate is None,
+                "durations": durations,
+                "first_seen": first,
+                "last_seen": last,
+                "environments": environment_breakdown(store, args.suite, args.test),
+            }
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return 0
+
+        if args.qa_command == "history":
+            rows = history_for_test(store, args.suite, args.test, limit=args.limit, days=args.days)
+            payload = {"suite": args.suite, "test": args.test, "count": len(rows), "rows": rows}
+            if args.json:
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+            else:
+                print(_render_qa_history(rows, args.suite, args.test))
+            return 0
+
+        print(f"error: unknown qa command: {args.qa_command}", file=sys.stderr)
+        return 2
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except (sqlite3.DatabaseError, OSError) as exc:
+        print(f"error: history store failed: {exc}", file=sys.stderr)
         return 3
 
 
@@ -1294,6 +1460,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_config(args)
     if args.command == "feedback":
         return run_feedback(args)
+    if args.command == "qa":
+        return run_qa(args)
     if args.command == "doctor":
         return run_doctor(args)
     if args.command == "log":

@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS test_results (
     attempt INTEGER NOT NULL,
     duration_ms INTEGER,
     runner TEXT NOT NULL,
-    commit TEXT NOT NULL,
+    commit_sha TEXT NOT NULL,
     branch TEXT NOT NULL,
     environment TEXT NOT NULL,
     failure_signature TEXT NOT NULL,
@@ -48,14 +48,14 @@ CREATE INDEX IF NOT EXISTS ix_test_result_recorded ON test_results (recorded_at)
 
 _UPSERT = """
 INSERT INTO test_results (
-    suite, test, status, attempt, duration_ms, runner, commit, branch,
+    suite, test, status, attempt, duration_ms, runner, commit_sha, branch,
     environment, failure_signature, run_id, evidence_id, recorded_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (suite, test, run_id, attempt) DO UPDATE SET
     status = excluded.status,
     duration_ms = excluded.duration_ms,
     runner = excluded.runner,
-    commit = excluded.commit,
+    commit_sha = excluded.commit_sha,
     branch = excluded.branch,
     environment = excluded.environment,
     failure_signature = excluded.failure_signature,
@@ -64,7 +64,7 @@ ON CONFLICT (suite, test, run_id, attempt) DO UPDATE SET
 """
 
 _COLUMNS = (
-    "suite", "test", "status", "attempt", "duration_ms", "runner", "commit",
+    "suite", "test", "status", "attempt", "duration_ms", "runner", "commit_sha",
     "branch", "environment", "failure_signature", "run_id", "evidence_id", "recorded_at",
 )
 
@@ -231,7 +231,7 @@ def history_for_test(
     with connect(store_path) as connection:
         cutoff = _window(days)
         query = (
-            "SELECT suite, test, status, attempt, duration_ms, runner, commit, branch, "
+            "SELECT suite, test, status, attempt, duration_ms, runner, commit_sha, branch, "
             "environment, failure_signature, run_id, evidence_id, recorded_at "
             "FROM test_results WHERE suite = ? AND test = ?"
         )
@@ -294,7 +294,7 @@ def record_doc_results(doc: dict, store_path: str | Path) -> int:
             environment="",
             failure_signature=str(test.get("assertion") or ""),
             run_id=str(run_id),
-            recorded_at=str(recorded_at) or None,
+            recorded_at=str(recorded_at or ""),
         ))
     return upsert_results(store_path, results)
 
@@ -303,7 +303,7 @@ def export_history(store_path: str | Path, output_path: str | Path) -> dict:
     """Write sanitized history to a JSON file; returns the manifest."""
     with connect(store_path) as connection:
         rows = connection.execute(
-            "SELECT suite, test, status, attempt, duration_ms, runner, commit, branch, "
+            "SELECT suite, test, status, attempt, duration_ms, runner, commit_sha, branch, "
             "environment, failure_signature, run_id, recorded_at "
             "FROM test_results ORDER BY recorded_at, suite, test"
         ).fetchall()
@@ -343,7 +343,7 @@ def import_history(store_path: str | Path, input_path: str | Path) -> int:
             attempt=int(record.get("attempt", 1) or 1),
             duration_ms=record.get("duration_ms"),
             runner=str(record.get("runner", "unknown")),
-            commit=str(record.get("commit", "")),
+            commit=str(record.get("commit_sha", "") or ""),
             branch=str(record.get("branch", "")),
             environment=str(record.get("environment", "")),
             failure_signature=str(record.get("failure_signature", "")),

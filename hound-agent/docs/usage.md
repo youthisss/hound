@@ -549,7 +549,50 @@ hound analyze ./ci-logs --source-class trusted_branch --repo . --source-context
 Hasil keputusan tercatat di `meta.trust` pada report: `source_class`,
 `source_context`, `enrichment`, `llm`, `delivery`.
 
-## 15. Arsitektur Singkat
+## 15. QA History
+
+Hound menyimpan hasil test lintas run ke **history store** SQLite agar pola
+flaky/regresi bisa dihitung dari data, bukan asumsi. Store terpisah dari dedup
+state: `<out>/.hound-agent/history.sqlite3`.
+
+```sh
+# Import bukti test (JUnit/XML, JSON report, atau log runner) ke history
+hound qa import ./artifacts --run-id ci-123 --commit <sha> --branch main \
+  --environment "os=linux;python=3.11" --out hound-agent-output
+
+# Lihat statistik agregat satu test
+hound qa stats tests/test_checkout.py test_cart_total --out hound-agent-output --json
+
+# Riwayat mentah per run/attempt
+hound qa history tests/test_checkout.py test_cart_total --out hound-agent-output
+
+# Daftar test yang terlacak
+hound qa tests --suite-prefix tests/ --out hound-agent-output
+
+# Ekspor history sanitized untuk CI cache / shared volume
+hound qa export --out hound-agent-output --output history.json
+
+# Impor balik manifest ekspor ke store lain
+hound qa import history.json --run-id seed --out /tmp/fresh-output
+```
+
+Catatan model:
+
+- Identitas stabil adalah pasangan `(suite, leaf test)`; prefix runner
+  (`path::test`, `class.method`, dsb.) dipangkas ke leaf sehingga test yang sama
+  terlacak konsisten di semua runner (pytest, JUnit, Jest/Vitest, Go, RSpec,
+  Cargo, dotnet).
+- Satu baris per `(suite, test, run_id, attempt)`; retry/flaky JUnit otomatis
+  menjadi baris `failed(1)` + `passed(2)`.
+- Raw log tidak pernah disimpan; baris hanya mereferensikan `run_id` /
+  `evidence_id`.
+- Tanpa cukup data, query `stats` melaporkan `failure_rate: null` dan
+  `insufficient_history: true` — jangan menebak dari satu sample.
+- Retention prunes seluruh baris lama; agregat dihitung ulang dari baris yang
+  tersisa sehingga tidak pernah korup:
+  `hound qa import <path> --retention-days 90 --out <out>`.
+
+## 16. Arsitektur Singkat
 
 ```text
 command / piped stdin
@@ -568,7 +611,7 @@ CLI / TUI / server
 ke satu core `pipeline.analyze()`, sehingga parsing, redaction, AI analysis,
 triage, dedup, dan report generation tidak diduplikasi.
 
-## 16. Contoh End-to-End
+## 17. Contoh End-to-End
 
 ```sh
 # Install
@@ -588,7 +631,7 @@ uv run hound analyze .hound-agent/logs --offline --format json \
 uv run hound report <run-id> --format text
 ```
 
-## 17. Testing dan Build
+## 18. Testing dan Build
 
 ```sh
 uv run pytest
@@ -600,7 +643,7 @@ uv build
 Baseline saat dokumen diperbarui: `421 passed, 5 skipped` pada Windows. Skip
 khusus verifikasi permission bit POSIX. Test tidak melakukan live API call.
 
-## 18. Dokumentasi Lain
+## 19. Dokumentasi Lain
 
 - `README.md`: ringkasan dan quick start.
 - `docs/prd.md`: product requirements.
