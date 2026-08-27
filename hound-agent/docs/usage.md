@@ -277,6 +277,19 @@ Helm rollback, Terraform apply, migrasi, dan permission deployment. Fitur ini
 hanya menganalisis log dan tidak pernah menjalankan deploy, retry, rollback,
 atau perubahan infrastruktur.
 
+### QA Intelligence & Test History
+
+```sh
+# Analisis dan klasifikasi artefak uji terhadap histori tersimpan
+hound qa analyze ./artifacts/junit.xml --json
+
+# Bandingkan dengan baseline commit spesifik untuk mendeteksi likely regression
+hound qa analyze ./artifacts/junit.xml --baseline 5a3f2e1
+
+# Import laporan uji ke history store
+hound qa import ./artifacts/junit.xml --run-id run-101 --commit 5a3f2e1 --branch main
+```
+
 ## 5. Melihat Stored Run
 
 ```sh
