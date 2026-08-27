@@ -1,22 +1,22 @@
-<div align="center" style="text-align: center; width: 100%;">
+<div align="center">
 
-```text
+<pre>
 ██╗  ██╗ ██████╗ ██╗   ██╗███╗   ██╗██████╗ 
 ██║  ██║██╔═══██╗██║   ██║████╗  ██║██╔══██╗
 ███████║██║   ██║██║   ██║██╔██╗ ██║██║  ██║
 ██╔══██║██║   ██║██║   ██║██║╚██╗██║██║  ██║
 ██║  ██║╚██████╔╝╚██████╔╝██║ ╚████║██████╔╝
 ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝ 
-```
+</pre>
 
-### An Offline-First CLI & TUI Tool for Investigating CI/CD, Build, and Test Failures.
+<h3>An Offline-First CLI & TUI Tool for Investigating CI/CD, Build, and Test Failures.</h3>
 
 <p align="center">
-[![Status](https://img.shields.io/badge/Status-Production--Ready-brightgreen.svg)](#quick-start)
-[![Tests](https://img.shields.io/badge/Tests-493%20Passed-success.svg)](#tests)
-[![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](pyproject.toml)
-[![Security](https://img.shields.io/badge/Security-Redaction%20Default-orange.svg)](#security-and-privacy)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Production--Ready-brightgreen.svg" alt="Status"></a>
+  <a href="#tests"><img src="https://img.shields.io/badge/Tests-493%20Passed-success.svg" alt="Tests"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python Version"></a>
+  <a href="#security-and-privacy"><img src="https://img.shields.io/badge/Security-Redaction%20Default-orange.svg" alt="Security"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
 </p>
 
 </div>
