@@ -215,8 +215,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-fixtures", action="store_true",
         help="export reviewed records as manual regression-fixture candidates",
     )
-    qa_cmd = sub.add_parser("qa", help="QA capabilities: test history store, import/export, and queries")
+    qa_cmd = sub.add_parser("qa", help="QA capabilities: test history store, import/export, queries, and classification")
     qa_sub = qa_cmd.add_subparsers(dest="qa_command", required=True)
+    qa_analyze = qa_sub.add_parser("analyze", help="classify test results from an artifact or directory against history")
+    qa_analyze.add_argument("path", help="artifact file or directory of test artifacts")
+    qa_analyze.add_argument("--runner", default=None, help="explicit runner label")
+    qa_analyze.add_argument("--baseline", default=None, help="baseline commit SHA to compare regressions against")
+    qa_analyze.add_argument("--days", type=_positive_int, default=None, help="history analysis window in days")
+    qa_analyze.add_argument("--store", default=None, help="history SQLite path")
+    qa_analyze.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
+    qa_analyze.add_argument("--json", action="store_true", help="output structured JSON")
     qa_import = qa_sub.add_parser("import", help="import test evidence (JUnit/JSON/log) into the history store")
     qa_import.add_argument("path", help="artifact file or directory of artifacts")
     qa_import.add_argument("--runner", default=None, help="explicit runner label (auto-detected for logs)")
@@ -525,9 +533,23 @@ def _render_qa_history(rows: list[dict], suite: str, test: str) -> str:
     return "\n".join(lines)
 
 
+def _render_qa_classifications(classifications: list[dict]) -> str:
+    if not classifications:
+        return "No test results analyzed."
+    lines = [f"{'SUITE':<30} {'TEST':<30} {'DECISION':<22} {'CONF':<6} {'DETAILS'}"]
+    lines.append("-" * 110)
+    for c in classifications:
+        dur_note = f" (dur +{c['duration_delta_ms']}ms)" if c.get("duration_regression") else ""
+        lines.append(
+            f"{c['suite'][:29]:<30} {c['test'][:29]:<30} {c['decision']:<22} {c['confidence']:<6} {c['reason']}{dur_note}"
+        )
+    return "\n".join(lines)
+
+
 def run_qa(args: argparse.Namespace) -> int:
     import sqlite3
 
+    from hound_agent.qa.classifier import classify_run_results
     from hound_agent.qa.history import (
         count_by_status,
         default_history_store,
@@ -545,16 +567,44 @@ def run_qa(args: argparse.Namespace) -> int:
 
     store = Path(args.store) if getattr(args, "store", None) else default_history_store(args.out)
     try:
-        if args.qa_command == "import":
+        if args.qa_command == "analyze":
             source = Path(args.path)
             results: list = []
+            if source.is_dir():
+                for item in sorted(source.rglob("*")):
+                    if not item.is_file() or item.suffix.lower() not in {".xml", ".json", ".log", ".txt"}:
+                        continue
+                    try:
+                        results.extend(import_artifact(item, "", "", "", "", runner=args.runner))
+                    except ValueError:
+                        pass
+            else:
+                results = import_artifact(source, "", "", "", "", runner=args.runner)
+            if not results:
+                print(f"error: no valid test results found in {source}", file=sys.stderr)
+                return 2
+            classifications = classify_run_results(
+                store_path=store if store.exists() else None,
+                results=results,
+                baseline_commit=args.baseline,
+                days=args.days,
+            )
+            data = [c.to_dict() for c in classifications]
+            if args.json:
+                print(json.dumps({"count": len(data), "classifications": data}, indent=2, ensure_ascii=False))
+            else:
+                print(_render_qa_classifications(data))
+            return 0
+        if args.qa_command == "import":
+            source = Path(args.path)
+            import_results: list = []
             imported_any = False
             if source.is_dir():
                 for item in sorted(source.rglob("*")):
                     if not item.is_file() or item.suffix.lower() not in {".xml", ".json", ".log", ".txt"}:
                         continue
                     try:
-                        results.extend(
+                        import_results.extend(
                             import_artifact(
                                 item, args.run_id, args.commit, args.branch,
                                 args.environment, runner=args.runner,
@@ -567,11 +617,11 @@ def run_qa(args: argparse.Namespace) -> int:
                     print(f"error: no supported artifacts found under {source}", file=sys.stderr)
                     return 2
             else:
-                results = import_artifact(
+                import_results = import_artifact(
                     source, args.run_id, args.commit, args.branch,
                     args.environment, runner=args.runner,
                 )
-            written = upsert_results(store, results)
+            written = upsert_results(store, import_results)
             if getattr(args, "retention_days", None):
                 retain(store, args.retention_days)
             print(json.dumps({"imported": written, "store": str(store)}, indent=2, ensure_ascii=False))

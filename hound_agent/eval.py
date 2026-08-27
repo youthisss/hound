@@ -254,9 +254,12 @@ def _confidence_calibration(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def evaluate(corpus: Path = DEFAULT_CORPUS, suite: str = "all") -> dict[str, Any]:
+    if suite == "qa-history":
+        from hound_agent.qa.eval import evaluate_qa_history
+        return evaluate_qa_history()
     corpus = corpus.resolve()
     if suite not in {"all", "dev", "held_out"}:
-        raise ValueError("suite must be all, dev, or held_out")
+        raise ValueError("suite must be all, dev, held_out, or qa-history")
     paths = _case_paths(corpus)
     cases = [load_case(path, corpus) for path in paths]
     if suite != "all":
@@ -347,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--offline", action="store_true", help="required; evaluation never uses the network")
     parser.add_argument("--format", choices=("json",), default="json")
-    parser.add_argument("--suite", choices=("all", "dev", "held_out"), default="all")
+    parser.add_argument("--suite", choices=("all", "dev", "held_out", "qa-history"), default="all")
     parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     args = parser.parse_args(argv)
     if not args.offline:

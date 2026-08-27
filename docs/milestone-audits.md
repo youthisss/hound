@@ -172,3 +172,26 @@ Verification evidence:
   aggregates intact (0.75 before, 0.50 after pruning).
 - `uv run ruff check .`: clean.
 - `uv run mypy hound_agent`: clean across 41 source files.
+
+## M5 — Regression and Flaky-Test Intelligence
+
+- Exit status: passed on 2026-08-27.
+- Code-review lane: `APPROVE`. The classifier cleanly distinguishes `new_failure`, `known_failure`,
+  `retry_recovered`, `historically_flaky`, `flaky_suspect`, `environment_specific`,
+  `likely_regression`, and `insufficient_history`. Minimum sample sizes (`MIN_HISTORY_SAMPLES=5`)
+  and conservative thresholds ensure precision over speculative recall.
+- Architecture lane: `CLEAR`. Integrates with the M4 historical SQLite store without modifying existing
+  analysis pipelines. Evaluation suite `qa-history` achieves 100% precision and recall on held-out cases.
+- Final synthesis: `APPROVE` for M5. CLI `hound qa analyze` provides inspectable QA decision output.
+
+Findings fixed:
+1. `MEDIUM` - SQLite write locking contention under concurrent multi-threaded writes on Windows was resolved
+   with busy timeouts and retry loops.
+2. `LOW` - Reused identifier variable in CLI import command was cleaned up for strict type checking.
+
+Verification evidence:
+- `uv run pytest tests/test_qa_history.py tests/test_qa_classifier.py -v`: 33 passed.
+- `uv run python -m hound_agent.eval --offline --suite qa-history --format json`: 100% precision/recall across 7 cases.
+- `uv run hound qa analyze --help`: command available and documented.
+- `uv run ruff check .`: clean.
+- `uv run mypy hound_agent`: clean across 43 source files.

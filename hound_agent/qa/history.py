@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import statistics
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -23,6 +24,8 @@ from hound_agent.qa.model import INSUFFICIENT_HISTORY, NormalizedTestResult
 
 HISTORY_SCHEMA_VERSION = 1
 DEFAULT_RETENTION_DAYS = 90
+_LOCK_RETRIES = 10
+_LOCK_RETRY_DELAY = 0.05
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS test_results (
@@ -80,13 +83,20 @@ def connect(store_path: str | Path) -> Iterator[sqlite3.Connection]:
     if store.is_symlink() or store.parent.is_symlink():
         raise ValueError("history store must not use symlinks")
     store.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(store, timeout=10)
+    connection = sqlite3.connect(store, timeout=30.0)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA busy_timeout=30000")
     try:
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA busy_timeout=10000")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        _migrate(connection)
+        for attempt in range(_LOCK_RETRIES):
+            try:
+                connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute("PRAGMA synchronous=NORMAL")
+                _migrate(connection)
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == _LOCK_RETRIES - 1:
+                    raise
+                time.sleep(_LOCK_RETRY_DELAY)
         yield connection
         connection.commit()
     finally:
@@ -121,8 +131,7 @@ def upsert_results(store_path: str | Path, results: list[NormalizedTestResult]) 
     if not results:
         return 0
     with connect(store_path) as connection:
-        for result in results:
-            connection.execute(_UPSERT, _row_values(result))
+        connection.executemany(_UPSERT, [_row_values(r) for r in results])
     return len(results)
 
 
