@@ -567,7 +567,7 @@ contracts stabilize:
 
 ```sh
 hound qa analyze ./artifacts --baseline <ref> --repo .
-hound qa gate ./artifacts --baseline <ref> --policy quality.yml
+hound qa gate ./artifacts --baseline <ref> --repo . --policy quality.yml
 hound deploy investigate --context deployment.json
 hound source inspect --run <run-id> --repo .
 hound feedback <run-id> --root-cause correct

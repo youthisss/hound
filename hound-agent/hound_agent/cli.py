@@ -261,6 +261,22 @@ def build_parser() -> argparse.ArgumentParser:
     qa_export.add_argument("--store", default=None)
     qa_export.add_argument("--out", default=DEFAULT_OUT)
     qa_export.add_argument("--output", default=None, help="destination JSON file")
+    qa_gate = qa_sub.add_parser("gate", help="evaluate test, coverage, and SARIF evidence against a policy")
+    qa_gate.add_argument("path", help="artifact file or directory")
+    qa_gate.add_argument("--baseline", required=True, help="explicit Git baseline ref")
+    qa_gate.add_argument("--head", default="HEAD", help="explicit candidate Git ref (default: HEAD)")
+    qa_gate.add_argument("--repo", required=True, help="repository used for the baseline diff")
+    qa_gate.add_argument("--policy", required=True, help="versioned YAML/JSON quality-gate policy")
+    qa_gate.add_argument("--coverage", action="append", default=[], help="coverage artifact; repeatable")
+    qa_gate.add_argument("--baseline-coverage", action="append", default=[],
+                         help="baseline coverage artifact used for coverage delta; repeatable")
+    qa_gate.add_argument("--sarif", action="append", default=[], help="SARIF artifact; repeatable")
+    qa_gate.add_argument("--environment", default="", help="policy environment override")
+    qa_gate.add_argument("--runner", default=None, help="explicit test runner label")
+    qa_gate.add_argument("--store", default=None, help="explicit history SQLite snapshot")
+    qa_gate.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
+    qa_gate.add_argument("--output", default=None, help="write the machine-readable gate result")
+    qa_gate.add_argument("--report-only", action="store_true", help="compute outcome without enforcing a block exit")
     doctor_cmd = sub.add_parser("doctor", help="check local Hound readiness without exposing secrets")
     doctor_cmd.add_argument("--config", default=None, help="optional YAML config path")
     doctor_cmd.add_argument("--out", default=DEFAULT_OUT, help="output directory to check")
@@ -565,8 +581,29 @@ def run_qa(args: argparse.Namespace) -> int:
     )
     from hound_agent.qa.normalize import import_artifact
 
-    store = Path(args.store) if getattr(args, "store", None) else default_history_store(args.out)
     try:
+        if args.qa_command == "gate":
+            from hound_agent.qa.service import run_quality_gate
+
+            result = run_quality_gate(
+                args.path,
+                baseline=args.baseline,
+                head=args.head,
+                repo_path=args.repo,
+                policy_path=args.policy,
+                coverage_paths=args.coverage,
+                baseline_coverage_paths=args.baseline_coverage,
+                sarif_paths=args.sarif,
+                environment=args.environment,
+                runner=args.runner,
+                history_store=args.store,
+                enforced=not args.report_only,
+            )
+            rendered = json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
+            _emit_output(rendered, args.output)
+            return 1 if result.enforced and result.policy_outcome == "block" else 0
+
+        store = Path(args.store) if getattr(args, "store", None) else default_history_store(args.out)
         if args.qa_command == "analyze":
             source = Path(args.path)
             results: list = []
@@ -677,6 +714,9 @@ def run_qa(args: argparse.Namespace) -> int:
         return 2
     except (sqlite3.DatabaseError, OSError) as exc:
         print(f"error: history store failed: {exc}", file=sys.stderr)
+        return 3
+    except Exception as exc:
+        print(f"error: QA operation failed: {exc}", file=sys.stderr)
         return 3
 
 

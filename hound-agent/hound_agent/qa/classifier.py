@@ -17,9 +17,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import time
 from typing import Any
 
-from hound_agent.qa.history import count_by_status, duration_stats, environment_breakdown, failure_rate, history_for_test
+from hound_agent.qa.history import count_by_status, duration_stats, environment_breakdown, history_for_test
 from hound_agent.qa.model import INSUFFICIENT_HISTORY, NormalizedTestResult
 
 # Conservative minimum thresholds
@@ -41,6 +42,11 @@ QA_CLASSIFICATIONS = {
     "likely_regression",
     "insufficient_history",
 }
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() > deadline:
+        raise ValueError("QA classification exceeded the gate deadline")
 
 
 @dataclass
@@ -67,6 +73,7 @@ class QAClassification:
     supporting_evidence: list[dict[str, Any]] = field(default_factory=list)
     contradicting_evidence: list[dict[str, Any]] = field(default_factory=list)
     environment_correlation: dict[str, int] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,6 +92,7 @@ class QAClassification:
             "supporting_evidence": self.supporting_evidence,
             "contradicting_evidence": self.contradicting_evidence,
             "environment_correlation": self.environment_correlation,
+            "evidence_refs": self.evidence_refs,
         }
 
 
@@ -123,6 +131,7 @@ def classify_test_result(
     attempts_in_run: list[NormalizedTestResult] | None = None,
     baseline_commit: str | None = None,
     days: int | None = None,
+    deadline: float | None = None,
 ) -> QAClassification:
     """Classify a single test result against historical evidence and baseline.
 
@@ -136,6 +145,7 @@ def classify_test_result(
     suite = candidate.suite
     test = candidate.test
     status = candidate.status
+    _check_deadline(deadline)
 
     # 1. Single-run retry recovery check (strongest flaky signal)
     if attempts_in_run:
@@ -194,12 +204,18 @@ def classify_test_result(
         )
 
     # 2. Query history store
-    counts = count_by_status(store_path, suite, test, days=days)
+    counts = count_by_status(store_path, suite, test, days=days, deadline=deadline)
+    _check_deadline(deadline)
     total_samples = sum(counts.values())
-    fail_rate = failure_rate(store_path, suite, test, days=days)
-    history_rows = history_for_test(store_path, suite, test, limit=100, days=days)
-    dur_stats = duration_stats(store_path, suite, test, days=days)
-    env_breakdown = environment_breakdown(store_path, suite, test)
+    failed_samples = counts["failed"] + counts["error"]
+    denominator = failed_samples + counts["passed"]
+    fail_rate = round(failed_samples / denominator, 6) if denominator else None
+    history_rows = history_for_test(store_path, suite, test, limit=100, days=days, deadline=deadline)
+    _check_deadline(deadline)
+    dur_stats = duration_stats(store_path, suite, test, days=days, deadline=deadline)
+    _check_deadline(deadline)
+    env_breakdown = environment_breakdown(store_path, suite, test, deadline=deadline)
+    _check_deadline(deadline)
 
     # Duration regression check
     is_dur_regr, dur_delta, dur_baseline_median = check_duration_regression(
@@ -474,17 +490,20 @@ def classify_run_results(
     results: list[NormalizedTestResult],
     baseline_commit: str | None = None,
     days: int | None = None,
+    deadline: float | None = None,
 ) -> list[QAClassification]:
     """Classify all test results from a run, grouping attempts by test identity."""
     # Group results by (suite, leaf test)
     attempts_by_identity: dict[tuple[str, str], list[NormalizedTestResult]] = {}
     for res in results:
+        _check_deadline(deadline)
         key = (res.suite, res.test)
         attempts_by_identity.setdefault(key, []).append(res)
 
     classifications: list[QAClassification] = []
     # Classify each unique test using its latest attempt as candidate
     for (suite, test), attempts in attempts_by_identity.items():
+        _check_deadline(deadline)
         latest = max(attempts, key=lambda a: a.attempt)
         classification = classify_test_result(
             store_path=store_path,
@@ -492,7 +511,9 @@ def classify_run_results(
             attempts_in_run=attempts if len(attempts) > 1 else None,
             baseline_commit=baseline_commit,
             days=days,
+            deadline=deadline,
         )
+        classification.evidence_refs = sorted({attempt.evidence_id for attempt in attempts if attempt.evidence_id})
         classifications.append(classification)
 
     return classifications

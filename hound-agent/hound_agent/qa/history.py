@@ -77,16 +77,42 @@ def default_history_store(output_root: str | Path) -> Path:
     return Path(output_root) / ".hound-agent" / "history.sqlite3"
 
 
+def _remaining_timeout(deadline: float | None) -> float:
+    if deadline is None:
+        return 30.0
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ValueError("history query exceeded its deadline")
+    return min(30.0, max(0.001, remaining))
+
+
 @contextmanager
-def connect(store_path: str | Path) -> Iterator[sqlite3.Connection]:
+def connect(
+    store_path: str | Path,
+    *,
+    deadline: float | None = None,
+    read_only: bool = False,
+) -> Iterator[sqlite3.Connection]:
     store = Path(store_path)
     if store.is_symlink() or store.parent.is_symlink():
         raise ValueError("history store must not use symlinks")
-    store.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(store, timeout=30.0)
+    timeout = _remaining_timeout(deadline)
+    if read_only:
+        if not store.is_file():
+            raise ValueError("history store is not a readable regular file")
+        connection = sqlite3.connect(f"file:{store.resolve().as_posix()}?mode=ro", uri=True, timeout=timeout)
+    else:
+        store.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(store, timeout=timeout)
     connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA busy_timeout=30000")
+    connection.execute(f"PRAGMA busy_timeout={int(timeout * 1000)}")
+    if deadline is not None:
+        connection.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, 1000)
     try:
+        if read_only:
+            connection.execute("PRAGMA query_only=ON")
+            yield connection
+            return
         for attempt in range(_LOCK_RETRIES):
             try:
                 connection.execute("PRAGMA journal_mode=WAL")
@@ -156,10 +182,10 @@ def _window(days: int | None) -> str | None:
 
 
 def count_by_status(
-    store_path: str | Path, suite: str, test: str, days: int | None = None
+    store_path: str | Path, suite: str, test: str, days: int | None = None, *, deadline: float | None = None
 ) -> dict[str, int]:
     counts = {status: 0 for status in ("passed", "failed", "skipped", "error", "unknown")}
-    with connect(store_path) as connection:
+    with connect(store_path, deadline=deadline, read_only=deadline is not None) as connection:
         cutoff = _window(days)
         query = "SELECT status, COUNT(*) AS n FROM test_results WHERE suite = ? AND test = ?"
         params: list = [suite, test]
@@ -173,10 +199,10 @@ def count_by_status(
 
 
 def failure_rate(
-    store_path: str | Path, suite: str, test: str, days: int | None = None
+    store_path: str | Path, suite: str, test: str, days: int | None = None, *, deadline: float | None = None
 ) -> float | None:
     """Failed / (passed + failed) over the window, or None for insufficient data."""
-    counts = count_by_status(store_path, suite, test, days)
+    counts = count_by_status(store_path, suite, test, days, deadline=deadline)
     failed = counts["failed"] + counts["error"]
     total = failed + counts["passed"]
     if total == 0:
@@ -184,8 +210,10 @@ def failure_rate(
     return round(failed / total, 6)
 
 
-def first_last_seen(store_path: str | Path, suite: str, test: str) -> tuple[str | None, str | None]:
-    with connect(store_path) as connection:
+def first_last_seen(
+    store_path: str | Path, suite: str, test: str, *, deadline: float | None = None
+) -> tuple[str | None, str | None]:
+    with connect(store_path, deadline=deadline, read_only=deadline is not None) as connection:
         row = connection.execute(
             "SELECT MIN(recorded_at) AS first_seen, MAX(recorded_at) AS last_seen "
             "FROM test_results WHERE suite = ? AND test = ?",
@@ -195,10 +223,10 @@ def first_last_seen(store_path: str | Path, suite: str, test: str) -> tuple[str 
 
 
 def duration_stats(
-    store_path: str | Path, suite: str, test: str, days: int | None = None
+    store_path: str | Path, suite: str, test: str, days: int | None = None, *, deadline: float | None = None
 ) -> dict:
     """Median/p95/mean over non-null durations; empty dict when there is no data."""
-    with connect(store_path) as connection:
+    with connect(store_path, deadline=deadline, read_only=deadline is not None) as connection:
         cutoff = _window(days)
         query = (
             "SELECT duration_ms FROM test_results "
@@ -222,8 +250,10 @@ def duration_stats(
     }
 
 
-def environment_breakdown(store_path: str | Path, suite: str, test: str) -> dict[str, int]:
-    with connect(store_path) as connection:
+def environment_breakdown(
+    store_path: str | Path, suite: str, test: str, *, deadline: float | None = None
+) -> dict[str, int]:
+    with connect(store_path, deadline=deadline, read_only=deadline is not None) as connection:
         rows = connection.execute(
             "SELECT environment, COUNT(*) AS n FROM test_results "
             "WHERE suite = ? AND test = ? GROUP BY environment ORDER BY n DESC",
@@ -233,11 +263,17 @@ def environment_breakdown(store_path: str | Path, suite: str, test: str) -> dict
 
 
 def history_for_test(
-    store_path: str | Path, suite: str, test: str, limit: int = 200, days: int | None = None
+    store_path: str | Path,
+    suite: str,
+    test: str,
+    limit: int = 200,
+    days: int | None = None,
+    *,
+    deadline: float | None = None,
 ) -> list[dict]:
     if limit < 1:
         raise ValueError("limit must be >= 1")
-    with connect(store_path) as connection:
+    with connect(store_path, deadline=deadline, read_only=deadline is not None) as connection:
         cutoff = _window(days)
         query = (
             "SELECT suite, test, status, attempt, duration_ms, runner, commit_sha, branch, "

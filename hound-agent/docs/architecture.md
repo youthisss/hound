@@ -18,7 +18,11 @@ hound-agent/
 │   ├── qa/
 │   │   ├── model.py          # NormalizedTestResult; stable (suite, leaf) identity; failure signatures
 │   │   ├── history.py        # SQLite test-history store (WAL, atomic upserts, retention, import/export, queries)
-│   │   └── normalize.py      # runner evidence -> history rows (JUnit/JSON/log; flaky->attempts)
+│   │   ├── normalize.py      # runner evidence -> history rows (JUnit/JSON/log; flaky->attempts)
+│   │   ├── coverage.py       # bounded Cobertura/JaCoCo/LCOV/Istanbul/dotnet coverage normalization
+│   │   ├── sarif.py          # bounded SARIF findings normalization
+│   │   ├── gate.py           # deterministic quality-policy evaluation and defect draft
+│   │   └── service.py        # bounded artifact discovery and reusable gate orchestration
 │   ├── cli.py                # argparse; subcommands: analyze, batch, tui, server, list-providers, feedback, qa
 │   ├── server.py             # stdlib HTTP webhook receiver: /analyze + /health + /stats; configurable workers/queue/rate-limit/job-ttl; SQLite job store
 │   ├── tui.py                # Textual terminal UI: log browser, analyze, report/ticket/raw panes
@@ -73,6 +77,7 @@ hound-agent/
 8. **log collector** (`hound log -- COMMAND` or piped stdin) tees raw output to the terminal, persists a redacted `.log` plus JSON metadata, and can explicitly call the shared service with `--analyze`.
 9. **trust** resolves the source class (`trusted_branch`/`fork_pr`/`local_artifact`) from `--source-class`, YAML `trust.source_class`, `TH_SOURCE_CLASS`, or CI environment detection before any capability runs. `fork_pr` fails closed: offline forced, redaction stays on, and source context, enrichment, LLM, and delivery are never invoked (`meta.trust` records the decision).
 10. **feedback** (`hound feedback record/export`) writes reviewed engineer ratings into `<out>/.hound-agent/feedback.sqlite3` — intentionally separate from dedup state — with audit metadata and redacted values. It never mutates classifiers; `export --candidate-fixtures` emits explicit, manual regression-fixture candidate manifests.
+11. **QA gate** (`hound qa gate ARTIFACTS --baseline REF --head REF --repo REPO --policy FILE`) delegates to `qa/service.py`, which normalizes tests, coverage, and SARIF under aggregate file/byte/time limits before evaluating an explicit deterministic policy. Its JSON contract keeps `analysis_status` separate from `policy_outcome`; every warn/block includes an evidence-backed reason and a defect draft. Exit `0` means pass/warn, `1` means policy block, `2` means invalid input/policy, and `3` means an internal failure. `--report-only` preserves the computed outcome but disables exit-code enforcement.
 
 `service.analyze_log()` is the adapter-facing entry point for CLI, TUI, server, and collector. It delegates to the single `pipeline.analyze()` core.
 
@@ -238,6 +243,58 @@ rows only, so aggregates recompute without corruption; queries return
 `insufficient_history` (`failure_rate=None`) until enough samples exist. Import
 rejects DOCTYPE XML and symlinked sources, and import/export round-trips
 sanitized records for CI cache / shared-volume workflows.
+
+## QA quality gate
+
+Coverage inputs are bounded and reject symlinks/DOCTYPE XML. Cobertura (including
+coverage.py XML), JaCoCo, LCOV, Istanbul JSON, and dotnet/OpenCover inputs reduce
+to one line/branch model. Changed-line coverage is computed only from an explicit
+Git baseline and repository; missing diff evidence is represented as unavailable,
+not as invented 100% coverage. SARIF results retain tool, rule, level, location,
+and suppression status.
+
+Quality policies use a versioned YAML/JSON mapping with deterministic outcomes:
+
+```yaml
+version: "1.0"
+rules:
+  new_failure: block
+  likely_regression: block
+  flaky: warn
+  duration_regression: warn
+  critical_sarif: block
+  sarif_error: block
+  sarif_warning: warn
+  changed_line_coverage:
+    minimum: 0.80
+    outcome: block
+    include: ["src/*.py"]
+    exclude: ["src/generated/*"]
+    max_unmapped_lines: 0
+  coverage_delta:
+    minimum: -0.01
+    outcome: block
+environments:
+  staging:
+    sarif_error: warn
+```
+
+Allowed outcomes are `pass`, `warn`, and `block`. Environment entries override
+only named rules, and a requested environment must exist in the policy. A
+configured rule whose required evidence is unavailable produces
+`analysis_status: insufficient_evidence` and uses that rule's warn/block outcome;
+missing or malformed evidence never becomes an implicit pass. History is used
+only when `--store` explicitly identifies a SQLite database; Hound takes a
+consistent SQLite backup and records its SHA-256 before classification. Symbolic
+baseline/head refs are resolved once and the immutable commit IDs are recorded
+in the result. Coverage evaluates only files selected by the policy's explicit
+include/exclude globs. Unmapped lines fail closed beyond `max_unmapped_lines`;
+summary-only reports cannot satisfy changed-line rules. Repeated `--coverage`
+inputs form candidate coverage, while repeated `--baseline-coverage` inputs form
+an independent baseline used by `coverage_delta`; they are never unioned. The
+machine result reserves `analysis_status`,
+`policy_outcome`, `enforced`, `reasons`, `summary`, and `defect_draft`; analysis
+can succeed while policy blocks a release.
 
 ## Test strategy
 
