@@ -1,4 +1,0 @@
-helm upgrade --install api ./chart
-Running database migration
-migration failed: relation "orders" does not exist
-release api failed and has been rolled back

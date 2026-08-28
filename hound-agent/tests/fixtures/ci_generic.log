@@ -1,6 +1,0 @@
-[2026-08-07T12:00:00Z] build started
-[2026-08-07T12:00:01Z] running job lint on pipeline main
-[2026-08-07T12:00:02Z] stage: lint
-[2026-08-07T12:00:03Z] running job unit-tests on pipeline main
-[2026-08-07T12:00:04Z] job deploy failed: exit status 1
-[2026-08-07T12:00:05Z] pipeline main failed

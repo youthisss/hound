@@ -1,4 +1,0 @@
-terraform apply -auto-approve
-aws_lb_listener.api: Creating...
-Error: creating ELBv2 Listener: ValidationError: Certificate not found
-terraform apply failed

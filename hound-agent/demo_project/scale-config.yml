@@ -1,4 +1,0 @@
-dedup:
-  backend: sqlite
-  max_entries: 20000
-  retention_days: 30

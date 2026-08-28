@@ -1,5 +1,0 @@
-pytest
-tests/test_cart.py::test_cart_total FAILED
-E assert 5 == 10
-tests/test_cart.py:12: AssertionError
-FAILED tests/test_cart.py::test_cart_total - assert 5 == 10

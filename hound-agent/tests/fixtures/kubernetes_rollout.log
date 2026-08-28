@@ -1,3 +1,0 @@
-Waiting for deployment "api" rollout to finish: 0 of 2 updated replicas are available...
-error: timed out waiting for the condition
-deployment.apps/api exceeded its progress deadline

@@ -1,8 +1,0 @@
-Collecting requests==2.31.0 (from -r requirements.txt)
-ERROR: Cannot install shop==2.1.0 and requests==2.31.0 because these package versions have conflicting dependencies.
-
-The conflict is caused by:
-    The user requested requests==2.31.0
-    shop 2.1.0 depends on requests<2.28,>=2.25
-
-To fix this you could try to relax the pin constraints in your requirements file.
