@@ -1,12 +1,13 @@
-# Panduan Penggunaan - Hound Agent
+# Hound Agent Usage Guide
 
-Hound Agent mengumpulkan dan menganalisis kegagalan CI/CD/build/test, memperkirakan
-root cause, melakukan triage, menyimpan report, dan membuat draft ticket.
-Workflow utama tersedia melalui TUI interaktif dan CLI untuk automation/CI.
+Hound Agent collects and analyzes CI/CD/build/test failures, estimates the
+root cause, performs triage, stores reports, and drafts tickets. The main
+workflow is available through an interactive TUI and a CLI for automation and
+CI.
 
-## 1. Instalasi
+## 1. Installation
 
-Butuh Python >= 3.10 dan [uv](https://docs.astral.sh/uv/).
+Requires Python >= 3.10 and [uv](https://docs.astral.sh/uv/).
 
 ```sh
 cd hound-agent
@@ -14,108 +15,111 @@ uv sync --extra dev
 uv run hound --version
 ```
 
-Package juga menyediakan executable `hound` setelah di-install.
+The package also provides the `hound` executable after installation.
 
-## 2. TUI Default
+## 2. Default TUI
 
-Jalankan tanpa argumen dari terminal interaktif:
+Run without arguments from an interactive terminal:
 
 ```sh
 uv run hound
 ```
 
-Hound Agent membuka TUI hanya jika stdin dan stdout merupakan TTY. Dalam pipe,
-redirect, atau CI non-interaktif, command tanpa argumen berhenti dengan exit
-`2` dan menyarankan:
+Hound Agent opens the TUI only when stdin and stdout are TTYs. In a pipe,
+redirect, or non-interactive CI, a command without arguments exits with code
+`2` and suggests:
 
 ```sh
 hound analyze <log-directory>
 ```
 
-Hound Agent tidak otomatis menganalisis current working directory saat command
-kosong.
+Hound Agent never auto-analyzes the current working directory when the command
+is empty.
 
-TUI juga dapat dibuka eksplisit:
+The TUI can also be opened explicitly:
 
 ```sh
 uv run hound tui --logs ./ci-logs --out hound-agent-output --offline
 uv run hound tui --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
 ```
 
-Jika `--logs` tidak diberikan, TUI memakai `.hound-agent/logs` bila directory
-hasil collector tersebut tersedia; selain itu TUI membuka current directory.
+If `--logs` is not given, the TUI uses `.hound-agent/logs` when that collector
+output directory is available; otherwise it opens the current directory.
 
-### Workflow TUI
+### TUI Workflow
 
-TUI dibuka pada halaman **Home** dengan wordmark HOUND, readiness directory dan
-provider, quick start, shortcut utama, serta rekomendasi setup. `Overview` kini
-merupakan tab hasil pertama sejajar dengan `Report`, `Ticket`, dan `Raw log`.
+The TUI opens on the **Home** page with the HOUND wordmark, directory and
+provider readiness, quick start, main shortcuts, and setup recommendations.
+`Overview` is now the first result tab alongside `Report`, `Ticket`, and
+`Raw log`.
 
-1. Tombol `Settings [s]` berada di sidebar setelah daftar Recent Runs dan dapat dibuka kapan saja dengan `s`.
-2. Pilih directory melalui tombol `Browse folder` atau tekan `b`; path juga dapat diketik manual.
-3. Tekan `Load directory` setelah mengetik path manual.
-4. Gunakan filter nama log bila perlu.
-   Filter jenis (`Deploy`, `Build`, `Test`, `CI`, `Unknown`) dan sort berdasarkan
-   waktu, jenis, atau nama dapat digabungkan. `Analyze all visible` hanya
-   memproses artifact yang lolos filter aktif.
-5. Pilih file `.log` dan jalankan `Analyze` atau tekan `a`.
+1. The `Settings [s]` button is in the sidebar after the Recent Runs list and
+   can be opened at any time with `s`.
+2. Select a directory with the `Browse folder` button or press `b`; the path
+   can also be typed manually.
+3. Press `Load directory` after typing a manual path.
+4. Use the log-name filter when needed. Type filters (`Deploy`, `Build`,
+   `Test`, `CI`, `Unknown`) and sorting by time, type, or name can be combined.
+   `Analyze all visible` only processes artifacts that pass the active filters.
+5. Select a `.log` file and run `Analyze` or press `a`.
 
-UI menampilkan jumlah file dan path aktif. Analyze disabled jika directory atau
-log tidak valid. Saat analisis berjalan, tombol menampilkan progress estimate
-dan submit ganda diblokir.
+The UI shows the active file count and path. Analyze is disabled when the
+directory or log is invalid. While analysis is running, buttons show a
+progress estimate and duplicate submissions are blocked.
 
-`Analyze all visible` mendukung bounded parallelism melalui `--jobs`. Dalam mode
-online, gunakan `--max-llm-calls` sebagai batas panggilan keras dan
-`--max-cost-usd` sebagai guardrail estimasi biaya. Ringkasan batch TUI menampilkan
-jumlah panggilan, artifact yang dilewati budget, dan estimasi biaya.
+`Analyze all visible` supports bounded parallelism via `--jobs`. In online
+mode, use `--max-llm-calls` as a hard call limit and `--max-cost-usd` as an
+estimated-cost guardrail. The TUI batch summary shows call counts,
+budget-skipped artifacts, and estimated cost.
 
-Tab tetap tersedia:
+Tabs available:
 
-- `Overview`: severity, failed stage, root cause, confidence, durasi/timestamp,
-  dan recommended action.
-- `Report`: report Markdown.
-- `Ticket`: draft ticket.
-- `Raw log`: isi log aktif.
-- `Settings`: provider, model, API key override, base URL, dan mode.
+- `Overview`: severity, failed stage, root cause, confidence, duration/
+  timestamp, and recommended action.
+- `Report`: the Markdown report.
+- `Ticket`: the draft ticket.
+- `Raw log`: the active log content.
+- `Settings`: provider, model, API key override, base URL, and mode.
 
-`Recent runs` menampilkan nama run, umur relatif, severity/status, dan ringkasan
-failure. Daftar memiliki scrollbar vertikal; pilih run untuk memperbarui
-Overview, Report, Ticket, dan Raw log.
+`Recent runs` shows run name, relative age, severity/status, and a failure
+summary. The list has a vertical scrollbar; select a run to update Overview,
+Report, Ticket, and Raw log.
 
-State TUI eksplisit: empty, loading, success, dan error. Error analysis
-menampilkan opsi retry.
+The TUI state is explicit: empty, loading, success, and error. Failed analyses
+show a retry option.
 
-### Shortcut TUI
+### TUI Shortcuts
 
-| Tombol | Aksi |
+| Key | Action |
 |---|---|
-| `a` | Analyze atau retry |
-| `b` | Buka pemilih folder untuk log directory |
-| `r` | Refresh log dan recent runs |
-| `s` | Buka Settings dan fokus provider |
+| `a` | Analyze or retry |
+| `b` | Open folder picker for the log directory |
+| `r` | Refresh logs and recent runs |
+| `s` | Open Settings and focus the provider |
 | `o` | Toggle offline mode |
-| `Enter` | Buka log yang dipilih |
-| `c` | Copy Report pada konteks relevan |
-| `e` | Copy Ticket pada konteks relevan |
-| `?` | Buka help overlay |
-| `Esc` | Tutup overlay atau lepas focus |
+| `Enter` | Open the selected log |
+| `c` | Copy Report in the relevant context |
+| `e` | Copy Ticket in the relevant context |
+| `?` | Open the help overlay |
+| `Esc` | Close overlay or release focus |
 | `q` | Quit |
 
-Shortcut bar bawah berubah mengikuti tab/konteks aktif.
+The bottom shortcut bar changes according to the active tab/context.
 
-### Provider dan Model
+### Providers and Models
 
-Settings mendukung 9Router lokal pada `http://127.0.0.1:20128/v1` dan custom
-provider OpenAI-compatible. `Connect & discover` menguji endpoint `/models`,
-menyimpan API key ke keyring sistem operasi, dan memuat katalog model. Definisi
-custom provider bersifat global; project YAML hanya memilih provider dan model.
-HTTP hanya diterima untuk endpoint loopback, sedangkan endpoint remote wajib HTTPS.
+Settings supports local routers on `http://127.0.0.1:20128/v1` and custom
+OpenAI-compatible providers. `Connect & discover` tests the `/models`
+endpoint, stores the API key in the operating system keyring, and loads the
+model catalog. Custom provider definitions are global; the project YAML only
+selects a provider and model. HTTP is only accepted for loopback endpoints;
+remote endpoints require HTTPS.
 
-## 3. Mengumpulkan Log
+## 3. Collecting Logs
 
-`hound log` membuat file log reusable dari command atau piped stdin.
+`hound log` creates a reusable log file from a command or piped stdin.
 
-### Jalankan Command
+### Run a Command
 
 ```sh
 hound log -- npm test
@@ -124,10 +128,11 @@ hound log -- docker build .
 hound log --name unit-tests -- pytest -q
 ```
 
-Command dijalankan langsung tanpa shell. stdout dan stderr digabung, ditampilkan
-live ke terminal, lalu disimpan. Exit code child command dipertahankan.
+The command runs directly without a shell. stdout and stderr are merged,
+streamed live to the terminal, and then saved. The child command's exit code is
+preserved.
 
-### Ambil Piped Input
+### Capture Piped Input
 
 ```sh
 kubectl logs deployment/api | hound log --name api
@@ -135,10 +140,10 @@ npm test 2>&1 | hound log --name npm-test
 kubectl rollout status deployment/api 2>&1 | hound log --name api-rollout --analyze --offline
 ```
 
-Tanpa command dan tanpa piped stdin, collector berhenti dengan exit `2`.
-Piped stdin kosong juga ditolak.
+Without a command and without piped stdin, the collector exits with code `2`.
+Empty piped stdin is also rejected.
 
-### Lokasi Output Collector
+### Collector Output Location
 
 Default:
 
@@ -148,38 +153,39 @@ Default:
 `- 20260811T143012Z-npm.json
 ```
 
-Atur destination:
+Set a destination:
 
 ```sh
 hound log --output captured.log -- npm test
 hound log --output ./existing-directory -- npm test
 ```
 
-`--output` menerima file berakhiran `.log` atau directory yang sudah ada.
+`--output` accepts a `.log` file or an existing directory.
 
-File `.log`, metadata JSON, dan live terminal stream di-redact secara default.
-Gunakan `--raw-console` hanya jika output terminal mentah benar-benar diperlukan. Metadata memuat source, nama,
-command, exit code, timestamp, durasi, cwd, lokasi log, status redaction, branch,
-commit, dan changed files. Value setelah flag umum seperti `--token`,
-`--password`, `--secret`, dan `--api-key` disensor dalam metadata.
+The `.log` file, JSON metadata, and the live terminal stream are redacted by
+default. Use `--raw-console` only when raw terminal output is truly required.
+The metadata contains source, name, command, exit code, timestamp, duration,
+cwd, log location, redaction status, branch, commit, and changed files. Values
+after common flags such as `--token`, `--password`, `--secret`, and
+`--api-key` are redacted in the metadata.
 
-### Capture dan Analyze
+### Capture and Analyze
 
 ```sh
 hound log --analyze --offline -- npm test
 hound log --analyze -- npm test
 ```
 
-`--analyze` memakai shared analysis service yang sama dengan CLI, TUI, dan
-server. Analysis tidak berjalan otomatis tanpa flag ini, sehingga collector
-tidak membuat panggilan LLM tersembunyi.
+`--analyze` uses the same shared analysis service as the CLI, TUI, and server.
+Analysis does not run automatically without this flag, so the collector never
+makes hidden LLM calls.
 
-Jika child command gagal, exit code child tetap dipertahankan. Jika child
-berhasil tetapi analysis gagal, command keluar dengan exit `3`.
+If the child command fails, its exit code is preserved. If the child succeeds
+but analysis fails, the command exits with code `3`.
 
-## 4. Analisis Directory
+## 4. Directory Analysis
 
-Command canonical menerima directory yang berisi file `.log`:
+The canonical command accepts a directory containing `.log` files:
 
 ```sh
 hound analyze ./ci-logs
@@ -187,8 +193,8 @@ hound analyze ./ci-logs --offline
 hound analyze ./ci-logs --repo ./repo --out hound-agent-output
 ```
 
-Gunakan `hound doctor` untuk memeriksa Python, konfigurasi, provider, output
-directory, Git, dan tool operasional lokal tanpa menampilkan nilai credential:
+Use `hound doctor` to check Python, configuration, providers, output directory,
+Git, and local operational tooling without printing credential values:
 
 ```sh
 hound doctor
@@ -196,16 +202,16 @@ hound doctor --json
 hound config show --json
 ```
 
-`config show` hanya melaporkan credential sebagai `configured` atau `missing`.
+`config show` only reports credentials as `configured` or `missing`.
 
-Scan hanya level langsung, tidak recursive. Format input yang didukung: `.log`,
-JUnit `.xml`, SARIF, dan test-report `.json`. Directory harus ada, readable, dan
-berisi minimal satu artifact yang didukung.
+The scan is direct-level only, not recursive. Supported input formats: `.log`,
+JUnit `.xml`, SARIF, and test-report `.json`. The directory must exist, be
+readable, and contain at least one supported artifact.
 
-Legacy `analyze --log <file>` masih diterima untuk compatibility, tetapi tidak
-ditampilkan dalam help dan bukan syntax yang direkomendasikan.
+Legacy `analyze --log <file>` is still accepted for compatibility but is not
+shown in help and is not the recommended syntax.
 
-### Format Output CLI
+### CLI Output Formats
 
 ```sh
 hound analyze ./ci-logs --format text
@@ -215,12 +221,12 @@ hound analyze ./ci-logs --format json --output result.json
 ```
 
 - `text`: severity, root cause, failed stage/kind, confidence, recommended action.
-- `json`: satu object JSON valid tanpa progress/debug noise di stdout.
-- `markdown`: ringkasan Markdown per run.
-- `--output`: menulis formatted output ke file dan menjaga stdout kosong.
-- Warning dan error selalu ditulis ke stderr.
+- `json`: one valid JSON object without progress/debug noise on stdout.
+- `markdown`: a Markdown summary per run.
+- `--output`: writes formatted output to a file and keeps stdout empty.
+- Warnings and errors are always written to stderr.
 
-Setiap log mendapat run directory terpisah:
+Each log gets a separate run directory:
 
 ```text
 hound-agent-output/
@@ -236,28 +242,28 @@ hound-agent-output/
    `- state.json
 ```
 
-Run ID bersifat opaque (`run-<random>`) agar nama file yang mungkin mengandung
-PII atau secret tidak bocor ke path output.
+Run IDs are opaque (`run-<random>`) so file names that may contain PII or
+secrets never leak into output paths.
 
-### Exit Code Analyze
+### Analyze Exit Codes
 
-| Code | Arti |
+| Code | Meaning |
 |---|---|
-| `0` | Analisis selesai; tidak ada CI/CD/build/test failure yang dikenali |
-| `1` | Analisis selesai; minimal satu failure ditemukan |
-| `2` | Argumen, path, isi directory, atau konfigurasi invalid |
-| `3` | Internal analysis atau output error |
+| `0` | Analysis completed; no recognized CI/CD/build/test failure |
+| `1` | Analysis completed; at least one failure found |
+| `2` | Invalid arguments, path, directory content, or configuration |
+| `3` | Internal analysis or output error |
 
-Exit `1` merupakan hasil analisis valid, bukan crash aplikasi.
+Exit `1` is a valid analysis result, not an application crash.
 
-Contoh CI:
+CI example:
 
 ```sh
 hound analyze ./artifacts/logs --offline --format json --output hound-agent.json
 code=$?
 
 if [ "$code" -eq 1 ]; then
-  echo "Hound Agent menemukan CI failure"
+  echo "Hound Agent found a CI failure"
 elif [ "$code" -ge 2 ]; then
   exit "$code"
 fi
@@ -265,32 +271,32 @@ fi
 
 ### Offline Mode
 
-`--offline` memaksa rule-based analysis lokal dan dedup file lokal. Mode ini
-tidak menghubungi provider AI. Agar kontrak no-network
-jelas, `--offline` tidak boleh digabung dengan `--gh`, `--jira`, `--gitlab`,
-atau `--slack-webhook`.
+`--offline` forces local rule-based analysis and local file dedup. This mode
+never contacts an AI provider. To keep the no-network contract explicit,
+`--offline` cannot be combined with `--gh`, `--jira`, `--gitlab`, or
+`--slack-webhook`.
 
-### Analisis CD
+### CD Analysis
 
-Stage `deploy` mengenali kegagalan rollout/readiness Kubernetes, image pull,
-Helm rollback, Terraform apply, migrasi, dan permission deployment. Fitur ini
-hanya menganalisis log dan tidak pernah menjalankan deploy, retry, rollback,
-atau perubahan infrastruktur.
+The `deploy` stage recognizes Kubernetes rollout/readiness, image pull, Helm
+rollback, Terraform apply, migration, and deployment permission failures. This
+feature only analyzes logs and never runs deploys, retries, rollbacks, or
+infrastructure changes.
 
 ### QA Intelligence & Test History
 
 ```sh
-# Analisis dan klasifikasi artefak uji terhadap histori tersimpan
+# Analyze and classify test artifacts against stored history
 hound qa analyze ./artifacts/junit.xml --json
 
-# Bandingkan dengan baseline commit spesifik untuk mendeteksi likely regression
+# Compare against a specific commit baseline to detect likely regressions
 hound qa analyze ./artifacts/junit.xml --baseline 5a3f2e1
 
-# Import laporan uji ke history store
+# Import test reports into the history store
 hound qa import ./artifacts/junit.xml --run-id run-101 --commit 5a3f2e1 --branch main
 ```
 
-## 5. Melihat Stored Run
+## 5. Viewing Stored Runs
 
 ```sh
 hound report <run-id>
@@ -299,26 +305,26 @@ hound report build-error --format json
 hound report build-error --format markdown --output report.md
 ```
 
-Command membaca `<out>/<run-id>/report.json`. Run ID harus berupa satu nama
-directory dan tidak boleh keluar dari output root.
+The command reads `<out>/<run-id>/report.json`. The run ID must be a single
+directory name and must not escape the output root.
 
-### Operasi Output
+### Output Operations
 
 ```sh
-# buat template konfigurasi tanpa menimpa config yang ada
+# create a config template without overwriting an existing config
 hound init
 
-# daftar run yang tersimpan
+# list stored runs
 hound list-runs --out hound-agent-output
 hound list-runs --out hound-agent-output --json
 
-# hapus seluruh output analysis, hanya dengan konfirmasi eksplisit
+# delete all analysis output, only with explicit confirmation
 hound clean --out hound-agent-output --yes
 ```
 
-## 6. Konfigurasi Model
+## 6. Model Configuration
 
-Persist provider preset atau nama model ke YAML:
+Persist a provider preset or model name to YAML:
 
 ```sh
 hound config set model gemini
@@ -326,19 +332,20 @@ hound config set model gpt-4o-mini
 hound config set model llama3.1 --config ./config/hound_agent.yml
 ```
 
-Jika value cocok dengan provider preset, Hound Agent menyimpan provider beserta
-default model provider. Jika tidak, value disimpan sebagai model. Update YAML
-dilakukan atomic dan mempertahankan section lain. API key tidak dicetak.
+If the value matches a provider preset, Hound Agent stores the provider along
+with the provider's default model. Otherwise the value is stored as a model.
+YAML updates are atomic and preserve other sections. API keys are never
+printed.
 
-## 7. Engine Analisis
+## 7. Analysis Engine
 
-| Mode | Kapan dipakai | Network |
+| Mode | When used | Network |
 |---|---|---|
-| LLM | Provider/key/base URL tersedia dan tidak memakai `--offline` | Ya |
-| Fallback rule-based | `--offline`, provider tidak tersedia, atau LLM gagal | Tidak |
+| LLM | Provider/key/base URL available and not using `--offline` | Yes |
+| Rule-based fallback | `--offline`, provider unavailable, or LLM failure | No |
 
-LLM menggunakan endpoint OpenAI-compatible. Pilih provider melalui CLI, YAML,
-atau environment variables:
+The LLM uses an OpenAI-compatible endpoint. Select the provider via CLI, YAML,
+or environment variables:
 
 ```sh
 hound analyze ./ci-logs --provider groq --model llama-3.3-70b-versatile
@@ -346,35 +353,35 @@ hound list-providers
 hound list-providers --json
 ```
 
-Jika LLM gagal, pipeline dapat jatuh ke deterministic fallback dan tetap
-menghasilkan report.
+If the LLM fails, the pipeline can fall back to deterministic rules and still
+produce a report.
 
-## 8. Opsi Analyze
+## 8. Analyze Options
 
-| Opsi | Fungsi |
+| Option | Purpose |
 |---|---|
-| `<log-directory>` | Directory berisi file `.log`; wajib |
-| `--repo` | Git checkout untuk branch, commit, dan changed files |
-| `--source-context` | Opt-in: lampirkan source di sekitar frame hanya untuk log tepercaya |
+| `<log-directory>` | Directory containing `.log` files; required |
+| `--repo` | Git checkout for branch, commit, and changed files |
+| `--source-context` | Opt-in: attach source around frames only for trusted logs |
 | `--out` | Artifact root; default `hound-agent-output` |
-| `--format` | `text`, `json`, atau `markdown` |
-| `--output` | File untuk formatted CLI output |
-| `--offline` | Rule-based local analysis tanpa network |
-| `--source-class` | Trust profile: `trusted_branch`, `fork_pr`, atau `local_artifact` (fail-closed) |
-| `--config` | YAML config opsional |
-| `--jobs` | Jumlah worker paralel (default 1 = sekuensial) |
-| `--no-dedup` | Matikan persistensi dedup |
-| `--no-redact` | Matikan redaction secret/PII |
+| `--format` | `text`, `json`, or `markdown` |
+| `--output` | File for formatted CLI output |
+| `--offline` | Local rule-based analysis without network |
+| `--source-class` | Trust profile: `trusted_branch`, `fork_pr`, or `local_artifact` (fail-closed) |
+| `--config` | Optional YAML config |
+| `--jobs` | Number of parallel workers (default 1 = sequential) |
+| `--no-dedup` | Disable dedup persistence |
+| `--no-redact` | Disable secret/PII redaction |
 | `--provider` | Provider preset |
 | `--model` | Model override |
-| `--base-url` | Base URL provider override |
-| `--api-key` | API key override; environment lebih aman |
-| `--gh` | Buat GitHub issue |
-| `--jira` | Buat Jira issue |
-| `--gitlab` | Buat GitLab issue |
-| `--slack-webhook` | Kirim Slack alert |
+| `--base-url` | Provider base URL override |
+| `--api-key` | API key override; environment is safer |
+| `--gh` | Create a GitHub issue |
+| `--jira` | Create a Jira issue |
+| `--gitlab` | Create a GitLab issue |
+| `--slack-webhook` | Send a Slack alert |
 
-## 9. Konfigurasi YAML
+## 9. YAML Configuration
 
 ```yaml
 llm:
@@ -385,9 +392,9 @@ llm:
   max_tokens: 2048
   max_retries: 3
   max_concurrency: 4
-  routing: all             # all | exclude-kinds (lewati LLM untuk kind di skip_kinds)
+  routing: all             # all | exclude-kinds (skip LLM for kinds in skip_kinds)
   skip_kinds: [flaky]
-  pricing:                 # USD per juta token; dipakai --max-cost-usd dan telemetry
+  pricing:                 # USD per million tokens; used by --max-cost-usd and telemetry
     default:
       prompt_per_mtok: 0.30
       completion_per_mtok: 1.50
@@ -402,12 +409,12 @@ components:
   "src/handlers/*": "payments"
 
 dedup:
-  state_file: "/path/ke/state.json"
+  state_file: "/path/to/state.json"
   backend: "file"          # file | sqlite
-  # backend: "sqlite"      # WAL store, atomic upsert, aman untuk worker paralel
+  # backend: "sqlite"      # WAL store, atomic upsert, safe for parallel workers
   max_entries: 50000
   retention_days: 90
-  reuse: true              # reuse root cause tersimpan untuk insiden berulang (default on)
+  reuse: true              # reuse stored root causes for recurring incidents (default on)
   reuse_after_occurrences: 3
 
 github:
@@ -427,23 +434,23 @@ slack:
   webhook_url: "https://hooks.slack.com/services/..."
 ```
 
-Gunakan `--config <file>` secara eksplisit. HoundAgent tidak memuat config dari
-repo yang dianalisis karena isi repo diperlakukan sebagai input tidak tepercaya.
-Simpan secret dalam environment variable, bukan YAML.
+Use `--config <file>` explicitly. Hound Agent never auto-loads config from the
+analyzed repository because repository content is treated as untrusted input.
+Store secrets in environment variables, not YAML.
 
 ## 10. Environment Variables
 
-| Variabel | Fungsi |
+| Variable | Purpose |
 |---|---|
-| `TH_API_PROVIDER` | Provider generic |
-| `TH_API_KEY` | API key generic |
-| `TH_BASE_URL` | Base URL generic |
-| `TH_MODEL` | Model generic |
+| `TH_API_PROVIDER` | Generic provider |
+| `TH_API_KEY` | Generic API key |
+| `TH_BASE_URL` | Generic base URL |
+| `TH_MODEL` | Generic model |
 | `TH_TEMPERATURE` | Temperature |
-| `TH_TIMEOUT` | Timeout request |
-| `TH_MAX_TOKENS` | Token output maksimum |
-| `TH_MAX_RETRIES` | Retry maksimum |
-| `TH_NO_REDACT=1` | Matikan redaction |
+| `TH_TIMEOUT` | Request timeout |
+| `TH_MAX_TOKENS` | Maximum output tokens |
+| `TH_MAX_RETRIES` | Maximum retries |
+| `TH_NO_REDACT=1` | Disable redaction |
 | `TH_SOURCE_CLASS` | Trust profile override (`trusted_branch`/`fork_pr`/`local_artifact`) |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` / `OPENAI_BASE_URL` | OpenAI preset |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` / `GEMINI_BASE_URL` | Gemini preset |
@@ -457,9 +464,9 @@ Simpan secret dalam environment variable, bukan YAML.
 | `GITLAB_URL` / `GITLAB_PROJECT` / `GITLAB_TOKEN` | GitLab integration |
 | `SLACK_WEBHOOK_URL` | Slack integration |
 
-## 11. Batch Legacy
+## 11. Legacy Batch
 
-Command batch lama tetap tersedia:
+The legacy batch command remains available:
 
 ```sh
 hound batch --logs ./ci-logs --out hound-agent-output --offline
@@ -467,39 +474,40 @@ hound batch --logs ./single.log --out hound-agent-output --offline
 hound batch --logs ./ci-logs --out out --jobs 4 --max-llm-calls 40 --max-cost-usd 5.0
 ```
 
-Batch memakai shared dedup state dan menulis `summary-<batch-id>.json` serta
-`usage-<batch-id>.json` (jumlah panggilan LLM, run yang di-reuse, run yang
-di-skip karena budget, total token, estimasi biaya). `--max-llm-calls` membatasi
-jumlah panggilan LLM secara ketat termasuk saat paralel. `--max-cost-usd`
-membatasi estimasi biaya dan dapat melewati ambang oleh request yang sudah berjalan (butuh
-`llm.pricing`); begitu batas tercapai, log berikutnya memakai analisis rule-based
-dan ditandai `budget_skipped`. Run dan summary lama dipertahankan sebagai history
-tanpa ditimpa. Untuk automation baru, gunakan `hound analyze <log-directory>`
-karena format output dan exit code-nya lebih jelas.
+Batch uses shared dedup state and writes `summary-<batch-id>.json` and
+`usage-<batch-id>.json` (LLM call counts, reused runs, budget-skipped runs,
+total tokens, estimated cost). `--max-llm-calls` strictly limits LLM calls,
+including under parallelism. `--max-cost-usd` limits the estimated cost and
+may be exceeded slightly by requests already in flight (requires
+`llm.pricing`); once the limit is reached, subsequent logs use rule-based
+analysis and are marked `budget_skipped`. Old runs and summaries are kept as
+history and never overwritten. For new automation, use
+`hound analyze <log-directory>` because its output format and exit codes are
+clearer.
 
-## 12. Server Webhook
+## 12. Webhook Server
 
 ```sh
 TH_SERVER_TOKEN='replace-with-a-strong-token' hound server \
   --host 127.0.0.1 --port 8123 --log-root ./trusted-logs
 ```
 
-- `POST /analyze`: bearer auth wajib; JSON `{"log": "relative/path.log", "offline": false}`. Field `repo` hanya boleh `"."` jika server dimulai dengan `--repo-root`.
+- `POST /analyze`: bearer auth required; JSON `{"log": "relative/path.log", "offline": false}`. The `repo` field may only be `"."` if the server was started with `--repo-root`.
 - `GET /health`: process liveness.
-- `GET /jobs/<id>`: bearer auth wajib; status job asynchronous.
+- `GET /jobs/<id>`: bearer auth required; asynchronous job status.
 
-Server memakai bearer token dan hanya menerima bind loopback. Jika diteruskan
-melalui reverse proxy, gunakan TLS dan jangan expose token melalui log.
+The server uses a bearer token and only binds to loopback. If forwarded through
+a reverse proxy, use TLS and never expose the token through logs.
 
 ## 13. Feedback
 
-Feedback engineer untuk suatu run disimpan ke store terpisah dari dedup state,
-direkam dengan audit metadata, dan **tidak pernah mengubah klasifikasi otomatis**.
-Feedback yang sudah di-review dapat diekspor menjadi kandidat fixture regresi
-melalui proses eksplisit.
+Engineer feedback for a run is stored in a store separate from dedup state,
+recorded with audit metadata, and **never changes automated classification**.
+Reviewed feedback can be exported as regression fixture candidates through an
+explicit process.
 
 ```sh
-# Rekam feedback untuk stored run (wajib --run-id)
+# Record feedback for a stored run (--run-id required)
 hound feedback record --out hound-agent-output --run-id run-a1b2c3d4e5f6 \
   --usefulness useful \
   --kind-correct correct --severity-correct incorrect \
@@ -508,104 +516,103 @@ hound feedback record --out hound-agent-output --run-id run-a1b2c3d4e5f6 \
   --actual-owner "@qa-team" --actual-outcome root_cause_confirmed \
   --review-status reviewed --reviewer "engineer@example.com"
 
-# Ekspor semua feedback yang sudah di-sanitize
+# Export all sanitized feedback
 hound feedback export --out hound-agent-output
 
-# Ekspor hanya yang di-review, format JSONL ke file
+# Export only reviewed feedback in JSONL to a file
 hound feedback export --out hound-agent-output --reviewed-only \
   --format jsonl --output reviewed.jsonl
 
-# Ekspor kandidat fixture regresi (manifest manual, bukan auto-mutasi rule)
+# Export regression fixture candidates (manual manifest, not auto-mutating rules)
 hound feedback export --out hound-agent-output --candidate-fixtures
 ```
 
-Store feedback berada di `<out>/.hound-agent/feedback.sqlite3` (terpisah dari
-`state.sqlite3`/`state.json` milik dedup). Setiap record menyimpan `run_id`,
-`report_sha256`, `dedup_key`, rating usefulness/kind/severity/owner/duplicate,
-`actual_*` outcome, `review_status`, `reviewer`, dan `created_at`. Nilai yang
-dikenali sebagai secret di-redact sebelum disimpan. Export kandidat fixture
-menandai `requires_manual_sanitized_artifact: true` — feedback tidak pernah
-mengubah rule atau klasifikasi secara otomatis.
+The feedback store lives at `<out>/.hound-agent/feedback.sqlite3` (separate
+from the dedup `state.sqlite3`/`state.json`). Each record stores `run_id`,
+`report_sha256`, `dedup_key`, usefulness/kind/severity/owner/duplicate ratings,
+`actual_*` outcome, `review_status`, `reviewer`, and `created_at`. Values
+recognized as secrets are redacted before storage. Fixture candidate exports
+mark `requires_manual_sanitized_artifact: true` — feedback never changes rules
+or classifications automatically.
 
 ## 14. Trust Policy
 
-Setiap analisis diberi **source class** yang menentukan kapabilitas mana yang
-boleh berjalan. Tujuannya fail-closed: sumber yang tidak tepercaya tidak boleh
-memicu source reading, enrichment, LLM, atau delivery.
+Every analysis is assigned a **source class** that determines which
+capabilities may run. The goal is fail-closed: untrusted sources must not
+trigger source reading, enrichment, LLM, or delivery.
 
 | Source class | Source context | Enrichment | LLM | Delivery |
 |---|---|---|---|---|
-| `trusted_branch` | Ya | Ya | Ya | Ya |
-| `local_artifact` | Ya | Ya | Ya | Ya |
-| `fork_pr` | Tidak | Tidak | Tidak | Tidak |
+| `trusted_branch` | Yes | Yes | Yes | Yes |
+| `local_artifact` | Yes | Yes | Yes | Yes |
+| `fork_pr` | No | No | No | No |
 
-Pilih secara eksplisit dengan `--source-class <name>`, YAML
-`trust.source_class: <name>`, atau env `TH_SOURCE_CLASS`. Jika tidak diberikan,
-Hound mendeteksi dari environment CI: event `pull_request`/
-`pull_request_target` GitHub dengan head repo berbeda dari base repo, dan GitLab
-merge request lintas project (`CI_MERGE_REQUEST_SOURCE_PROJECT_ID !=
-CI_PROJECT_ID`) diklasifikasikan sebagai `fork_pr`. Event PR yang hilang atau
-tidak lengkap juga dianggap tidak tepercaya.
+Select it explicitly with `--source-class <name>`, YAML
+`trust.source_class: <name>`, or the `TH_SOURCE_CLASS` environment variable.
+If not given, Hound detects it from the CI environment: GitHub
+`pull_request`/`pull_request_target` events where the head repo differs from
+the base repo, and cross-project GitLab merge requests
+(`CI_MERGE_REQUEST_SOURCE_PROJECT_ID != CI_PROJECT_ID`) are classified as
+`fork_pr`. Missing or incomplete PR events are also considered untrusted.
 
-Profil `fork_pr` memaksa offline (`llm.require` ditolak), redaction selalu aktif
-(`redact: false` diabaikan), dan kapabilitas terlarang diblokir sebelum
-pemanggilan connector mana pun. Contoh:
+The `fork_pr` profile forces offline mode (`llm.require` is rejected),
+redaction stays always on (`redact: false` is ignored), and forbidden
+capabilities are blocked before any connector is invoked. Example:
 
 ```sh
-# Fork PR: semua kapabilitas opsional otomatis nonaktif
+# Fork PR: all optional capabilities are automatically disabled
 hound analyze ./ci-logs --source-class fork_pr --offline
 
-# Eksplisit tepercaya
+# Explicitly trusted
 hound analyze ./ci-logs --source-class trusted_branch --repo . --source-context
 ```
 
-Hasil keputusan tercatat di `meta.trust` pada report: `source_class`,
+The decision is recorded in the report's `meta.trust`: `source_class`,
 `source_context`, `enrichment`, `llm`, `delivery`.
 
 ## 15. QA History
 
-Hound menyimpan hasil test lintas run ke **history store** SQLite agar pola
-flaky/regresi bisa dihitung dari data, bukan asumsi. Store terpisah dari dedup
-state: `<out>/.hound-agent/history.sqlite3`.
+Hound stores test results across runs in a SQLite **history store** so flaky
+and regression patterns are computed from data, not assumptions. The store is
+separate from dedup state: `<out>/.hound-agent/history.sqlite3`.
 
 ```sh
-# Import bukti test (JUnit/XML, JSON report, atau log runner) ke history
+# Import test evidence (JUnit/XML, JSON report, or runner log) into history
 hound qa import ./artifacts --run-id ci-123 --commit <sha> --branch main \
   --environment "os=linux;python=3.11" --out hound-agent-output
 
-# Lihat statistik agregat satu test
+# View aggregate statistics for one test
 hound qa stats tests/test_checkout.py test_cart_total --out hound-agent-output --json
 
-# Riwayat mentah per run/attempt
+# Raw history per run/attempt
 hound qa history tests/test_checkout.py test_cart_total --out hound-agent-output
 
-# Daftar test yang terlacak
+# List tracked tests
 hound qa tests --suite-prefix tests/ --out hound-agent-output
 
-# Ekspor history sanitized untuk CI cache / shared volume
+# Export sanitized history for CI cache / shared volume
 hound qa export --out hound-agent-output --output history.json
 
-# Impor balik manifest ekspor ke store lain
+# Import an exported manifest back into another store
 hound qa import history.json --run-id seed --out /tmp/fresh-output
 ```
 
-Catatan model:
+Model notes:
 
-- Identitas stabil adalah pasangan `(suite, leaf test)`; prefix runner
-  (`path::test`, `class.method`, dsb.) dipangkas ke leaf sehingga test yang sama
-  terlacak konsisten di semua runner (pytest, JUnit, Jest/Vitest, Go, RSpec,
-  Cargo, dotnet).
-- Satu baris per `(suite, test, run_id, attempt)`; retry/flaky JUnit otomatis
-  menjadi baris `failed(1)` + `passed(2)`.
-- Raw log tidak pernah disimpan; baris hanya mereferensikan `run_id` /
-  `evidence_id`.
-- Tanpa cukup data, query `stats` melaporkan `failure_rate: null` dan
-  `insufficient_history: true` — jangan menebak dari satu sample.
-- Retention prunes seluruh baris lama; agregat dihitung ulang dari baris yang
-  tersisa sehingga tidak pernah korup:
+- The stable identity is the `(suite, leaf test)` pair; runner prefixes
+  (`path::test`, `class.method`, etc.) are stripped to the leaf so the same
+  test is tracked consistently across runners (pytest, JUnit, Jest/Vitest, Go,
+  RSpec, Cargo, dotnet).
+- One row per `(suite, test, run_id, attempt)`; JUnit retries/flaky results
+  automatically become `failed(1)` + `passed(2)` rows.
+- Raw logs are never stored; rows only reference `run_id` / `evidence_id`.
+- Without enough data, `stats` reports `failure_rate: null` and
+  `insufficient_history: true` — never guess from a single sample.
+- Retention prunes whole old rows; aggregates are recomputed from the
+  remaining rows so they are never corrupted:
   `hound qa import <path> --retention-days 90 --out <out>`.
 
-## 16. Arsitektur Singkat
+## 16. Brief Architecture
 
 ```text
 command / piped stdin
@@ -620,31 +627,31 @@ shared service -> pipeline -> parse -> analyze -> triage -> output
 CLI / TUI / server
 ```
 
-`service.analyze_log()` menjadi entry point adapter-facing. Service mendelegasi
-ke satu core `pipeline.analyze()`, sehingga parsing, redaction, AI analysis,
-triage, dedup, dan report generation tidak diduplikasi.
+`service.analyze_log()` is the adapter-facing entry point. The service
+delegates to one core `pipeline.analyze()`, so parsing, redaction, AI analysis,
+triage, dedup, and report generation are never duplicated.
 
-## 17. Contoh End-to-End
+## 17. End-to-End Example
 
 ```sh
 # Install
 uv sync --extra dev
 
-# Capture command; exit mengikuti command yang dijalankan
+# Capture a command; exit follows the executed command
 uv run hound log --name tests -- pytest -q
 
-# Buka captured logs dalam TUI
+# Open the captured logs in the TUI
 uv run hound
 
-# Atau analisis directory secara headless
+# Or analyze a directory headlessly
 uv run hound analyze .hound-agent/logs --offline --format json \
   --output hound-agent-result.json
 
-# Lihat salah satu stored run
+# View one of the stored runs
 uv run hound report <run-id> --format text
 ```
 
-## 18. Testing dan Build
+## 18. Testing and Build
 
 ```sh
 uv run pytest
@@ -653,13 +660,13 @@ uv run python -m py_compile hound_agent/cli.py hound_agent/tui.py \
 uv build
 ```
 
-Baseline saat dokumen diperbarui: `421 passed, 5 skipped` pada Windows. Skip
-khusus verifikasi permission bit POSIX. Test tidak melakukan live API call.
+Baseline when this document was last updated: `421 passed, 5 skipped` on
+Windows. The skipped tests verify POSIX permission bits specifically. Tests
+never make live API calls.
 
-## 19. Dokumentasi Lain
+## 19. Other Documentation
 
-- `README.md`: ringkasan dan quick start.
-- `docs/prd.md`: product requirements.
-- `docs/architecture.md`: struktur modul dan data flow.
-- `docs/todo.md`: roadmap.
-- `docs/workflow.md`: definition of done dan verification gate.
+- `README.md`: summary and quick start.
+- `docs/prd.md`: product requirements and scope.
+- `docs/architecture.md`: module structure and data flow.
+- `AGENTS.md`: development workflow, definition of done, and verification gates.

@@ -447,10 +447,10 @@ uv run pytest
 |:---|:---|
 | 📖 [**PRD & Specifications**](docs/prd.md) | Complete functional requirements, non-functional constraints, and scope. |
 | 🏗️ [**Architecture Guide**](docs/architecture.md) | Pipeline mechanics, module map, data schemas, and contracts. |
-| 📘 [**User & Integration Manual**](docs/usage.md) | Comprehensive usage guide (TUI, CLI, Integrations, Bahasa Indonesia). |
+| 📘 [**User & Integration Manual**](docs/usage.md) | Comprehensive usage guide (TUI, CLI, integrations, and configuration). |
 | 📋 [**Correlated Log Format**](docs/log-format.md) | Standard schema and field contracts for structured error logging. |
 | 🔀 [**Schema Migration (v1.4 ➔ v2.0)**](docs/schema-migration-v1.4-to-v2.0.md) | Backward compatibility and RCA JSON schema upgrades. |
-| 🔄 [**Contribution Workflow**](docs/workflow.md) | Development guidelines, code standards, and verification gates. |
+| 🤖 [**AGENTS.md**](AGENTS.md) | Development workflow, code standards, and verification gates for contributors and AI agents. |
 
 ---
 
