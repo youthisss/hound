@@ -88,7 +88,7 @@ Hound requires **Python ≥ 3.10** and is managed via [`uv`](https://github.com/
 
 ```sh
 # Clone and install dependencies
-git clone https://github.com/your-org/hound-agent.git
+git clone https://github.com/youthisss/hound-agent.git
 cd hound-agent
 uv sync --extra dev
 ```

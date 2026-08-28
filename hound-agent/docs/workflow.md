@@ -4,8 +4,8 @@ Process rules to keep the project linear. Deviations require updating this file,
 
 ## Repo context
 
-- Works inside monorepo at `/mnt/d/project/hound-agent/`.
-- Do not touch files outside `hound-agent/`.
+- Works inside the Hound Agent repository.
+- Do not touch files outside the repository.
 - Package name `hound_agent`, import module `hound_agent`.
 
 ## Change flow (strict order)
