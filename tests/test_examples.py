@@ -3,10 +3,10 @@ import subprocess
 import sys
 
 
-def test_demo_project_smoke():
+def test_examples_smoke():
     root = Path(__file__).parents[1]
     completed = subprocess.run(
-        [sys.executable, str(root / "demo_project" / "run_demo.py"), "--profile", "smoke"],
+        [sys.executable, str(root / "examples" / "run_demo.py"), "--profile", "smoke"],
         cwd=root,
         text=True,
         capture_output=True,

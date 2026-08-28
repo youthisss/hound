@@ -27,7 +27,7 @@ jobs:
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
           uv run pip-audit --requirement audited-requirements.txt
       - if: matrix.python == '3.12'
-        run: uv run python demo_project/run_demo.py --profile smoke
+        run: uv run python examples/run_demo.py --profile smoke
       - if: matrix.python == '3.12'
         run: uv build
       - run: uv run python -m py_compile hound_agent/*.py hound_agent/analyze/*.py hound_agent/ingest/*.py hound_agent/output/*.py hound_agent/triage/*.py

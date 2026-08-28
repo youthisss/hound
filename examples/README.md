@@ -1,19 +1,19 @@
-# Hound Agent Demo Project
+# Hound Agent Examples
 
-This project exercises Hound through its public CLI with deterministic synthetic
+This folder exercises Hound through its public CLI with deterministic synthetic
 CI/CD artifacts. It runs offline and never contacts an LLM, issue tracker, or
 deployment environment.
 
 ## Run
 
 ```sh
-uv run python demo_project/run_demo.py --profile smoke
-uv run python demo_project/run_demo.py --profile scale --count 5000 --jobs 8
+uv run python examples/run_demo.py --profile smoke
+uv run python examples/run_demo.py --profile scale --count 5000 --jobs 8
 ```
 
 `smoke` is the pull-request gate. `scale` generates thousands of artifacts in a
 temporary directory and measures throughput. Add `--keep` to retain generated
-inputs, reports, and `benchmark.json` under `demo_project/work`, or combine it
+inputs, reports, and `benchmark.json` under `examples/work`, or combine it
 with `--work-dir PATH` to select another location.
 
 The scale dataset mixes test, build, deployment, healthy, and sensitive logs.

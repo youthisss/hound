@@ -422,10 +422,10 @@ Hound includes an offline synthetic benchmark suite to verify classification, st
 
 ```sh
 # 1. Run quick smoke test gate
-uv run python demo_project/run_demo.py --profile smoke
+uv run python examples/run_demo.py --profile smoke
 
 # 2. Run high-volume scale benchmark (5,000 synthetic artifacts across 8 parallel workers)
-uv run python demo_project/run_demo.py --profile scale --count 5000 --jobs 8
+uv run python examples/run_demo.py --profile scale --count 5000 --jobs 8
 ```
 
 ---

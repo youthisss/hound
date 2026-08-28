@@ -17,8 +17,8 @@ htmlcov/
 .tmp/
 .hound-agent/
 hound-agent-output/
-demo_project/output/
-demo_project/work/
+examples/output/
+examples/work/
 .audit-9router/
 ui-audit-out/
 zzout/
