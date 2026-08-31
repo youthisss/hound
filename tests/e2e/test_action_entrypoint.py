@@ -5,6 +5,15 @@ import subprocess
 import pytest
 
 
+def test_action_entrypoint_preserves_first_cli_argument():
+    entrypoint = Path(__file__).resolve().parents[2] / "action-entrypoint.sh"
+
+    script = entrypoint.read_text(encoding="utf-8")
+
+    # sh -c reserves the first argument after the command as $0.
+    assert "-- action-entrypoint \"$@\"" in script
+
+
 @pytest.mark.skipif(os.name == "nt", reason="Docker action entrypoint is exercised in Linux CI")
 def test_action_rejects_log_outside_workspace(tmp_path):
     workspace = tmp_path / "workspace"
