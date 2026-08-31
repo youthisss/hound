@@ -11,10 +11,10 @@
           "line": 84,
           "symbol": {"name": "recommendation_recall", "snippet": ""},
           "changed": true,
-          "related_tests": ["tests/source/test_impact.py"]
+          "related_tests": ["tests/integration/source/test_impact.py"]
         }
       ],
-      "expected_tests": ["tests/source/test_impact.py"]
+      "expected_tests": ["tests/integration/source/test_impact.py"]
     },
     {
       "id": "devops-investigation",
@@ -24,10 +24,10 @@
           "line": 1,
           "symbol": {"name": "build_investigation", "snippet": ""},
           "changed": true,
-          "related_tests": ["tests/devops/test_investigation.py"]
+          "related_tests": ["tests/integration/devops/test_investigation.py"]
         }
       ],
-      "expected_tests": ["tests/devops/test_investigation.py"]
+      "expected_tests": ["tests/integration/devops/test_investigation.py"]
     }
   ]
 }

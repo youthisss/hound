@@ -1,6 +1,6 @@
 # WORKFLOW — Hound Agent
 
-Process rules to keep the project linear. Deviations require updating this file, `docs/prd.md`, or `docs/todo.md` **first**.
+Process rules to keep the project linear. Deviations require updating this file, `docs/prd.md`, or the relevant record under `docs/plans/` **first**.
 
 ## Repo context
 
@@ -16,22 +16,22 @@ Within each stage: **one area at a time**. Never edit two modules in parallel; f
 
 ### Definition of done (per task)
 - Code written matching `docs/architecture.md` contracts.
-- Unit tests for the module (or pipeline coverage where noted in `docs/todo.md`).
+- Unit tests for the module (or pipeline coverage where noted in `docs/plans/`).
 - `uv run pytest` green.
 - No "TODO" reference to the module remains in other files.
 
 ## Git / commit rules
 
-- Commit at stage boundaries (one commit per milestone in `docs/todo.md`).
+- Commit at stage boundaries (one commit per milestone in `docs/plans/`).
 - Messages: conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`), subject ≤ 72 chars.
 - Never commit `.env`, API keys, or out-dir artifacts.
-- Stage only files under `hound-agent/`.
+- Stage only files under this repository.
 
 ## Verify gate (before any milestone is "done")
 
 ```sh
 uv run ruff check .
-uv run mypy hound_agent
+uv run mypy src/hound_agent
 uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
 uv run python -m hound_agent.eval --offline --format json
 uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
@@ -91,7 +91,7 @@ the limit; offline/failing-LLM runs never spend, so the guardrail stays silent.
 If the implementation diverges from PRD/ARCHITECTURE by more than ~20% (new module, changed schema, new CLI flag):
 
 1. Stop.
-2. Update `docs/prd.md` / `docs/architecture.md` / `docs/todo.md`.
+2. Update `docs/prd.md` / `docs/architecture.md` / the relevant file in `docs/plans/`.
 3. Then continue.
 
 Do not ship code that contradicts the docs.

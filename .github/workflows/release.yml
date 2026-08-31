@@ -22,7 +22,7 @@ jobs:
           package_version="$(uv run python -c 'import hound_agent; print(hound_agent.__version__)')"
           test "$GITHUB_REF_NAME" = "v${package_version}"
       - run: uv run ruff check .
-      - run: uv run mypy hound_agent
+      - run: uv run mypy src/hound_agent
       - run: uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
       - name: Audit locked production dependencies
         run: |

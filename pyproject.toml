@@ -61,18 +61,29 @@ dev = [
 hound = "hound_agent.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["hound_agent"]
+packages = ["src/hound_agent"]
 core-metadata-version = "2.4"
 
 [tool.hatch.version]
-path = "hound_agent/__init__.py"
+path = "src/hound_agent/__init__.py"
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/demo", "/dist"]
+exclude = [
+    "/dist",
+    "/.vscode",
+    "/demo-output",
+    "/examples/demo/**/work",
+    "/examples/demo/**/output",
+    "/hound-agent-output",
+    "/portfolio-capture-output",
+    "/portfolio-redaction-output",
+    "/portfolio-screenshots",
+]
 core-metadata-version = "2.4"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src", "."]
 markers = [
     "unit: fast in-process logic tests",
     "integration: multi-component or store integration tests",
@@ -92,4 +103,4 @@ ignore = ["E501"]
 python_version = "3.10"
 ignore_missing_imports = true
 check_untyped_defs = true
-exclude = "(?x)(hound_agent[\\\\/]analyze[\\\\/](llm|rca)\\.py|hound_agent[\\\\/](collector|tui)\\.py|hound_agent[\\\\/]ingest[\\\\/]context\\.py)"
+exclude = "(?x)(src[\\\\/]hound_agent[\\\\/]analyze[\\\\/](llm|rca)\\.py|src[\\\\/]hound_agent[\\\\/](collector|tui)\\.py|src[\\\\/]hound_agent[\\\\/]ingest[\\\\/]context\\.py)"

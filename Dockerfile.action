@@ -6,7 +6,7 @@ WORKDIR /app
 
 COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md LICENSE ./
-COPY hound_agent ./hound_agent
+COPY src ./src
 COPY action-entrypoint.sh /usr/local/bin/action-entrypoint
 
 RUN uv sync --frozen --no-dev && chmod 755 /usr/local/bin/action-entrypoint

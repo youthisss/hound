@@ -6,7 +6,7 @@ WORKDIR /app
 
 COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md LICENSE ./
-COPY hound_agent ./hound_agent
+COPY src ./src
 
 RUN uv sync --frozen --no-dev \
     && useradd --create-home --uid 10001 hound-agent \

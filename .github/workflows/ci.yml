@@ -24,7 +24,7 @@ jobs:
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - run: uv sync --frozen --extra dev
       - run: uv run ruff check .
-      - run: uv run mypy hound_agent
+      - run: uv run mypy src/hound_agent
       - run: uv run pytest -m integration -q
 
   compatibility:
@@ -52,7 +52,7 @@ jobs:
         run: |
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
           uv run pip-audit --requirement audited-requirements.txt
-      - run: uv run python demo_project/run_demo.py --profile smoke
+      - run: uv run python examples/demo/run_demo.py --profile smoke
       - run: uv build
       - run: uv run twine check dist/*.whl dist/*.tar.gz
       - run: docker build -t hound:test .

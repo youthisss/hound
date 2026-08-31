@@ -23,5 +23,5 @@ Hound Agent is designed with privacy-first principles:
 2. **Read-Only**: Hound Agent does not mutate infrastructure, deploy code, or execute arbitrary remote actions.
 3. **Offline Mode**: Operates 100% locally with `--offline` without sending telemetry, logs, or metrics to external services.
 
-Dependency updates follow [`docs/dependency-policy.md`](docs/dependency-policy.md),
+Dependency updates follow [`docs/operations/dependency-policy.md`](docs/operations/dependency-policy.md),
 including lockfile regeneration, release-note review, tests, and `pip-audit`.

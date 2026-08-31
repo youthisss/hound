@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue and PR templates for GitHub.
 - Comprehensive distribution and production maturity roadmap.
 
+### Changed
+- Reorganized the package into `src/hound_agent`, grouped tests by runtime boundary,
+  and grouped documentation under purpose-specific directories.
+- Refreshed README navigation and added a documentation hub plus a runnable demo
+  under `examples/demo`.
+
 ## [0.4.0] - 2026-08-07
 
 ### Added

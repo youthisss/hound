@@ -60,7 +60,7 @@ uv run pytest -m "e2e and not slow" -q
    Before submitting a pull request, ensure all checks pass:
    ```sh
    uv run ruff check .
-   uv run mypy hound_agent
+   uv run mypy src/hound_agent
    uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
    ```
 
@@ -68,4 +68,4 @@ uv run pytest -m "e2e and not slow" -q
    - Use [Conventional Commits](https://www.conventionalcommits.org/) format for commit messages (e.g., `feat:`, `fix:`, `docs:`, `test:`).
     - Describe the problem solved and include reproduction steps or fixture evidence where applicable.
 
-Dependency changes must also follow [`docs/dependency-policy.md`](docs/dependency-policy.md).
+Dependency changes must also follow [`docs/operations/dependency-policy.md`](docs/operations/dependency-policy.md).

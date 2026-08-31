@@ -5,68 +5,40 @@
 ```
 hound-agent/
 ├── pyproject.toml            # uv; [project.scripts] hound = hound_agent.cli:main
-├── hound_agent/
-│   ├── __init__.py           # __version__
-│   ├── models.py             # dataclasses: Artifacts, RootCause, Triage, Ticket; RCA doc; validate()
-│   ├── config.py             # env vars + optional YAML config (component map, dedup path, trackers)
-│   ├── collector.py          # command/stdin capture -> redacted .log + metadata
-│   ├── service.py            # shared application service for CLI/TUI/server
-│   ├── pipeline.py           # core analyze(log_path, out, ...) -> doc
-│   ├── eval.py               # offline labeled-corpus evaluator, baseline metrics, confidence calibration
-│   ├── feedback.py           # auditable feedback store (separate from dedup state) + candidate-fixture exports
-│   ├── telemetry.py          # bounded payload-free counters, gauges, and latency percentiles
-│   ├── trust.py              # fail-closed trust profiles by source class (trusted_branch/fork_pr/local_artifact)
-│   ├── qa/
-│   │   ├── model.py          # NormalizedTestResult; stable (suite, leaf) identity; failure signatures
-│   │   ├── history.py        # SQLite test-history store (WAL, atomic upserts, retention, import/export, queries)
-│   │   ├── normalize.py      # runner evidence -> history rows (JUnit/JSON/log; flaky->attempts)
-│   │   ├── coverage.py       # bounded Cobertura/JaCoCo/LCOV/Istanbul/dotnet coverage normalization
-│   │   ├── sarif.py          # bounded SARIF findings normalization
-│   │   ├── gate.py           # deterministic quality-policy evaluation and defect draft
-│   │   └── service.py        # bounded artifact discovery and reusable gate orchestration
-│   ├── devops/
-│   │   └── timeline.py       # deterministic deployment timeline, causal links, release identity, impact
-│   │   └── investigation.py  # release diff, trace path, SLO severity, runbook correlation
-│   ├── connectors/
-│   │   ├── model.py          # sanitized evidence bundle and credential-free connector audit contract
-│   │   └── deployment.py     # bounded read-only Kubernetes/Helm command allowlists
-│   │   └── observability.py  # bounded Prometheus range and Tempo trace-ID queries
-│   ├── source/
-│   │   └── context.py        # contained symbol context, blame, owners, diff, related tests
-│   │   └── impact.py         # Python static_candidate graph and advisory test ranking
-│   ├── cli.py                # argparse; subcommands: analyze, batch, tui, server, list-providers, feedback, qa
-│   ├── server.py             # stdlib HTTP webhook receiver: /analyze + /health + /stats; configurable workers/queue/rate-limit/job-ttl; SQLite job store
-│   ├── tui.py                # Textual terminal UI: log browser, analyze, report/ticket/raw panes
-│   ├── ingest/
-│   │   ├── logs.py           # detect stage/kind, failure-event graph, smart windowing
-│   │   ├── context.py        # collector/GitHub Actions run and deployment context
-│   │   ├── structured.py     # JUnit, SARIF, JSON and Go NDJSON artifact parsers
-│   │   ├── owners.py         # CODEOWNERS resolver for affected files
-│   │   ├── enrich.py         # explicit bounded read-only Kubernetes/Helm/Terraform evidence
-│   │   ├── stacktrace.py     # parse frames: file, line, function; attach source snippets (±2 lines)
-│   │   ├── tests.py          # parse failed-test names from pytest output
-│   │   ├── redact.py         # secret/PII redaction (keys, JWT, passwords, conn strings, email/IP)
-│   │   └── git.py            # GitPython: branch, HEAD, changed_files vs HEAD
-│   ├── analyze/
-│   │   ├── llm.py            # openai SDK client; retries w/ backoff; usage capture; json_object; try/except
-│   │   ├── prompts.py        # system + user prompt builders (nonce-boundary injection guard)
-│   │   ├── rca.py            # orchestrator: run_analysis(artifacts) -> RootCause
-│   │   └── fallback.py       # rule-based deterministic RCA
-│   ├── triage/
-│   │   ├── severity.py       # rules -> severity + priority
-│   │   ├── component.py      # glob map + path heuristic -> component
-│   │   └── dedup.py          # normalize -> sha256; locked file store OR SQLite (WAL, atomic upserts); flaky_suspect (count>=3)
-│   └── output/
-│       ├── report.py         # write report.json + report.md
-│       ├── tickets.py        # ticket.md draft; GitHub/Jira/GitLab REST clients
-│       ├── delivery.py       # idempotent SQLite delivery ledger and reconciliation states
-│       └── slack.py          # Slack webhook alert
-├── Dockerfile                # containerized runner
-├── action.yml                # GitHub Action manifest
+├── src/
+│   └── hound_agent/
+│       ├── __init__.py       # __version__
+│       ├── models.py         # RCA document models and schema validation
+│       ├── config.py         # environment and YAML configuration
+│       ├── collector.py      # command/stdin capture and redaction
+│       ├── service.py        # shared application service for CLI/TUI/server
+│       ├── pipeline.py       # core analysis orchestration
+│       ├── eval.py           # offline evaluator and confidence calibration
+│       ├── ingest/           # logs, artifacts, source, Git, and redaction
+│       ├── analyze/          # LLM adapter, prompts, RCA, and fallback
+│       ├── triage/           # severity, component, and deduplication
+│       ├── qa/               # test history, coverage, SARIF, and quality gates
+│       ├── devops/            # deployment timelines and investigations
+│       ├── connectors/       # bounded read-only deployment/observability adapters
+│       ├── source/            # source context and test impact analysis
+│       └── output/            # reports, tickets, Slack, and delivery ledger
+├── examples/
+│   └── demo/                 # deterministic smoke and scale harness
+├── docs/
+│   ├── guides/               # usage, GitHub Action, server, and connectors
+│   ├── reference/            # log, source, impact, timeline, and migration contracts
+│   ├── operations/           # recovery, security, release, and pilot operations
+│   ├── schema/               # normative RCA JSON schema
+│   └── plans/                # project plans and mutation records
 ├── tests/
-│   ├── conftest.py           # fixtures path helpers
-│   ├── fixtures/             # pytest_fail.log, build_error.log, stacktrace.txt, flaky.log, fake repo/
-│   └── test_*.py
+│   ├── unit/                 # fast in-process behavior
+│   ├── integration/          # stores, connectors, source, and DevOps boundaries
+│   ├── e2e/                  # CLI, TUI, action, evaluator, and demo workflows
+│   ├── fixtures/             # reusable local logs and artifacts
+│   ├── eval/                 # versioned evaluation corpus and baselines
+│   └── golden/               # versioned RCA output fixtures
+├── Dockerfile                # containerized runner
+└── action.yml                # GitHub Action manifest
 ```
 
 ## Data flow
@@ -91,12 +63,12 @@ hound-agent/
 9. **trust** resolves the source class (`trusted_branch`/`fork_pr`/`local_artifact`) from `--source-class`, YAML `trust.source_class`, `TH_SOURCE_CLASS`, or CI environment detection before any capability runs. `fork_pr` fails closed: offline forced, redaction stays on, and source context, enrichment, LLM, and delivery are never invoked (`meta.trust` records the decision).
 10. **feedback** (`hound feedback record/export`) writes reviewed engineer ratings into `<out>/.hound-agent/feedback.sqlite3` — intentionally separate from dedup state — with audit metadata and redacted values. It never mutates classifiers; `export --candidate-fixtures` emits explicit, manual regression-fixture candidate manifests.
 11. **QA gate** (`hound qa gate ARTIFACTS --baseline REF --head REF --repo REPO --policy FILE`) delegates to `qa/service.py`, which normalizes tests, coverage, and SARIF under aggregate file/byte/time limits before evaluating an explicit deterministic policy. Its JSON contract keeps `analysis_status` separate from `policy_outcome`; every warn/block includes an evidence-backed reason and a defect draft. Exit `0` means pass/warn, `1` means policy block, `2` means invalid input/policy, and `3` means an internal failure. `--report-only` preserves the computed outcome but disables exit-code enforcement.
-12. **DevOps timeline** combines explicit deployment context, CI metadata, and failure events. It orders comparable events by `timestamp_ns`, falls back to `sequence` or source order with explicit uncertainty, preserves partial traces, detects causal-link cycles without failing analysis, and separately records deployment outcome, recovery, customer impact, and release identity comparison. The complete additive contract and legacy-reader behavior are documented in `docs/timeline-schema.md`.
-13. **Deployment connectors** run only after explicit operator opt-in, trusted policy approval, a supplied context file, and deploy-stage detection. Kubernetes and Helm commands are constructed as argument lists and checked against read-only verb allowlists; output is redacted and bounded before becoming evidence. Each attempt emits a credential-free `context.connector_audits` record, including partial failures. See `docs/deployment-connectors.md`.
-14. **Operational correlation** compares explicitly supplied current/previous release metadata and optionally queries a bounded Prometheus time window plus Tempo trace IDs already present in evidence. The resulting `devops` section keeps static and impact-adjusted severity separately, labels metric evidence as correlation only, estimates a critical path from available parent links, and resolves runbooks only from trusted configuration. See `docs/operational-correlation.md`.
-15. **Source intelligence V1** runs only for trusted repositories with explicit `--source-context`. It resolves repository-contained frame files, extracts Python symbols (bounded text fallback for other recognized suffixes), and attaches diff, blame, commit, CODEOWNERS, and direct related-test evidence. Symlinks, hidden/secret files, binaries, oversized files, and traversal paths are excluded. Source evidence stays local and out of LLM payloads unless trusted configuration explicitly sets `source.send_to_llm: true`. See `docs/source-intelligence.md`.
-16. **Test impact recommendations** use a depth-limited Python call graph and rank tests from direct references, optional coverage, static dependency candidates, and optional historical correlation. Every graph edge is labeled `static_candidate`; output is advisory and never changes CI selection. Missing coverage remains explicit. See `docs/test-impact.md`.
-17. **Delivery reliability and telemetry** use a separate WAL-mode delivery ledger with `pending`, `confirmed`, `failed`, and `unknown` states. Ambiguous outcomes block automatic retries until reconciliation. A bounded process-local telemetry registry exposes payload-free counters and latency percentiles through authenticated `/stats`. See `docs/delivery-reliability.md`, `docs/operations-metrics.md`, and `docs/pilot-readiness.md`.
+12. **DevOps timeline** combines explicit deployment context, CI metadata, and failure events. It orders comparable events by `timestamp_ns`, falls back to `sequence` or source order with explicit uncertainty, preserves partial traces, detects causal-link cycles without failing analysis, and separately records deployment outcome, recovery, customer impact, and release identity comparison. The complete additive contract and legacy-reader behavior are documented in `docs/reference/timeline-schema.md`.
+13. **Deployment connectors** run only after explicit operator opt-in, trusted policy approval, a supplied context file, and deploy-stage detection. Kubernetes and Helm commands are constructed as argument lists and checked against read-only verb allowlists; output is redacted and bounded before becoming evidence. Each attempt emits a credential-free `context.connector_audits` record, including partial failures. See `docs/guides/deployment-connectors.md`.
+14. **Operational correlation** compares explicitly supplied current/previous release metadata and optionally queries a bounded Prometheus time window plus Tempo trace IDs already present in evidence. The resulting `devops` section keeps static and impact-adjusted severity separately, labels metric evidence as correlation only, estimates a critical path from available parent links, and resolves runbooks only from trusted configuration. See `docs/operations/operational-correlation.md`.
+15. **Source intelligence V1** runs only for trusted repositories with explicit `--source-context`. It resolves repository-contained frame files, extracts Python symbols (bounded text fallback for other recognized suffixes), and attaches diff, blame, commit, CODEOWNERS, and direct related-test evidence. Symlinks, hidden/secret files, binaries, oversized files, and traversal paths are excluded. Source evidence stays local and out of LLM payloads unless trusted configuration explicitly sets `source.send_to_llm: true`. See `docs/reference/source-intelligence.md`.
+16. **Test impact recommendations** use a depth-limited Python call graph and rank tests from direct references, optional coverage, static dependency candidates, and optional historical correlation. Every graph edge is labeled `static_candidate`; output is advisory and never changes CI selection. Missing coverage remains explicit. See `docs/reference/test-impact.md`.
+17. **Delivery reliability and telemetry** use a separate WAL-mode delivery ledger with `pending`, `confirmed`, `failed`, and `unknown` states. Ambiguous outcomes block automatic retries until reconciliation. A bounded process-local telemetry registry exposes payload-free counters and latency percentiles through authenticated `/stats`. See `docs/operations/delivery-reliability.md`, `docs/operations/operations-metrics.md`, and `docs/operations/pilot-readiness.md`.
 
 `service.analyze_log()` is the adapter-facing entry point for CLI, TUI, server, and collector. It delegates to the single `pipeline.analyze()` core.
 
@@ -222,7 +194,7 @@ Evidence IDs are deterministic counters scoped to one report (`ev-001`, `ev-002`
 
 Every run is bound to a source class resolved from `--source-class`, YAML
 `trust.source_class`, `TH_SOURCE_CLASS`, or CI environment detection. Profiles are
-fail-closed (`hound_agent/trust.py`):
+fail-closed (`src/hound_agent/trust.py`):
 
 | Source class | Detection | Source context | Enrichment | LLM | Delivery |
 |---|---|---|---|---|---|

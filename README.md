@@ -13,9 +13,9 @@
 
 <p align="center">
   <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta-yellow.svg" alt="Status"></a>
-  <a href="#tests"><img src="https://img.shields.io/badge/Tests-CI%20Verified-success.svg" alt="Tests"></a>
+  <a href="#running-tests"><img src="https://img.shields.io/badge/Tests-CI%20Verified-success.svg" alt="Tests"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python Version"></a>
-  <a href="#security-and-privacy"><img src="https://img.shields.io/badge/Security-Redaction%20Default-orange.svg" alt="Security"></a>
+  <a href="#security"><img src="https://img.shields.io/badge/Security-Redaction%20Default-orange.svg" alt="Security"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
 </p>
 
@@ -29,7 +29,7 @@
 
 ## ⚡ Why Hound Agent?
 
-- 🔒 **Offline-First & Deterministic:** 100% functional out of the box with zero external dependencies, no API keys, and no network access required.
+- 🔒 **Offline-First & Deterministic:** 100% functional out of the box with no external services, no API keys, and no network access required.
 - 🤖 **Multi-Provider LLM Enhancement:** Seamlessly plug into OpenAI, Anthropic, Gemini, Groq, Ollama, DeepSeek, Azure, or local OpenAI-compatible endpoints when deeper synthesis is desired.
 - 🛡️ **Zero-Crash CI Safety:** Automatic fallback to deterministic rule engines if LLM calls time out, hit rate limits, or fail JSON schema validation. Your CI pipeline never fails because of an AI outage.
 - 💰 **Built-In Token & Cost Control:** Deduplication-first result caching, failure-kind routing (skip noisy flaky tests), a strict call-attempt cap (`--max-llm-calls`), and an estimated post-call cost threshold (`--max-cost-usd`).
@@ -254,7 +254,7 @@ hound serve \
 ```
 
 Hound intentionally serves plaintext HTTP on loopback only. Terminate TLS and
-apply shared rate limiting at a reverse proxy; see `docs/server-deployment.md`.
+apply shared rate limiting at a reverse proxy; see `docs/guides/server-deployment.md`.
 
 #### API Endpoints:
 - `POST /analyze` — Submit analysis job `{"log": "relative/path.log", "offline": false}`
@@ -438,10 +438,10 @@ Hound includes an offline synthetic benchmark suite to verify classification, st
 
 ```sh
 # 1. Run quick smoke test gate
-uv run python demo_project/run_demo.py --profile smoke
+uv run python examples/demo/run_demo.py --profile smoke
 
 # 2. Run high-volume scale benchmark (5,000 synthetic artifacts across 8 parallel workers)
-uv run python demo_project/run_demo.py --profile scale --count 5000 --jobs 8
+uv run python examples/demo/run_demo.py --profile scale --count 5000 --jobs 8
 ```
 
 ---
@@ -455,17 +455,60 @@ uv run pytest
 
 > **Test Guarantee:** All tests run strictly with local fixtures, with no live API credentials required. The current count is reported by CI.
 
+## Repository Layout
+
+```text
+src/hound_agent/        Core package and CLI implementation
+examples/demo/          Offline smoke test and scale benchmark harness
+docs/                   Guides, reference contracts, operations, and plans
+tests/unit/              Fast in-process tests
+tests/integration/       Store, connector, source, and DevOps tests
+tests/e2e/               CLI, TUI, Action, evaluator, and demo tests
+tests/fixtures/          Local logs and structured artifacts
+```
+
+The package uses a standard `src` layout so the development checkout and built
+wheel exercise the same import boundary. The repository does not contain a
+second application or a hidden runtime service.
+
+## Project Status
+
+Hound Agent `0.4.0` is currently Beta. The offline CLI, TUI, GitHub Action
+contract, SQLite state stores, and deterministic fallback are covered by the
+local quality gates. Production sign-off still requires the documented
+two-repository pilot and external Docker, image-scan, TestPyPI, and PyPI
+release controls; see [`docs/operations/pilot-readiness.md`](docs/operations/pilot-readiness.md).
+
+## Contributing
+
+1. Create a branch and keep changes focused.
+2. Add or update tests in the matching `tests/unit`, `tests/integration`, or
+   `tests/e2e` directory.
+3. Run `uv run ruff check .`, `uv run mypy src/hound_agent`, and
+   `uv run pytest --cov=hound_agent --cov-fail-under=80 -q`.
+4. Update the relevant documentation and `CHANGELOG.md` entry.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/workflow.md`](docs/workflow.md)
+for the complete contribution and verification rules.
+
+## Security
+
+Redaction is enabled by default, external integrations are opt-in, and Hound
+does not mutate infrastructure. Report suspected vulnerabilities privately
+according to [`SECURITY.md`](SECURITY.md).
+
 ---
 
 ## 📚 Documentation Index
 
 | Document | Description |
 |:---|:---|
+| 📚 [**Documentation Hub**](docs/README.md) | Map of guides, reference contracts, operations, schema, audits, and plans. |
 | 📖 [**PRD & Specifications**](docs/prd.md) | Complete functional requirements, non-functional constraints, and scope. |
 | 🏗️ [**Architecture Guide**](docs/architecture.md) | Pipeline mechanics, module map, data schemas, and contracts. |
-| 📘 [**User & Integration Manual**](docs/usage.md) | Comprehensive usage guide (TUI, CLI, Integrations, Bahasa Indonesia). |
-| 📋 [**Correlated Log Format**](docs/log-format.md) | Standard schema and field contracts for structured error logging. |
-| 🔀 [**Schema Migration (v1.4 ➔ v2.0)**](docs/schema-migration-v1.4-to-v2.0.md) | Backward compatibility and RCA JSON schema upgrades. |
+| 📘 [**User & Integration Manual**](docs/guides/usage.md) | Comprehensive CLI, TUI, server, and integration usage. |
+| 📋 [**Reference Contracts**](docs/reference/log-format.md) | Log, source, test-impact, timeline, and migration contracts. |
+| 🛡️ [**Operations and Security**](docs/operations/threat-model.md) | Deployment, recovery, release, pilot, and security procedures. |
 | 🔄 [**Contribution Workflow**](docs/workflow.md) | Development guidelines, code standards, and verification gates. |
 
 ---
