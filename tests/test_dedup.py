@@ -291,6 +291,23 @@ def test_sqlite_store_survives_reconfigure(tmp_path):
     assert len(dedup.load_sqlite_entries(path)) == 1
 
 
+def test_sqlite_max_entries_bounds_undelivered_incidents(tmp_path):
+    from hound_agent.triage import dedup
+
+    path = str(tmp_path / "bounded.sqlite3")
+    dedup.configure_store(backend="sqlite", max_entries=2)
+    try:
+        for index in range(5):
+            artifacts = make_artifacts("pytest_fail.log")
+            artifacts.message = f"unique failure {index}"
+            check_duplicate(artifacts, path)
+        entries = dedup.load_sqlite_entries(path)
+        assert len(entries) == 2
+        assert {entry["message"] for entry in entries} == {"unique failure 3", "unique failure 4"}
+    finally:
+        dedup.configure_store(backend="file", max_entries=50000)
+
+
 def test_sqlite_backend_rejects_unknown_path_extension_is_irrelevant(tmp_path):
     from hound_agent.triage import dedup
 

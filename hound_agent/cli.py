@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 import shutil
+import sqlite3
 import sys
 import threading
 from dataclasses import replace
@@ -70,19 +71,22 @@ def _add_common(parser: argparse.ArgumentParser, *, batch: bool = False) -> None
                             help="path to a log file, or a directory scanned for *.log")
     else:
         parser.add_argument("--log", required=True, help="path to the failure log file")
-    parser.add_argument("--repo", default=None, help="path to the local git checkout")
-    parser.add_argument("--out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
+    parser.add_argument("--repo-dir", "--repo", dest="repo", default=None, help="path to the local git checkout")
+    parser.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
     parser.add_argument("--offline", action="store_true", help="force rule-based analysis, no LLM")
     parser.add_argument("--jobs", type=_positive_int, default=1,
                         help="parallel analysis workers (default: 1 = sequential)")
     parser.add_argument("--config", default=None, help="optional YAML config (components, dedup)")
     parser.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
-    parser.add_argument("--no-redact", action="store_true", help="disable secret/PII redaction")
+    parser.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true",
+                        help="disable secret/PII redaction (unsafe)")
     parser.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     parser.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
     parser.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
     parser.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
                         help="trust profile for this artifact source")
+    parser.add_argument("--llm-preview", action="store_true",
+                        help="write the final redacted LLM payload without contacting a provider")
     parser.add_argument("--max-llm-calls", type=_positive_int, default=None,
                         help="strict cap on LLM calls for the whole batch, including parallel workers")
     parser.add_argument("--max-cost-usd", type=_positive_float, default=None,
@@ -113,15 +117,15 @@ def build_parser() -> argparse.ArgumentParser:
     _add_analyze_options(analyze_cmd)
     batch = sub.add_parser("batch", help="analyze artifacts with budgets and usage telemetry")
     _add_common(batch, batch=True)
-    tui = sub.add_parser("tui", help="interactive terminal UI")
+    tui = sub.add_parser("tui", aliases=["console"], help="interactive terminal UI")
     tui.add_argument("--logs", default=None, help="log directory to browse (default: cwd)")
-    tui.add_argument("--repo", default=None, help="path to the local git checkout")
-    tui.add_argument("--out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
+    tui.add_argument("--repo-dir", "--repo", dest="repo", default=None, help="path to the local git checkout")
+    tui.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
     tui_mode = tui.add_mutually_exclusive_group()
     tui_mode.add_argument("--offline", action="store_true", default=None, help="force rule-based analysis, no LLM")
     tui_mode.add_argument("--online", dest="offline", action="store_false", help="force LLM analysis")
     tui.add_argument("--config", default=None, help="optional YAML config")
-    tui.add_argument("--no-redact", action="store_true", help="disable secret/PII redaction")
+    tui.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
     tui.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
     tui.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     tui.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
@@ -132,17 +136,17 @@ def build_parser() -> argparse.ArgumentParser:
     tui.add_argument("--max-llm-calls", type=_positive_int, default=None, help="strict LLM call cap for Analyze all")
     tui.add_argument("--max-cost-usd", type=_positive_float, default=None, help="estimated cost guardrail for Analyze all")
     _add_llm_args(tui)
-    server_cmd = sub.add_parser("server", help="run the HTTP webhook receiver (POST /analyze, GET /health)")
+    server_cmd = sub.add_parser("server", aliases=["serve"], help="run the HTTP webhook receiver (POST /analyze, GET /health)")
     server_cmd.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
     server_cmd.add_argument("--port", type=int, default=8123, help="bind port (default: 8123)")
-    server_cmd.add_argument("--token", default=None, help="Bearer token; defaults to TH_SERVER_TOKEN")
+    server_cmd.add_argument("--token", default=None, help="Bearer token; defaults to HOUND_SERVER_TOKEN (legacy TH_SERVER_TOKEN supported)")
     server_cmd.add_argument("--log-root", default=".", help="trusted root for relative log paths")
-    server_cmd.add_argument("--out", default="hound-agent-server-output", help="server-owned output root")
+    server_cmd.add_argument("--output-dir", "--out", dest="out", default="hound-agent-server-output", help="server-owned output root")
     server_cmd.add_argument("--repo-root", default=None, help="optional trusted repository root")
     server_cmd.add_argument("--offline", action="store_true", help="force local rule-based analysis")
     server_cmd.add_argument("--config", default=None, help="optional YAML config")
     server_cmd.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
-    server_cmd.add_argument("--no-redact", action="store_true", help="disable secret/PII redaction")
+    server_cmd.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
     server_cmd.add_argument("--source-context", action="store_true", help="attach source near frames from trusted logs")
     server_cmd.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
     server_cmd.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
@@ -155,19 +159,23 @@ def build_parser() -> argparse.ArgumentParser:
                             help="max requests per client per minute (default: 60; env TH_SERVER_RATE_LIMIT)")
     server_cmd.add_argument("--job-ttl", type=int, default=None,
                             help="retention seconds for finished jobs (default: 3600; env TH_SERVER_JOB_TTL)")
+    server_cmd.add_argument("--log-level", choices=("debug", "info", "warning", "error", "critical"), default="info",
+                            help="server log level (default: info)")
+    server_cmd.add_argument("--log-format", choices=("text", "json"), default="text",
+                            help="server log format (default: text)")
     _add_llm_args(server_cmd)
-    providers_cmd = sub.add_parser("list-providers", help="list built-in LLM provider presets")
+    providers_cmd = sub.add_parser("list-providers", aliases=["providers"], help="list built-in LLM provider presets")
     providers_cmd.add_argument("--json", action="store_true", help="output as JSON")
     report_cmd = sub.add_parser("report", help="show a stored analysis run")
     report_cmd.add_argument("run_id", help="run ID under the output directory")
-    report_cmd.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
+    report_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     report_cmd.add_argument("--format", choices=("text", "json", "markdown"), default="text")
     report_cmd.add_argument("--output", default=None, help="write formatted report to this file")
-    runs_cmd = sub.add_parser("list-runs", help="list stored analysis runs")
-    runs_cmd.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
+    runs_cmd = sub.add_parser("list-runs", aliases=["runs"], help="list stored analysis runs")
+    runs_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     runs_cmd.add_argument("--json", action="store_true", help="output as JSON")
     clean_cmd = sub.add_parser("clean", help="remove stored analysis output")
-    clean_cmd.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
+    clean_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     clean_cmd.add_argument("--yes", action="store_true", help="confirm deletion")
     init_cmd = sub.add_parser("init", help="create a commented project config template")
     init_cmd.add_argument("--config", default=".hound-agent.yml", help="config path to create")
@@ -180,12 +188,16 @@ def build_parser() -> argparse.ArgumentParser:
     config_show = config_sub.add_parser("show", help="show effective non-secret configuration")
     config_show.add_argument("--config", default=None, help="optional YAML config path")
     config_show.add_argument("--json", action="store_true", help="output JSON")
+    config_validate = config_sub.add_parser("validate", help="validate every configuration key without network access")
+    config_validate.add_argument("--config", required=True, help="YAML config path")
+    config_validate.add_argument("--warn-only", action="store_true", help="warn instead of failing for unknown keys")
+    config_validate.add_argument("--json", action="store_true", help="output machine-readable result")
     feedback_cmd = sub.add_parser("feedback", help="record or export reviewed analysis feedback")
     feedback_sub = feedback_cmd.add_subparsers(dest="feedback_command", required=True)
     feedback_record = feedback_sub.add_parser("record", help="record structured feedback for a stored run")
     feedback_record.add_argument("--run-id", required=True, help="stored run ID under --out")
-    feedback_record.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
-    feedback_record.add_argument("--store", default=None, help="feedback SQLite path (separate from dedup state)")
+    feedback_record.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    feedback_record.add_argument("--history-db", "--store", dest="store", default=None, help="feedback SQLite path (separate from dedup state)")
     feedback_record.add_argument(
         "--usefulness", choices=("useful", "partial", "not_useful", "unknown"), default="unknown"
     )
@@ -206,8 +218,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     feedback_record.add_argument("--reviewer", default="", help="reviewer identifier; secrets are redacted")
     feedback_export = feedback_sub.add_parser("export", help="export sanitized feedback or candidate manifests")
-    feedback_export.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
-    feedback_export.add_argument("--store", default=None, help="feedback SQLite path")
+    feedback_export.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    feedback_export.add_argument("--history-db", "--store", dest="store", default=None, help="feedback SQLite path")
     feedback_export.add_argument("--output", default=None, help="write export to a file")
     feedback_export.add_argument("--format", choices=("json", "jsonl"), default="json")
     feedback_export.add_argument("--reviewed-only", action="store_true")
@@ -215,55 +227,87 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-fixtures", action="store_true",
         help="export reviewed records as manual regression-fixture candidates",
     )
-    qa_cmd = sub.add_parser("qa", help="QA capabilities: test history store, import/export, queries, and classification")
+    qa_cmd = sub.add_parser("qa", aliases=["insights"], help="QA capabilities: test history store, import/export, queries, and classification")
     qa_sub = qa_cmd.add_subparsers(dest="qa_command", required=True)
     qa_analyze = qa_sub.add_parser("analyze", help="classify test results from an artifact or directory against history")
     qa_analyze.add_argument("path", help="artifact file or directory of test artifacts")
-    qa_analyze.add_argument("--runner", default=None, help="explicit runner label")
-    qa_analyze.add_argument("--baseline", default=None, help="baseline commit SHA to compare regressions against")
-    qa_analyze.add_argument("--days", type=_positive_int, default=None, help="history analysis window in days")
-    qa_analyze.add_argument("--store", default=None, help="history SQLite path")
-    qa_analyze.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
+    qa_analyze.add_argument("--test-runner", "--runner", dest="runner", default=None, help="explicit runner label")
+    qa_analyze.add_argument("--baseline-ref", "--baseline", dest="baseline", default=None, help="baseline commit SHA")
+    qa_analyze.add_argument("--window-days", "--days", dest="days", type=_positive_int, default=None, help="history window")
+    qa_analyze.add_argument("--history-db", "--store", dest="store", default=None, help="history SQLite path")
+    qa_analyze.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     qa_analyze.add_argument("--json", action="store_true", help="output structured JSON")
     qa_import = qa_sub.add_parser("import", help="import test evidence (JUnit/JSON/log) into the history store")
     qa_import.add_argument("path", help="artifact file or directory of artifacts")
-    qa_import.add_argument("--runner", default=None, help="explicit runner label (auto-detected for logs)")
+    qa_import.add_argument("--test-runner", "--runner", dest="runner", default=None, help="explicit runner label")
     qa_import.add_argument("--run-id", default="", help="run identifier for the imported evidence")
     qa_import.add_argument("--commit", default="", help="commit SHA for the imported evidence")
     qa_import.add_argument("--branch", default="", help="branch name for the imported evidence")
     qa_import.add_argument("--environment", default="", help="environment dimensions, e.g. os=linux;python=3.11")
-    qa_import.add_argument("--store", default=None, help="history SQLite path (default: <out>/.hound-agent/history.sqlite3)")
-    qa_import.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory (default store location)")
+    qa_import.add_argument("--history-db", "--store", dest="store", default=None, help="history SQLite path")
+    qa_import.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     qa_import.add_argument("--retention-days", type=_positive_int, default=None,
                            help="retain only this many days after import")
     qa_history = qa_sub.add_parser("history", help="show recent history rows for a test")
     qa_history.add_argument("suite", help="suite identifier, e.g. tests/test_checkout.py")
     qa_history.add_argument("test", help="test leaf identity, e.g. test_checkout")
-    qa_history.add_argument("--store", default=None)
-    qa_history.add_argument("--out", default=DEFAULT_OUT)
-    qa_history.add_argument("--days", type=_positive_int, default=None, help="only rows within this many days")
+    qa_history.add_argument("--history-db", "--store", dest="store", default=None)
+    qa_history.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
+    qa_history.add_argument("--window-days", "--days", dest="days", type=_positive_int, default=None, help="only rows within this many days")
     qa_history.add_argument("--limit", type=_positive_int, default=200)
     qa_history.add_argument("--json", action="store_true", help="output JSON")
     qa_tests = qa_sub.add_parser("tests", help="list tracked tests in the history store")
-    qa_tests.add_argument("--store", default=None)
-    qa_tests.add_argument("--out", default=DEFAULT_OUT)
+    qa_tests.add_argument("--history-db", "--store", dest="store", default=None)
+    qa_tests.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
     qa_tests.add_argument("--suite-prefix", default="", help="filter suites by prefix")
     qa_tests.add_argument("--limit", type=_positive_int, default=100)
     qa_tests.add_argument("--json", action="store_true", help="output JSON")
     qa_stats = qa_sub.add_parser("stats", help="aggregate stats (rate, durations, environments) for a test")
     qa_stats.add_argument("suite")
     qa_stats.add_argument("test")
-    qa_stats.add_argument("--store", default=None)
-    qa_stats.add_argument("--out", default=DEFAULT_OUT)
-    qa_stats.add_argument("--days", type=_positive_int, default=None, help="window in days")
+    qa_stats.add_argument("--history-db", "--store", dest="store", default=None)
+    qa_stats.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
+    qa_stats.add_argument("--window-days", "--days", dest="days", type=_positive_int, default=None, help="window in days")
     qa_stats.add_argument("--json", action="store_true", help="output JSON")
     qa_export = qa_sub.add_parser("export", help="export sanitized history to a JSON file")
-    qa_export.add_argument("--store", default=None)
-    qa_export.add_argument("--out", default=DEFAULT_OUT)
+    qa_export.add_argument("--history-db", "--store", dest="store", default=None)
+    qa_export.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
     qa_export.add_argument("--output", default=None, help="destination JSON file")
+    qa_gate = qa_sub.add_parser("gate", help="evaluate test, coverage, and SARIF evidence against a policy")
+    qa_gate.add_argument("path", help="artifact file or directory")
+    qa_gate.add_argument("--baseline-ref", "--baseline", dest="baseline", required=True, help="explicit Git baseline ref")
+    qa_gate.add_argument("--candidate-ref", "--head", dest="head", default="HEAD", help="candidate Git ref")
+    qa_gate.add_argument("--repo-dir", "--repo", dest="repo", required=True, help="repository for baseline diff")
+    qa_gate.add_argument("--policy", required=True, help="versioned YAML/JSON quality-gate policy")
+    qa_gate.add_argument("--coverage", action="append", default=[], help="coverage artifact; repeatable")
+    qa_gate.add_argument("--baseline-coverage", action="append", default=[],
+                         help="baseline coverage artifact used for coverage delta; repeatable")
+    qa_gate.add_argument("--sarif", action="append", default=[], help="SARIF artifact; repeatable")
+    qa_gate.add_argument("--environment", default="", help="policy environment override")
+    qa_gate.add_argument("--test-runner", "--runner", dest="runner", default=None, help="explicit test runner")
+    qa_gate.add_argument("--history-db", "--store", dest="store", default=None, help="history SQLite snapshot")
+    qa_gate.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    qa_gate.add_argument("--output", default=None, help="write the machine-readable gate result")
+    qa_gate.add_argument("--report-only", action="store_true", help="compute outcome without enforcing a block exit")
+    gate_cmd = sub.add_parser("gate", help="evaluate test, coverage, and SARIF evidence against a policy")
+    gate_cmd.set_defaults(qa_command="gate")
+    gate_cmd.add_argument("path", help="artifact file or directory")
+    gate_cmd.add_argument("--baseline-ref", "--baseline", dest="baseline", required=True, help="explicit Git baseline ref")
+    gate_cmd.add_argument("--candidate-ref", "--head", dest="head", default="HEAD", help="explicit candidate Git ref")
+    gate_cmd.add_argument("--repo-dir", "--repo", dest="repo", required=True, help="repository used for the baseline diff")
+    gate_cmd.add_argument("--policy", required=True, help="versioned YAML/JSON quality-gate policy")
+    gate_cmd.add_argument("--coverage", action="append", default=[], help="coverage artifact; repeatable")
+    gate_cmd.add_argument("--baseline-coverage", action="append", default=[], help="baseline coverage artifact; repeatable")
+    gate_cmd.add_argument("--sarif", action="append", default=[], help="SARIF artifact; repeatable")
+    gate_cmd.add_argument("--environment", default="", help="policy environment override")
+    gate_cmd.add_argument("--test-runner", "--runner", dest="runner", default=None)
+    gate_cmd.add_argument("--history-db", "--store", dest="store", default=None)
+    gate_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
+    gate_cmd.add_argument("--output", default=None)
+    gate_cmd.add_argument("--report-only", action="store_true")
     doctor_cmd = sub.add_parser("doctor", help="check local Hound readiness without exposing secrets")
     doctor_cmd.add_argument("--config", default=None, help="optional YAML config path")
-    doctor_cmd.add_argument("--out", default=DEFAULT_OUT, help="output directory to check")
+    doctor_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="output directory to check")
     doctor_cmd.add_argument("--json", action="store_true", help="output JSON")
     log_cmd = sub.add_parser(
         "log",
@@ -274,11 +318,11 @@ def build_parser() -> argparse.ArgumentParser:
     log_cmd.add_argument("--output", default=None, help="destination .log file or existing directory")
     log_cmd.add_argument("--raw-console", action="store_true", help="print unredacted output (unsafe)")
     log_cmd.add_argument("--analyze", action="store_true", help="analyze captured log after collection")
-    log_cmd.add_argument("--out", default=DEFAULT_OUT, help="analysis output directory")
+    log_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     log_cmd.add_argument("--offline", action="store_true", help="use local analysis when --analyze is set")
     log_cmd.add_argument("--config", default=None, help="optional YAML config used with --analyze")
     log_cmd.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence with --analyze")
-    log_cmd.add_argument("--no-redact", action="store_true", help="disable secret/PII redaction with --analyze")
+    log_cmd.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
     log_cmd.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     log_cmd.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
     log_cmd.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
@@ -290,20 +334,23 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_analyze_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--repo", default=None, help="path to local git checkout")
-    parser.add_argument("--out", default=DEFAULT_OUT, help="artifact directory (default: hound-agent-output)")
+    parser.add_argument("--repo-dir", "--repo", dest="repo", default=None, help="path to local git checkout")
+    parser.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="artifact directory (default: hound-agent-output)")
     parser.add_argument("--offline", action="store_true", help="local rule-based analysis; no network")
     parser.add_argument("--offline-value", choices=("true", "false"), default=None, help=argparse.SUPPRESS)
     parser.add_argument("--jobs", type=_positive_int, default=1,
                         help="parallel analysis workers (default: 1 = sequential)")
     parser.add_argument("--config", default=None, help="optional YAML config")
     parser.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
-    parser.add_argument("--no-redact", action="store_true", help="disable secret/PII redaction")
+    parser.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true",
+                        help="disable secret/PII redaction (unsafe; emits a warning)")
     parser.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     parser.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
     parser.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
     parser.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
                         help="trust profile for this artifact source")
+    parser.add_argument("--llm-preview", action="store_true",
+                        help="write the final redacted LLM payload without contacting a provider")
     parser.add_argument("--gh", action="store_true", help="file GitHub issue")
     parser.add_argument("--jira", action="store_true", help="file Jira issue")
     parser.add_argument("--gitlab", action="store_true", help="file GitLab issue")
@@ -350,6 +397,7 @@ def run_analyze(args: argparse.Namespace) -> int:
             "context_path": getattr(args, "context", None),
             "enrich": getattr(args, "enrich", False),
             "source_class": getattr(args, "source_class", None),
+            "llm_preview": getattr(args, "llm_preview", False),
         }
         common["require_llm"] = getattr(args, "require_llm", False) or None
         if legacy_file:
@@ -372,6 +420,8 @@ def run_analyze(args: argparse.Namespace) -> int:
     except OSError as exc:
         print(f"error: could not write output: {exc}", file=sys.stderr)
         return 3
+    if getattr(args, "llm_preview", False):
+        print("LLM preview only: no provider request was made.", file=sys.stderr)
     delivery_failed = False
     for run in runs:
         if getattr(args, "format", "text") == "json":
@@ -565,8 +615,30 @@ def run_qa(args: argparse.Namespace) -> int:
     )
     from hound_agent.qa.normalize import import_artifact
 
-    store = Path(args.store) if getattr(args, "store", None) else default_history_store(args.out)
     try:
+        if args.qa_command == "gate":
+            from hound_agent.qa.service import run_quality_gate
+
+            result = run_quality_gate(
+                args.path,
+                baseline=args.baseline,
+                head=args.head,
+                repo_path=args.repo,
+                policy_path=args.policy,
+                coverage_paths=args.coverage,
+                baseline_coverage_paths=args.baseline_coverage,
+                sarif_paths=args.sarif,
+                environment=args.environment,
+                runner=args.runner,
+                history_store=args.store,
+                enforced=not args.report_only,
+                output_dir=args.out,
+            )
+            rendered = json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
+            _emit_output(rendered, args.output)
+            return 1 if result.enforced and result.policy_outcome == "block" else 0
+
+        store = Path(args.store) if getattr(args, "store", None) else default_history_store(args.out)
         if args.qa_command == "analyze":
             source = Path(args.path)
             results: list = []
@@ -677,6 +749,9 @@ def run_qa(args: argparse.Namespace) -> int:
         return 2
     except (sqlite3.DatabaseError, OSError) as exc:
         print(f"error: history store failed: {exc}", file=sys.stderr)
+        return 3
+    except Exception as exc:
+        print(f"error: QA operation failed: {exc}", file=sys.stderr)
         return 3
 
 
@@ -860,6 +935,8 @@ def _maybe_file(args: argparse.Namespace, doc: dict, cfg_path: str | None) -> bo
             or getattr(args, "gitlab", False) or getattr(args, "slack_webhook", False)):
         return True
     from hound_agent.output.slack import SlackError, send_slack
+    from hound_agent.output.delivery import DeliveryLedger
+    from hound_agent.telemetry import telemetry
     from hound_agent.output.tickets import GitlabError, JiraError, create_gitlab_ticket, create_jira_ticket
     from hound_agent.triage.dedup import claim_delivery, mark_filed, release_delivery_claim
 
@@ -881,6 +958,7 @@ def _maybe_file(args: argparse.Namespace, doc: dict, cfg_path: str | None) -> bo
     configure_store(backend=config.state_backend or "file", max_entries=config.dedup_max_entries, retention_days=config.dedup_retention_days)
     state_path = default_state_path(Path(args.out), config.state_file, args.no_dedup, backend=config.state_backend)
     key = doc["triage"]["dedup_key"]
+    ledger = DeliveryLedger(Path(args.out) / ".hound-agent" / "deliveries.sqlite3")
 
     valid = True
     if getattr(args, "gh", False) and not (config.gh_repo and config.gh_token):
@@ -901,9 +979,22 @@ def _maybe_file(args: argparse.Namespace, doc: dict, cfg_path: str | None) -> bo
     ticket = _ticket_from_doc(doc)
 
     def reserve(destination: str) -> bool:
+        telemetry.increment("delivery_attempts_total")
         try:
-            return claim_delivery(state_path, key, destination)
-        except RuntimeError as exc:
+            if not ledger.reserve(key, destination):
+                telemetry.increment("delivery_idempotent_skips_total")
+                return False
+            if claim_delivery(state_path, key, destination):
+                return True
+            ledger.mark_unknown(key, destination, "legacy dedup state indicates delivered or in progress")
+            return False
+        except (RuntimeError, sqlite3.Error, OSError, KeyError) as exc:
+            try:
+                record = ledger.get(key, destination)
+                if record is not None and record.state == "pending":
+                    ledger.fail(key, destination, "reservation failed before delivery")
+            except (sqlite3.Error, OSError, KeyError):
+                pass
             print(f"warning: could not reserve {destination} delivery: {exc}", file=sys.stderr)
             return False
 
@@ -913,12 +1004,19 @@ def _maybe_file(args: argparse.Namespace, doc: dict, cfg_path: str | None) -> bo
                 print(f"warning: {destination} delivered but state update could not be persisted", file=sys.stderr)
         except RuntimeError as exc:
             print(f"warning: {destination} delivered but state update failed: {exc}", file=sys.stderr)
+        try:
+            ledger.confirm(key, destination, url)
+            telemetry.increment("delivery_confirmed_total")
+        except (sqlite3.Error, OSError, KeyError) as exc:
+            print(f"warning: {destination} delivered but ledger confirmation failed: {exc}", file=sys.stderr)
 
     def release(destination: str) -> None:
         try:
+            ledger.mark_unknown(key, destination, "delivery outcome ambiguous; reconciliation required")
+            telemetry.increment("delivery_unknown_total")
             if not release_delivery_claim(state_path, key, destination):
                 print(f"warning: could not persist release of {destination} delivery claim", file=sys.stderr)
-        except RuntimeError as exc:
+        except (RuntimeError, sqlite3.Error, OSError, KeyError) as exc:
             print(f"warning: could not release {destination} delivery claim: {exc}", file=sys.stderr)
 
     if getattr(args, "gh", False):
@@ -975,8 +1073,8 @@ def _maybe_file(args: argparse.Namespace, doc: dict, cfg_path: str | None) -> bo
 class _BatchBudget:
     """Thread-safe budget guardrail for batch LLM usage.
 
-    ``reserve_llm`` atomically reserves a call slot before work starts;
-    ``record`` accounts for what actually happened and releases the slot.
+    ``reserve_llm`` atomically consumes a call-attempt slot before work starts;
+    ``record`` releases the in-flight reservation and refunds cache reuse only.
     The call cap is strict, while the cost cap remains an estimate because
     actual token usage is only known after a response.
     """
@@ -994,10 +1092,11 @@ class _BatchBudget:
 
     def reserve_llm(self) -> bool:
         with self._lock:
-            if self.max_calls and self.calls + self.reserved_calls >= self.max_calls:
+            if self.max_calls is not None and self.calls >= self.max_calls:
                 return False
-            if self.max_cost and self.cost >= self.max_cost:
+            if self.max_cost is not None and self.cost >= self.max_cost:
                 return False
+            self.calls += 1
             self.reserved_calls += 1
             return True
 
@@ -1005,8 +1104,8 @@ class _BatchBudget:
         with self._lock:
             if not skipped:
                 self.reserved_calls -= 1
-            if llm_called:
-                self.calls += 1
+            if reused:
+                self.calls = max(0, self.calls - 1)
             self.cost += max(0.0, cost)
             if reused:
                 self.reused_runs += 1
@@ -1269,6 +1368,8 @@ def run_server(args: argparse.Namespace) -> int:
             max_queue=args.max_queue,
             rate_limit=args.rate_limit,
             job_ttl=args.job_ttl,
+            log_level=args.log_level,
+            log_format=args.log_format,
         )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -1343,6 +1444,20 @@ def run_config_show(args: argparse.Namespace) -> int:
         print(f"trust.source_class {payload['trust']['source_class']}")
         for name, ready in payload["integrations"].items():
             print(f"integration.{name:<7} {'ready' if ready else 'not configured'}")
+    return 0
+
+
+def run_config_validate(args: argparse.Namespace) -> int:
+    try:
+        load_config(config_path=args.config, offline=True, strict=not args.warn_only)
+    except (OSError, ValueError) as exc:
+        if args.json:
+            print(json.dumps({"valid": False, "error_category": "configuration", "message": str(exc)}))
+        else:
+            print(f"error: configuration: {exc}. Next action: correct the named key or value.", file=sys.stderr)
+        return 2
+    payload = {"valid": True, "config": str(Path(args.config))}
+    print(json.dumps(payload) if args.json else f"valid configuration: {args.config}")
     return 0
 
 
@@ -1486,31 +1601,38 @@ def main(argv: list[str] | None = None) -> int:
         ))
     parser = build_parser()
     args = parser.parse_args(effective_argv)
+    if getattr(args, "no_redact", False):
+        print(
+            "warning: unredacted mode can expose secrets and PII in reports, logs, and provider payloads",
+            file=sys.stderr,
+        )
     if args.command == "analyze":
         return run_analyze(args)
     if args.command == "batch":
         return run_batch(args)
-    if args.command == "tui":
+    if args.command in {"tui", "console"}:
         return run_tui(args)
-    if args.command == "server":
+    if args.command in {"server", "serve"}:
         return run_server(args)
-    if args.command == "list-providers":
+    if args.command in {"list-providers", "providers"}:
         return run_list_providers(args)
     if args.command == "report":
         return run_report(args)
-    if args.command == "list-runs":
+    if args.command in {"list-runs", "runs"}:
         return run_list_runs(args)
     if args.command == "clean":
         return run_clean(args)
     if args.command == "init":
         return run_init(args)
     if args.command == "config":
+        if args.config_command == "validate":
+            return run_config_validate(args)
         if args.config_command == "show":
             return run_config_show(args)
         return run_config(args)
     if args.command == "feedback":
         return run_feedback(args)
-    if args.command == "qa":
+    if args.command in {"qa", "insights", "gate"}:
         return run_qa(args)
     if args.command == "doctor":
         return run_doctor(args)

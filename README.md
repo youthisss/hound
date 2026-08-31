@@ -12,8 +12,8 @@
 <h3>An Offline-First CLI & TUI Tool for Investigating CI/CD, Build, and Test Failures.</h3>
 
 <p align="center">
-  <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Production--Ready-brightgreen.svg" alt="Status"></a>
-  <a href="#tests"><img src="https://img.shields.io/badge/Tests-493%20Passed-success.svg" alt="Tests"></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta-yellow.svg" alt="Status"></a>
+  <a href="#tests"><img src="https://img.shields.io/badge/Tests-CI%20Verified-success.svg" alt="Tests"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python Version"></a>
   <a href="#security-and-privacy"><img src="https://img.shields.io/badge/Security-Redaction%20Default-orange.svg" alt="Security"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
@@ -32,7 +32,7 @@
 - 🔒 **Offline-First & Deterministic:** 100% functional out of the box with zero external dependencies, no API keys, and no network access required.
 - 🤖 **Multi-Provider LLM Enhancement:** Seamlessly plug into OpenAI, Anthropic, Gemini, Groq, Ollama, DeepSeek, Azure, or local OpenAI-compatible endpoints when deeper synthesis is desired.
 - 🛡️ **Zero-Crash CI Safety:** Automatic fallback to deterministic rule engines if LLM calls time out, hit rate limits, or fail JSON schema validation. Your CI pipeline never fails because of an AI outage.
-- 💰 **Built-In Token & Cost Control:** Deduplication-first result caching, failure-kind routing (skip noisy flaky tests), and hard per-batch spend caps (`--max-cost-usd`, `--max-llm-calls`).
+- 💰 **Built-In Token & Cost Control:** Deduplication-first result caching, failure-kind routing (skip noisy flaky tests), a strict call-attempt cap (`--max-llm-calls`), and an estimated post-call cost threshold (`--max-cost-usd`).
 - 🔐 **Privacy by Design:** Automatic regex scrubbing for API keys, passwords, JWTs, connection strings, emails, and IP addresses before anything is analyzed or written to disk.
 - 🚫 **Read-Only Guarantee:** Hound analyzes and reports—it **never** deploys, retries, or rolls back infrastructure.
 
@@ -84,7 +84,20 @@
 
 ### Installation
 
-Hound requires **Python ≥ 3.10** and is managed via [`uv`](https://github.com/astral-sh/uv):
+#### End-User Installation (No clone required)
+
+```sh
+# Using uv (recommended)
+uv tool install hound-agent
+hound --version
+hound doctor
+
+# Using pipx
+pipx install hound-agent
+hound --version
+```
+
+#### Contributor Setup
 
 ```sh
 # Clone and install dependencies
@@ -224,21 +237,24 @@ hound batch --logs ./ci-logs \
 
 ---
 
-### 4. `hound server` — Webhook Receiver for CI/CD & Production
+### 4. `hound serve` — Webhook Receiver for CI/CD & Production
 
 Runs a lightweight, stdlib-based HTTP webhook service with bearer authentication and persistent SQLite job management.
 
 ```sh
-export TH_SERVER_TOKEN="your-secure-token"
+export HOUND_SERVER_TOKEN="your-secure-token"
 
-hound server \
-  --host 0.0.0.0 \
+hound serve \
+  --host 127.0.0.1 \
   --port 8123 \
   --log-root ./ci-logs \
   --out ./server-runs \
   --workers 4 \
   --rate-limit 60
 ```
+
+Hound intentionally serves plaintext HTTP on loopback only. Terminate TLS and
+apply shared rate limiting at a reverse proxy; see `docs/server-deployment.md`.
 
 #### API Endpoints:
 - `POST /analyze` — Submit analysis job `{"log": "relative/path.log", "offline": false}`
@@ -422,10 +438,10 @@ Hound includes an offline synthetic benchmark suite to verify classification, st
 
 ```sh
 # 1. Run quick smoke test gate
-uv run python examples/run_demo.py --profile smoke
+uv run python demo_project/run_demo.py --profile smoke
 
 # 2. Run high-volume scale benchmark (5,000 synthetic artifacts across 8 parallel workers)
-uv run python examples/run_demo.py --profile scale --count 5000 --jobs 8
+uv run python demo_project/run_demo.py --profile scale --count 5000 --jobs 8
 ```
 
 ---
@@ -437,7 +453,7 @@ uv run python examples/run_demo.py --profile scale --count 5000 --jobs 8
 uv run pytest
 ```
 
-> **Test Guarantee:** All tests run strictly with local fixtures—no network access or live API credentials needed (**493 passed, 5 skipped**).
+> **Test Guarantee:** All tests run strictly with local fixtures, with no live API credentials required. The current count is reported by CI.
 
 ---
 
@@ -447,10 +463,10 @@ uv run pytest
 |:---|:---|
 | 📖 [**PRD & Specifications**](docs/prd.md) | Complete functional requirements, non-functional constraints, and scope. |
 | 🏗️ [**Architecture Guide**](docs/architecture.md) | Pipeline mechanics, module map, data schemas, and contracts. |
-| 📘 [**User & Integration Manual**](docs/usage.md) | Comprehensive usage guide (TUI, CLI, integrations, and configuration). |
+| 📘 [**User & Integration Manual**](docs/usage.md) | Comprehensive usage guide (TUI, CLI, Integrations, Bahasa Indonesia). |
 | 📋 [**Correlated Log Format**](docs/log-format.md) | Standard schema and field contracts for structured error logging. |
 | 🔀 [**Schema Migration (v1.4 ➔ v2.0)**](docs/schema-migration-v1.4-to-v2.0.md) | Backward compatibility and RCA JSON schema upgrades. |
-| 🤖 [**AGENTS.md**](AGENTS.md) | Development workflow, code standards, and verification gates for contributors and AI agents. |
+| 🔄 [**Contribution Workflow**](docs/workflow.md) | Development guidelines, code standards, and verification gates. |
 
 ---
 

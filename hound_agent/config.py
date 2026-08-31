@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+from difflib import get_close_matches
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -15,6 +16,65 @@ from hound_agent.trust import policy_for, resolve_source_class
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_CONFIG_PATH = Path(".hound-agent.yml")
+
+CONFIG_SCHEMA: dict[str, object] = {
+    "llm": {
+        "provider", "model", "base_url", "api_key", "temperature", "timeout",
+        "max_tokens", "max_retries", "max_concurrency", "routing", "skip_kinds",
+        "require", "pricing",
+    },
+    "trust": {"source_class"},
+    "redact": None,
+    "components": "*",
+    "dedup": {
+        "path", "state_file", "backend", "url", "token", "max_entries",
+        "retention_days", "reuse", "reuse_after_occurrences",
+    },
+    "policy": {"severity_overrides", "recurrence_threshold"},
+    "github": {"repo", "api_base"},
+    "jira": {"url", "project", "token", "email"},
+    "gitlab": {"url", "project", "token"},
+    "slack": {"webhook_url"},
+    "observability": {
+        "prometheus_url", "prometheus_token", "tempo_url", "tempo_token", "window_minutes",
+    },
+    "runbooks": "*",
+    "source": {"send_to_llm"},
+}
+
+
+def env_value(canonical: str, legacy: str | None = None) -> str | None:
+    """Read a canonical environment variable with a deprecated fallback."""
+    if canonical in os.environ:
+        return os.environ.get(canonical)
+    if legacy and legacy in os.environ:
+        sys.stderr.write(f"Warning: {legacy} is deprecated; use {canonical}.\n")
+        return os.environ.get(legacy)
+    return None
+
+
+def _validate_unknown_keys(config: dict, *, strict: bool) -> list[str]:
+    unknown: list[str] = []
+    for key, value in config.items():
+        if key not in CONFIG_SCHEMA:
+            suggestion = get_close_matches(str(key), CONFIG_SCHEMA, n=1)
+            suffix = f"; did you mean {suggestion[0]!r}?" if suggestion else ""
+            unknown.append(f"unknown config key {key!r}{suffix}")
+            continue
+        allowed = CONFIG_SCHEMA[key]
+        if not isinstance(value, dict) or not isinstance(allowed, set):
+            continue
+        for child in value:
+            if child in allowed:
+                continue
+            suggestion = get_close_matches(str(child), sorted(allowed), n=1)
+            suffix = f"; did you mean {key}.{suggestion[0]}?" if suggestion else ""
+            unknown.append(f"unknown config key {key}.{child}{suffix}")
+    if unknown and strict:
+        raise ValueError("; ".join(unknown))
+    for warning in unknown:
+        sys.stderr.write(f"Warning: {warning}\n")
+    return unknown
 
 
 def _mapping_section(config: dict, name: str) -> dict:
@@ -82,7 +142,7 @@ PROVIDERS: dict[str, dict] = {
 
 def _pick_provider(provider: str | None) -> str:
     if not provider:
-        p = (os.environ.get("TH_API_PROVIDER") or "openai").strip().lower()
+        p = (env_value("HOUND_API_PROVIDER", "TH_API_PROVIDER") or "openai").strip().lower()
     else:
         p = provider.strip().lower()
 
@@ -158,6 +218,13 @@ class Config:
     allow_enrichment: bool = True
     allow_llm: bool = True
     allow_delivery: bool = True
+    prometheus_url: str = ""
+    prometheus_token: str = ""
+    tempo_url: str = ""
+    tempo_token: str = ""
+    observability_window_minutes: int = 15
+    runbooks: dict[str, str] = field(default_factory=dict)
+    source_send_to_llm: bool = False
 
     @property
     def llm_enabled(self) -> bool:
@@ -181,6 +248,7 @@ def load_config(
     max_retries: int | None = None,
     require_llm: bool | None = None,
     source_class: str | None = None,
+    strict: bool = False,
 ) -> Config:
     yaml_cfg: dict = {}
     if config_path:
@@ -193,6 +261,7 @@ def load_config(
             yaml_cfg = parsed
         elif parsed is not None:
             raise ValueError("config root must be a mapping")
+    _validate_unknown_keys(yaml_cfg, strict=strict)
 
     llm_cfg = _mapping_section(yaml_cfg, "llm")
     trust_cfg = _mapping_section(yaml_cfg, "trust")
@@ -219,7 +288,7 @@ def load_config(
     api_key = (
         api_key
         or yaml_key
-        or os.environ.get("TH_API_KEY")
+        or env_value("HOUND_API_KEY", "TH_API_KEY")
         or _env(p_key_env)
         or __import__("hound_agent.credentials", fromlist=["get_api_key"]).get_api_key(provider)
         or ""
@@ -229,7 +298,7 @@ def load_config(
     base_url = (
         base_url
         or llm_cfg.get("base_url")
-        or os.environ.get("TH_BASE_URL")
+        or env_value("HOUND_BASE_URL", "TH_BASE_URL")
         or _env(p_url_env)
         or preset.get("base_url")
     )
@@ -238,21 +307,25 @@ def load_config(
     model = (
         model
         or llm_cfg.get("model")
-        or os.environ.get("TH_MODEL")
+        or env_value("HOUND_MODEL", "TH_MODEL")
         or _env(p_model_env)
         or preset.get("default_model")
         or DEFAULT_MODEL
     )
 
-    # 3) Legacy OPENAI_* fallback applies ONLY to the openai preset, so a stray
-    #    OPENAI_BASE_URL/OPENAI_MODEL in the environment cannot hijack another
-    #    provider's endpoint or model.
+    # 3) Legacy OPENAI_* fallback applies ONLY to the openai preset
     if provider == "openai":
         if not api_key:
             api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not base_url:
-            base_url = os.environ.get("OPENAI_BASE_URL")
-        if model == DEFAULT_MODEL and not llm_cfg.get("model") and not _env(p_model_env):
+
+        # In case base_url wasn't customized via HOUND_LLM_BASE_URL, check OPENAI_BASE_URL
+        if not os.environ.get("HOUND_LLM_BASE_URL") and not llm_cfg.get("base_url"):
+            legacy_url = os.environ.get("OPENAI_BASE_URL")
+            if legacy_url:
+                base_url = legacy_url
+
+        # If we got the preset DEFAULT_MODEL and no HOUND_ config was set, check OPENAI_MODEL
+        if model == preset.get("default_model") and not llm_cfg.get("model") and not _env(p_model_env):
             model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
 
     if not str(model).strip():
@@ -276,12 +349,12 @@ def load_config(
     concurrency_val = llm_cfg.get("max_concurrency", 4)
 
     try:
-        temperature = float(temp_val if effective_offline else os.environ.get("TH_TEMPERATURE", temp_val))
-        timeout = float(timeout_val if effective_offline else os.environ.get("TH_TIMEOUT", timeout_val))
-        max_tokens = int(tokens_val if effective_offline else os.environ.get("TH_MAX_TOKENS", tokens_val))
-        retry_source = max_retries if max_retries is not None else (retries_val if effective_offline else os.environ.get("TH_MAX_RETRIES", retries_val))
+        temperature = float(temp_val if effective_offline else (env_value("HOUND_TEMPERATURE", "TH_TEMPERATURE") or temp_val))
+        timeout = float(timeout_val if effective_offline else (env_value("HOUND_TIMEOUT", "TH_TIMEOUT") or timeout_val))
+        max_tokens = int(tokens_val if effective_offline else (env_value("HOUND_MAX_TOKENS", "TH_MAX_TOKENS") or tokens_val))
+        retry_source = max_retries if max_retries is not None else (retries_val if effective_offline else (env_value("HOUND_MAX_RETRIES", "TH_MAX_RETRIES") or retries_val))
         resolved_retries = int(retry_source)
-        concurrency_source = concurrency_val if effective_offline else os.environ.get("TH_MAX_CONCURRENCY", concurrency_val)
+        concurrency_source = concurrency_val if effective_offline else (env_value("HOUND_MAX_CONCURRENCY", "TH_MAX_CONCURRENCY") or concurrency_val)
         resolved_concurrency = int(concurrency_source)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"invalid LLM numeric configuration: {exc}") from exc
@@ -316,7 +389,7 @@ def load_config(
     if not isinstance(require_llm_val, bool):
         raise ValueError("llm.require must be a boolean")
     resolved_require_llm = require_llm if require_llm is not None else (
-        require_llm_val or os.environ.get("TH_REQUIRE_LLM", "") == "1"
+        require_llm_val or env_value("HOUND_REQUIRE_LLM", "TH_REQUIRE_LLM") == "1"
     )
     if effective_offline and resolved_require_llm:
         raise ValueError("llm.require cannot be enabled in offline mode")
@@ -341,7 +414,7 @@ def load_config(
 
 
     redact_cfg = yaml_cfg.get("redact")
-    redact_val = not (os.environ.get("TH_NO_REDACT", "") == "1") and redact_cfg is not False
+    redact_val = not (env_value("HOUND_ALLOW_UNREDACTED", "TH_NO_REDACT") == "1") and redact_cfg is not False
     if redact is not None:
         redact_val = redact
     if trust.source_class == "fork_pr":
@@ -484,6 +557,44 @@ def load_config(
         cfg.slack_webhook = str(slack["webhook_url"])
     if os.environ.get("SLACK_WEBHOOK_URL") and not cfg.slack_webhook:
         cfg.slack_webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+
+    observability = _mapping_section(yaml_cfg, "observability")
+    cfg.prometheus_url = str(observability.get("prometheus_url") or os.environ.get("PROMETHEUS_URL") or "").rstrip("/")
+    cfg.tempo_url = str(observability.get("tempo_url") or os.environ.get("TEMPO_URL") or "").rstrip("/")
+    for name, value in (("prometheus_url", cfg.prometheus_url), ("tempo_url", cfg.tempo_url)):
+        if not value:
+            continue
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(f"observability.{name} must be an HTTP(S) URL")
+        if parsed.scheme != "https" and (parsed.hostname or "").lower() not in {"localhost", "127.0.0.1", "::1"}:
+            raise ValueError(f"observability.{name} must use HTTPS unless it targets loopback")
+    if observability.get("prometheus_token") or observability.get("tempo_token"):
+        sys.stderr.write("Warning: observability token found in YAML config; prefer environment variables.\n")
+    cfg.prometheus_token = str(observability.get("prometheus_token") or os.environ.get("PROMETHEUS_TOKEN") or "")
+    cfg.tempo_token = str(observability.get("tempo_token") or os.environ.get("TEMPO_TOKEN") or "")
+    window = observability.get("window_minutes", 15)
+    try:
+        cfg.observability_window_minutes = int(window)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("observability.window_minutes must be an integer") from exc
+    if not 1 <= cfg.observability_window_minutes <= 120:
+        raise ValueError("observability.window_minutes must be in [1, 120]")
+    runbooks = _mapping_section(yaml_cfg, "runbooks")
+    cfg.runbooks = {}
+    for service, url_value in runbooks.items():
+        url = str(url_value)
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(f"runbooks.{service} must be an HTTP(S) URL")
+        if parsed.scheme != "https" and (parsed.hostname or "").lower() not in {"localhost", "127.0.0.1", "::1"}:
+            raise ValueError(f"runbooks.{service} must use HTTPS unless it targets loopback")
+        cfg.runbooks[str(service)] = url
+    source = _mapping_section(yaml_cfg, "source")
+    send_to_llm = source.get("send_to_llm", False)
+    if not isinstance(send_to_llm, bool):
+        raise ValueError("source.send_to_llm must be a boolean")
+    cfg.source_send_to_llm = send_to_llm
     return cfg
 
 

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from hound_agent.analyze.fallback import build_root_cause
 from hound_agent.formatters import format_document
@@ -77,3 +78,14 @@ def test_schema_document_publishes_v2_analysis_contract():
     assert {"observed_facts", "evidence", "hypotheses"}.issubset(
         schema["properties"]["analysis"]["required"]
     )
+
+
+def test_current_writer_matches_published_json_schema():
+    schema = json.loads(Path("docs/schema/rca-v2.0.schema.json").read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    artifacts = make_artifacts("pytest_fail.log")
+    root_cause = build_root_cause(artifacts)
+    triage = Triage(component="tests", dedup_key="a" * 64)
+    ticket = build_ticket(artifacts, root_cause, triage)
+    doc = build_doc(artifacts, root_cause, triage, ticket, "2026-01-01T00:00:00Z")
+    Draft202012Validator(schema).validate(doc)

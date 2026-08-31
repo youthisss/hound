@@ -13,6 +13,9 @@
     "root_cause": {"$ref": "#/$defs/rootCause"},
     "triage": {"$ref": "#/$defs/triage"},
     "ticket": {"$ref": "#/$defs/ticket"},
+    "timeline": {"$ref": "#/$defs/timeline"},
+    "devops": {"$ref": "#/$defs/devops"},
+    "test_impact": {"$ref": "#/$defs/testImpact"},
     "analysis": {
       "type": "object",
       "additionalProperties": false,
@@ -89,7 +92,15 @@
         "stage": {"enum": ["ci", "build", "test", "deploy", "unknown"]},
         "kind": {"$ref": "#/$defs/failureKind"},
         "message": {"type": "string"},
-        "role": {"enum": ["primary", "downstream"]}
+        "role": {"enum": ["primary", "downstream"]},
+        "event_id": {"type": "string"},
+        "service": {"type": "string"},
+        "trace_id": {"type": "string"},
+        "span_id": {"type": "string"},
+        "parent_span_id": {"type": ["string", "null"]},
+        "timestamp": {"type": "string"},
+        "timestamp_ns": {"type": ["integer", "null"], "minimum": 0},
+        "sequence": {"type": ["integer", "null"], "minimum": 0}
       }
     },
     "failureKind": {
@@ -155,7 +166,19 @@
         "target": {"type": "string"}, "namespace": {"type": "string"}, "release": {"type": "string"},
         "revision": {"type": "string"}, "previous_revision": {"type": "string"}, "artifact": {"type": "string"},
         "strategy": {"type": "string"}, "started_at": {"type": "string"}, "migration_version": {"type": "string"},
-        "outcome": {"type": "string"}, "recovery": {"type": "string"}
+        "outcome": {"type": "string"}, "recovery": {"type": "string"},
+        "service": {"type": "string"}, "workload": {"type": "string"}, "commit": {"type": "string"},
+        "image_digest": {"type": "string"}, "finished_at": {"type": "string"},
+        "previous_commit": {"type": "string"}, "previous_image_digest": {"type": "string"},
+        "customer_impact": {"enum": ["", "unknown", "none", "degraded", "outage"]},
+        "manifest_digest": {"type": "string"}, "previous_manifest_digest": {"type": "string"},
+        "resource_fingerprint": {"type": "string"}, "previous_resource_fingerprint": {"type": "string"},
+        "previous_migration_version": {"type": "string"},
+        "runtime_version": {"type": "string"}, "previous_runtime_version": {"type": "string"},
+        "dependency_fingerprint": {"type": "string"}, "previous_dependency_fingerprint": {"type": "string"},
+        "feature_flag_version": {"type": "string"}, "previous_feature_flag_version": {"type": "string"},
+        "slo_target": {"type": "string"}, "error_budget_remaining": {"type": "string"},
+        "runbook_url": {"type": "string"}
       }
     },
     "requestContext": {
@@ -173,7 +196,25 @@
       "properties": {
         "run": {"$ref": "#/$defs/runContext"}, "deployment": {"$ref": "#/$defs/deploymentContext"},
         "request": {"$ref": "#/$defs/requestContext"},
-        "owners": {"type": "array", "items": {"type": "string"}}
+        "owners": {"type": "array", "items": {"type": "string"}},
+        "connector_audits": {"type": "array", "items": {"$ref": "#/$defs/connectorAudit"}},
+        "source_evidence": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "connectorAudit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["connector", "operation", "resource", "namespace", "status", "observed_at", "duration_ms", "output_bytes", "returncode", "error"],
+      "properties": {
+        "connector": {"enum": ["kubernetes", "helm", "prometheus", "tempo"]},
+        "operation": {"type": "string"},
+        "resource": {"type": "string"},
+        "namespace": {"type": "string"},
+        "status": {"enum": ["collected", "command_failed", "denied", "unavailable", "timeout", "failed"]},
+        "observed_at": {"type": "string"},
+        "duration_ms": {"type": "integer", "minimum": 0},
+        "output_bytes": {"type": "integer", "minimum": 0},
+        "returncode": {"type": ["integer", "null"]},
+        "error": {"type": "string"}
       }
     },
     "rootCause": {
@@ -262,6 +303,76 @@
         },
         "missing_information": {"type": "array", "items": {"type": "string"}},
         "recommended_checks": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "timeline": {
+      "type": "object", "additionalProperties": false,
+      "required": ["entries", "grouping", "ordering_basis", "has_cycles", "cycle_warning", "primary_event_id", "downstream_event_ids", "recovery_event_ids", "customer_impact", "release_changed", "release_changed_fields"],
+      "properties": {
+        "entries": {"type": "array", "items": {"$ref": "#/$defs/timelineEvent"}},
+        "grouping": {"enum": ["runtime", "pipeline", "mixed", "none"]},
+        "ordering_basis": {"enum": ["timestamp_ns", "sequence", "log_order", "mixed"]},
+        "has_cycles": {"type": "boolean"},
+        "cycle_warning": {"type": "string"},
+        "primary_event_id": {"type": "string"},
+        "downstream_event_ids": {"type": "array", "items": {"type": "string"}},
+        "recovery_event_ids": {"type": "array", "items": {"type": "string"}},
+        "customer_impact": {"enum": ["unknown", "none", "degraded", "outage"]},
+        "release_changed": {"type": ["boolean", "null"]},
+        "release_changed_fields": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "devops": {
+      "type": "object", "additionalProperties": false,
+      "required": ["release_changes", "metric_samples", "trace_spans", "service_boundaries", "service_versions", "critical_path", "slo", "static_severity", "effective_severity", "severity_reasons", "runbook"],
+      "properties": {
+        "release_changes": {"type": "array", "items": {"type": "object"}},
+        "metric_samples": {"type": "array", "items": {"type": "object"}},
+        "trace_spans": {"type": "array", "items": {"type": "object"}},
+        "service_boundaries": {"type": "array", "items": {"type": "string"}},
+        "service_versions": {"type": "object"},
+        "critical_path": {"type": "object"},
+        "slo": {"type": "object"},
+        "static_severity": {"type": "string"},
+        "effective_severity": {"type": "string"},
+        "severity_reasons": {"type": "array", "items": {"type": "string"}},
+        "runbook": {"type": "object"}
+      }
+    },
+    "testImpact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["advisory", "language", "max_depth", "call_graph", "recommendations", "missing_coverage", "uncertainty", "runtime_trace_contract"],
+      "properties": {
+        "advisory": {"const": true},
+        "language": {"const": "python"},
+        "max_depth": {"type": "integer", "minimum": 1, "maximum": 2},
+        "call_graph": {"type": "array", "items": {"type": "object"}},
+        "recommendations": {"type": "array", "items": {"type": "object"}},
+        "missing_coverage": {"type": "boolean"},
+        "uncertainty": {"type": "string"},
+        "runtime_trace_contract": {"type": "object"}
+      }
+    },
+    "timelineEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event_id", "position", "stage", "kind", "role", "message", "ordering_basis"],
+      "properties": {
+        "event_id": {"type": "string"},
+        "position": {"type": "integer", "minimum": 0},
+        "timestamp_ns": {"type": ["integer", "null"], "minimum": 0},
+        "timestamp": {"type": "string"},
+        "sequence": {"type": ["integer", "null"], "minimum": 0},
+        "stage": {"enum": ["ci", "build", "test", "deploy", "unknown"]},
+        "kind": {"$ref": "#/$defs/failureKind"},
+        "role": {"enum": ["primary", "downstream", "recovery", "context", "unknown"]},
+        "message": {"type": "string"},
+        "trace_id": {"type": "string"},
+        "span_id": {"type": "string"},
+        "parent_span_id": {"type": ["string", "null"]},
+        "service": {"type": "string"},
+        "source": {"enum": ["failure_event", "deployment", "ci", "recovery", ""]},
+        "ordering_basis": {"enum": ["timestamp_ns", "sequence", "log_order"]},
+        "uncertainty": {"type": "string"}
       }
     }
   }

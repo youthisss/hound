@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import yaml
 from platformdirs import user_cache_path, user_config_path
@@ -17,6 +17,14 @@ from hound_agent.fsio import atomic_write
 PROVIDER_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 REGISTRY_PATH = user_config_path("hound-agent") / "providers.yml"
 CACHE_PATH = user_cache_path("hound-agent") / "models.json"
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+urlopen = build_opener(_NoRedirect()).open
 
 
 def validate_base_url(value: str) -> str:

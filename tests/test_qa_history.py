@@ -42,6 +42,16 @@ from hound_agent.qa.normalize import (
     parse_test_json_results,
 )
 
+
+def test_history_store_preserves_corrupt_database(tmp_path):
+    path = tmp_path / "history.sqlite3"
+    path.write_bytes(b"not a sqlite database")
+    result = NormalizedTestResult(suite="suite", test="test", status="passed", run_id="run")
+    with pytest.raises(ValueError, match="original preserved"):
+        upsert_results(path, [result])
+    recovery = next(tmp_path.glob("history.sqlite3.corrupt-*"))
+    assert (recovery / "history.sqlite3").read_bytes() == b"not a sqlite database"
+
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
 
 _JUNIT = """<?xml version="1.0" encoding="UTF-8"?>
@@ -254,13 +264,18 @@ class TestHistoryStore:
 
     def test_import_export_roundtrip(self, tmp_path):
         store = tmp_path / "history.sqlite3"
-        upsert_results(store, [_result(run_id="r1"), _result(run_id="r2", status="passed")])
+        first = _result(run_id="r1")
+        first.evidence_id = "ev-001"
+        upsert_results(store, [first, _result(run_id="r2", status="passed")])
         export_path = tmp_path / "history.json"
         manifest = export_history(store, export_path)
         assert manifest["count"] == 2
+        assert manifest["records"][0]["evidence_id"] == "ev-001"
         store2 = tmp_path / "history2.sqlite3"
         assert import_history(store2, export_path) == 2
         assert failure_rate(store2, "tests.test_checkout", "test_cart_total") == 0.5
+        rows = history_for_test(store2, "tests.test_checkout", "test_cart_total")
+        assert {row["evidence_id"] for row in rows} == {"ev-001", None}
 
     def test_record_doc_results(self, tmp_path):
         store = tmp_path / "history.sqlite3"

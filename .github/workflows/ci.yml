@@ -1,14 +1,33 @@
 name: CI
 
 on:
-  push:
   pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
+      - run: uv sync --frozen --extra dev
+      - run: uv run ruff check .
+      - run: uv run mypy hound_agent
+      - run: uv run pytest -m integration -q
+
+  compatibility:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -17,46 +36,105 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - run: uv python install ${{ matrix.python }}
+      - run: uv sync --frozen --extra dev --python ${{ matrix.python }}
+      - run: uv run --python ${{ matrix.python }} pytest -m unit -q
+
+  extended:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - run: uv sync --frozen --extra dev
-      - run: uv run ruff check .
-      - run: uv run mypy hound_agent
       - run: uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
+      - run: uv run python -m hound_agent.eval --offline --format json
       - name: Audit locked production dependencies
-        if: matrix.python == '3.12'
         run: |
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
           uv run pip-audit --requirement audited-requirements.txt
-      - if: matrix.python == '3.12'
-        run: uv run python examples/run_demo.py --profile smoke
-      - if: matrix.python == '3.12'
-        run: uv build
-      - run: uv run python -m py_compile hound_agent/*.py hound_agent/analyze/*.py hound_agent/ingest/*.py hound_agent/output/*.py hound_agent/triage/*.py
-      - if: matrix.python == '3.12'
-        run: docker build -t hound:test .
-      - if: matrix.python == '3.12'
-        run: docker build -f Dockerfile.action -t hound-action:test .
-      - name: Scan source and dependencies
-        if: matrix.python == '3.12'
+      - run: uv run python demo_project/run_demo.py --profile smoke
+      - run: uv build
+      - run: uv run twine check dist/*.whl dist/*.tar.gz
+      - run: docker build -t hound:test .
+      - run: docker build -f Dockerfile.action -t hound-action:test .
+      - name: Smoke-test GitHub Action contract
+        shell: bash
+        run: |
+          mkdir action-smoke
+          cp tests/fixtures/pytest_fail.log action-smoke/failure.log
+          touch action-smoke/github-output
+          set +e
+          docker run --rm \
+            -e GITHUB_WORKSPACE=/workspace \
+            -e GITHUB_OUTPUT=/workspace/github-output \
+            -v "$PWD/action-smoke:/workspace" \
+            hound-action:test analyze --log failure.log --repo . --out out --offline-value true
+          status=$?
+          set -e
+          test "$status" -eq 1
+          test -f action-smoke/out/report.json
+          grep -q '^report=' action-smoke/github-output
+          grep -q '^severity=' action-smoke/github-output
+          grep -q '"kind": "test_failure"' action-smoke/out/report.json
+      - name: Scan repository and generated artifacts
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
         with:
           scan-type: fs
           scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Scan runtime image
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        with:
+          image-ref: hound:test
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Scan Action image
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        with:
+          image-ref: hound-action:test
+          scanners: vuln,secret
           severity: HIGH,CRITICAL
           exit-code: "1"
 
   windows:
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - run: uv sync --frozen --extra dev
-      - run: uv run ruff check .
-      - run: uv run pytest -q
+      - run: uv run pytest -m "not slow and not network" -q
       - run: uv build
       - shell: pwsh
         run: |
-          uv venv wheel-smoke
-          $wheel = (Get-ChildItem dist\*.whl | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
-          uv pip install --python wheel-smoke\Scripts\python.exe $wheel
-          wheel-smoke\Scripts\hound.exe --version
-          wheel-smoke\Scripts\hound.exe doctor --out wheel-smoke-output --json
+          $smoke = Join-Path $env:RUNNER_TEMP "hound-wheel-smoke"
+          uv venv "$smoke\venv"
+          $wheel = (Get-ChildItem dist\*.whl | Select-Object -First 1).FullName
+          uv pip install --python "$smoke\venv\Scripts\python.exe" $wheel
+          Push-Location $smoke
+          & "$smoke\venv\Scripts\hound.exe" --version
+          & "$smoke\venv\Scripts\hound.exe" doctor --out doctor-output --json
+          Pop-Location
+
+  ci-result:
+    if: always()
+    needs: [quality, compatibility, extended, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize required checks
+        env:
+          QUALITY: ${{ needs.quality.result }}
+          COMPATIBILITY: ${{ needs.compatibility.result }}
+          EXTENDED: ${{ needs.extended.result }}
+          WINDOWS: ${{ needs.windows.result }}
+        run: |
+          printf '| Check | Result |\n|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '| quality | %s |\n| compatibility | %s |\n| extended | %s |\n| windows | %s |\n' \
+            "$QUALITY" "$COMPATIBILITY" "$EXTENDED" "$WINDOWS" >> "$GITHUB_STEP_SUMMARY"
+          test "$QUALITY" = success
+          test "$COMPATIBILITY" = success
+          test "$EXTENDED" = success -o "$EXTENDED" = skipped
+          test "$WINDOWS" = success -o "$WINDOWS" = skipped

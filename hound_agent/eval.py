@@ -24,6 +24,7 @@ from hound_agent.triage.severity import classify
 CASE_VERSION = "1.0"
 DEFAULT_CORPUS = Path("tests/eval/cases")
 BASELINE_PATH = Path("tests/eval/baseline-v1.0.json")
+DEFAULT_TEST_IMPACT_CORPUS = Path("tests/eval/test-impact-v1.0.json")
 _TOP_LEVEL_FIELDS = {"eval_case_version", "id", "artifact", "expected"}
 _EXPECTED_FIELDS = {
     "stage", "kind", "primary_event", "failed_tests", "stack_frames",
@@ -257,9 +258,12 @@ def evaluate(corpus: Path = DEFAULT_CORPUS, suite: str = "all") -> dict[str, Any
     if suite == "qa-history":
         from hound_agent.qa.eval import evaluate_qa_history
         return evaluate_qa_history()
+    if suite == "test-impact":
+        path = DEFAULT_TEST_IMPACT_CORPUS if corpus == DEFAULT_CORPUS else corpus
+        return evaluate_test_impact(path)
     corpus = corpus.resolve()
     if suite not in {"all", "dev", "held_out"}:
-        raise ValueError("suite must be all, dev, held_out, or qa-history")
+        raise ValueError("suite must be all, dev, held_out, qa-history, or test-impact")
     paths = _case_paths(corpus)
     cases = [load_case(path, corpus) for path in paths]
     if suite != "all":
@@ -346,11 +350,58 @@ def evaluate(corpus: Path = DEFAULT_CORPUS, suite: str = "all") -> dict[str, Any
     return report
 
 
+def evaluate_test_impact(corpus: Path = DEFAULT_TEST_IMPACT_CORPUS) -> dict[str, Any]:
+    """Evaluate advisory test recommendations against labeled symbol/test pairs."""
+    from hound_agent.source.impact import build_test_impact
+
+    data = json.loads(corpus.resolve().read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("version") != "1.0":
+        raise ValueError("test-impact corpus version must be 1.0")
+    cases = data.get("cases")
+    minimum_recall = data.get("minimum_recall")
+    if not isinstance(cases, list) or not cases:
+        raise ValueError("test-impact corpus must contain cases")
+    if not isinstance(minimum_recall, (int, float)) or not 0 <= minimum_recall <= 1:
+        raise ValueError("test-impact minimum_recall must be between 0 and 1")
+    repo = (corpus.resolve().parent / str(data.get("repo") or ".")).resolve()
+    results = []
+    expected_total = 0
+    matched_total = 0
+    for case in cases:
+        if not isinstance(case, dict):
+            raise ValueError("test-impact cases must be objects")
+        evidence = case.get("source_evidence")
+        expected = case.get("expected_tests")
+        if not isinstance(evidence, list) or not isinstance(expected, list) or not all(isinstance(item, str) for item in expected):
+            raise ValueError("test-impact case evidence and expected_tests are invalid")
+        impact = build_test_impact(repo, evidence)
+        actual = {str(item.get("test") or "") for item in impact["recommendations"]}
+        expected_set = set(expected)
+        matched = len(actual & expected_set)
+        expected_total += len(expected_set)
+        matched_total += matched
+        results.append({
+            "id": str(case.get("id") or ""),
+            "expected_tests": sorted(expected_set),
+            "recommended_tests": sorted(actual),
+            "recall": _ratio(matched, len(expected_set)),
+        })
+    recall = _ratio(matched_total, expected_total)
+    if recall < float(minimum_recall):
+        raise RuntimeError(f"test-impact recall {recall:.3f} is below {float(minimum_recall):.3f}")
+    return {
+        "suite": "test-impact",
+        "metrics": {"recommendation_recall": recall},
+        "minimum_recall": float(minimum_recall),
+        "cases": results,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--offline", action="store_true", help="required; evaluation never uses the network")
     parser.add_argument("--format", choices=("json",), default="json")
-    parser.add_argument("--suite", choices=("all", "dev", "held_out", "qa-history"), default="all")
+    parser.add_argument("--suite", choices=("all", "dev", "held_out", "qa-history", "test-impact"), default="all")
     parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     args = parser.parse_args(argv)
     if not args.offline:

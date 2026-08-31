@@ -1,0 +1,18 @@
+{
+  "eval_case_version": "1.0",
+  "id": "dev-partial-trace-deploy",
+  "artifact": "partial-trace-deploy.log",
+  "expected": {
+    "stage": "deploy",
+    "kind": "crash_loop",
+    "primary_event": {
+      "stage": "deploy",
+      "kind": "crash_loop"
+    },
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high", "critical"],
+    "duplicate_group": null,
+    "redactions": []
+  }
+}

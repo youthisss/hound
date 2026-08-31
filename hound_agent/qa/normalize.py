@@ -210,11 +210,16 @@ def _walk_json_tests(
     run_id: str,
     recorded_at: str,
     suite_hint: str = "unknown",
+    depth: int = 0,
 ) -> None:
+    if depth >= 100:
+        raise ValueError("test JSON exceeds the maximum nesting depth of 100")
     if isinstance(node, dict):
         outcome = _outcome_of(node)
         name = node.get("name") or node.get("test") or node.get("test_name") or node.get("id")
         if outcome is not None and name:
+            if len(results) >= 10000:
+                raise ValueError("test JSON exceeds the 10000 result limit")
             suite = str(node.get("classname") or node.get("file") or node.get("suite") or suite_hint)
             duration = _duration_ms(node.get("duration_ms") or node.get("duration") or node.get("time"))
             message = node.get("message") or node.get("error") or node.get("traceback") or ""
@@ -230,12 +235,12 @@ def _walk_json_tests(
             child = node.get(key)
             if isinstance(child, list):
                 for item in child:
-                    _walk_json_tests(item, runner, results, commit, branch, environment, run_id, recorded_at, suite_hint)
+                    _walk_json_tests(item, runner, results, commit, branch, environment, run_id, recorded_at, suite_hint, depth + 1)
         for key in ("testsuites", "suites"):
             child = node.get(key)
             if isinstance(child, list):
                 for item in child:
-                    _walk_json_tests(item, runner, results, commit, branch, environment, run_id, recorded_at, suite_hint)
+                    _walk_json_tests(item, runner, results, commit, branch, environment, run_id, recorded_at, suite_hint, depth + 1)
         # pytest-json-report "summary" style: nested dicts of outcomes
         summary = node.get("summary")
         if isinstance(summary, dict):
@@ -245,12 +250,13 @@ def _walk_json_tests(
                     for item in items:
                         if isinstance(item, dict):
                             _walk_json_tests(
-                                {**item, "outcome": "failed" if section == "errors" else section[:-1]},
+                                {**item, "outcome": "error" if section == "errors" else section},
                                 runner, results, commit, branch, environment, run_id, recorded_at, suite_hint,
+                                depth + 1,
                             )
     elif isinstance(node, list):
         for item in node:
-            _walk_json_tests(item, runner, results, commit, branch, environment, run_id, recorded_at, suite_hint)
+            _walk_json_tests(item, runner, results, commit, branch, environment, run_id, recorded_at, suite_hint, depth + 1)
 
 
 def parse_test_json_results(
@@ -267,7 +273,7 @@ def parse_test_json_results(
         raise ValueError("test JSON must not use symlinks and must be bounded")
     try:
         payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError(f"could not parse test JSON: {exc}") from exc
 
     results: list[NormalizedTestResult] = []

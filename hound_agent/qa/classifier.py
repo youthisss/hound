@@ -17,9 +17,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import time
 from typing import Any
 
-from hound_agent.qa.history import count_by_status, duration_stats, environment_breakdown, failure_rate, history_for_test
+from hound_agent.ingest.owners import resolve_owners
+from hound_agent.qa.history import count_by_status, duration_stats, environment_breakdown, history_for_test
 from hound_agent.qa.model import INSUFFICIENT_HISTORY, NormalizedTestResult
 
 # Conservative minimum thresholds
@@ -32,6 +34,7 @@ DURATION_REGRESSION_RATIO = 2.0  # at least 2x baseline median duration
 DURATION_REGRESSION_MIN_MS = 100  # avoid flagging sub-second microsecond noise
 
 QA_CLASSIFICATIONS = {
+    "passed",
     "new_failure",
     "known_failure",
     "retry_recovered",
@@ -41,6 +44,11 @@ QA_CLASSIFICATIONS = {
     "likely_regression",
     "insufficient_history",
 }
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() > deadline:
+        raise ValueError("QA classification exceeded the gate deadline")
 
 
 @dataclass
@@ -67,6 +75,9 @@ class QAClassification:
     supporting_evidence: list[dict[str, Any]] = field(default_factory=list)
     contradicting_evidence: list[dict[str, Any]] = field(default_factory=list)
     environment_correlation: dict[str, int] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
+    owners: list[str] = field(default_factory=list)
+    related_incidents: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,6 +96,9 @@ class QAClassification:
             "supporting_evidence": self.supporting_evidence,
             "contradicting_evidence": self.contradicting_evidence,
             "environment_correlation": self.environment_correlation,
+            "evidence_refs": self.evidence_refs,
+            "owners": self.owners,
+            "related_incidents": self.related_incidents,
         }
 
 
@@ -123,6 +137,9 @@ def classify_test_result(
     attempts_in_run: list[NormalizedTestResult] | None = None,
     baseline_commit: str | None = None,
     days: int | None = None,
+    deadline: float | None = None,
+    repo_dir: str | Path | None = None,
+    feedback_store_path: str | Path | None = None,
 ) -> QAClassification:
     """Classify a single test result against historical evidence and baseline.
 
@@ -132,10 +149,38 @@ def classify_test_result(
         attempts_in_run: Other attempts of this test in the same run (for retry detection)
         baseline_commit: Specific commit SHA to compare as baseline (e.g. main branch HEAD)
         days: Analysis window in days
+        deadline: Monotonic deadline timestamp
+        repo_dir: Repository path for CODEOWNERS resolution
+        feedback_store_path: Optional path to feedback SQLite store for related incidents
     """
     suite = candidate.suite
     test = candidate.test
     status = candidate.status
+    _check_deadline(deadline)
+
+    owners: list[str] = []
+    if repo_dir:
+        owners = resolve_owners(repo_dir, [suite, f"{suite}/{test}"])
+
+    related_incidents: list[dict[str, Any]] = []
+    if feedback_store_path and Path(feedback_store_path).is_file():
+        try:
+            from hound_agent.feedback import read_feedback
+            # Find reviewed feedback entries that match this suite/test or failure signature
+            feedbacks = read_feedback(feedback_store_path, reviewed_only=True)
+            for fb in feedbacks:
+                pred_comp = fb.get("predicted_component", "")
+                if suite in pred_comp or fb.get("dedup_key") == candidate.failure_signature:
+                    related_incidents.append({
+                        "feedback_id": fb.get("feedback_id"),
+                        "run_id": fb.get("run_id"),
+                        "actual_outcome": fb.get("actual_outcome"),
+                        "actual_owner": fb.get("actual_owner"),
+                        "actual_kind": fb.get("actual_kind"),
+                        "actual_severity": fb.get("actual_severity") or fb.get("predicted_severity"),
+                    })
+        except Exception:
+            pass
 
     # 1. Single-run retry recovery check (strongest flaky signal)
     if attempts_in_run:
@@ -158,6 +203,8 @@ def classify_test_result(
                         "attempts": [a.to_dict() for a in sorted_attempts],
                     }
                 ],
+                owners=owners,
+                related_incidents=related_incidents,
             )
         # If candidate is a failure but there is a later pass in the same run
         has_later_pass = any(a.attempt > candidate.attempt and a.status == "passed" for a in sorted_attempts)
@@ -178,6 +225,8 @@ def classify_test_result(
                         "attempts": [a.to_dict() for a in sorted_attempts],
                     }
                 ],
+                owners=owners,
+                related_incidents=related_incidents,
             )
 
     # If no store is provided or test passed with no retry anomaly
@@ -191,15 +240,23 @@ def classify_test_result(
             candidate_status=status,
             sample_count=0,
             historical_failure_rate=None,
+            owners=owners,
+            related_incidents=related_incidents,
         )
 
     # 2. Query history store
-    counts = count_by_status(store_path, suite, test, days=days)
+    counts = count_by_status(store_path, suite, test, days=days, deadline=deadline)
+    _check_deadline(deadline)
     total_samples = sum(counts.values())
-    fail_rate = failure_rate(store_path, suite, test, days=days)
-    history_rows = history_for_test(store_path, suite, test, limit=100, days=days)
-    dur_stats = duration_stats(store_path, suite, test, days=days)
-    env_breakdown = environment_breakdown(store_path, suite, test)
+    failed_samples = counts["failed"] + counts["error"]
+    denominator = failed_samples + counts["passed"]
+    fail_rate = round(failed_samples / denominator, 6) if denominator > 0 else None
+    history_rows = history_for_test(store_path, suite, test, limit=100, days=days, deadline=deadline)
+    _check_deadline(deadline)
+    dur_stats = duration_stats(store_path, suite, test, days=days, deadline=deadline)
+    _check_deadline(deadline)
+    env_breakdown = environment_breakdown(store_path, suite, test, deadline=deadline)
+    _check_deadline(deadline)
 
     # Duration regression check
     is_dur_regr, dur_delta, dur_baseline_median = check_duration_regression(
@@ -228,6 +285,8 @@ def classify_test_result(
                     "type": "duration_regression",
                     "description": f"Duration {candidate.duration_ms}ms is >2x baseline median {dur_baseline_median}ms",
                 }],
+                owners=owners,
+                related_incidents=related_incidents,
             )
         return QAClassification(
             suite=suite,
@@ -242,6 +301,8 @@ def classify_test_result(
             duration_delta_ms=dur_delta,
             duration_baseline_median_ms=dur_baseline_median,
             duration_candidate_ms=candidate.duration_ms,
+            owners=owners,
+            related_incidents=related_incidents,
         )
 
     # 3. Failure analysis: sample count threshold check
@@ -264,6 +325,8 @@ def classify_test_result(
                 "description": f"Only {total_samples} historical runs recorded",
                 "counts": counts,
             }],
+            owners=owners,
+            related_incidents=related_incidents,
         )
 
     failed_count = counts["failed"] + counts["error"]
@@ -305,6 +368,8 @@ def classify_test_result(
                 duration_candidate_ms=candidate.duration_ms,
                 supporting_evidence=supporting,
                 environment_correlation=env_breakdown,
+                owners=owners,
+                related_incidents=related_incidents,
             )
 
     # 5. Baseline Comparison (Likely Regression vs Known Failure)
@@ -333,6 +398,8 @@ def classify_test_result(
                     duration_baseline_median_ms=dur_baseline_median,
                     duration_candidate_ms=candidate.duration_ms,
                     supporting_evidence=supporting,
+                    owners=owners,
+                    related_incidents=related_incidents,
                 )
             elif baseline_failed and not baseline_passed:
                 supporting.append({
@@ -354,6 +421,8 @@ def classify_test_result(
                     duration_baseline_median_ms=dur_baseline_median,
                     duration_candidate_ms=candidate.duration_ms,
                     supporting_evidence=supporting,
+                    owners=owners,
+                    related_incidents=related_incidents,
                 )
 
     # 6. Statistical Classification (new_failure, known_failure, historically_flaky, flaky_suspect)
@@ -378,6 +447,8 @@ def classify_test_result(
             duration_baseline_median_ms=dur_baseline_median,
             duration_candidate_ms=candidate.duration_ms,
             supporting_evidence=supporting,
+            owners=owners,
+            related_incidents=related_incidents,
         )
 
     # Known Failure (High consistent failure rate)
@@ -401,6 +472,8 @@ def classify_test_result(
             duration_baseline_median_ms=dur_baseline_median,
             duration_candidate_ms=candidate.duration_ms,
             supporting_evidence=supporting,
+            owners=owners,
+            related_incidents=related_incidents,
         )
 
     # Historically Flaky (Intermittent pass and fail in history)
@@ -426,6 +499,8 @@ def classify_test_result(
                 duration_baseline_median_ms=dur_baseline_median,
                 duration_candidate_ms=candidate.duration_ms,
                 supporting_evidence=supporting,
+                owners=owners,
+                related_incidents=related_incidents,
             )
 
     # Flaky Suspect (Occasional failure < 5%, but not pure new failure)
@@ -449,15 +524,22 @@ def classify_test_result(
             duration_baseline_median_ms=dur_baseline_median,
             duration_candidate_ms=candidate.duration_ms,
             supporting_evidence=supporting,
+            owners=owners,
+            related_incidents=related_incidents,
         )
 
     # Fallback to likely regression if mostly passing (fail_rate low) or insufficient clarity
+    if fail_rate is None:
+        fail_rate_str = "unknown"
+    else:
+        fail_rate_str = f"{fail_rate:.1%}"
+
     return QAClassification(
         suite=suite,
         test=test,
         decision="likely_regression",
         confidence="medium",
-        reason=f"Test failed with {fail_rate:.1%} historical failure rate",
+        reason=f"Test failed with {fail_rate_str} historical failure rate",
         candidate_status=status,
         sample_count=total_samples,
         historical_failure_rate=fail_rate,
@@ -466,6 +548,8 @@ def classify_test_result(
         duration_baseline_median_ms=dur_baseline_median,
         duration_candidate_ms=candidate.duration_ms,
         supporting_evidence=[{"type": "failure_observed", "counts": counts}],
+        owners=owners,
+        related_incidents=related_incidents,
     )
 
 
@@ -474,17 +558,22 @@ def classify_run_results(
     results: list[NormalizedTestResult],
     baseline_commit: str | None = None,
     days: int | None = None,
+    deadline: float | None = None,
+    repo_dir: str | Path | None = None,
+    feedback_store_path: str | Path | None = None,
 ) -> list[QAClassification]:
     """Classify all test results from a run, grouping attempts by test identity."""
     # Group results by (suite, leaf test)
     attempts_by_identity: dict[tuple[str, str], list[NormalizedTestResult]] = {}
     for res in results:
+        _check_deadline(deadline)
         key = (res.suite, res.test)
         attempts_by_identity.setdefault(key, []).append(res)
 
     classifications: list[QAClassification] = []
     # Classify each unique test using its latest attempt as candidate
     for (suite, test), attempts in attempts_by_identity.items():
+        _check_deadline(deadline)
         latest = max(attempts, key=lambda a: a.attempt)
         classification = classify_test_result(
             store_path=store_path,
@@ -492,7 +581,11 @@ def classify_run_results(
             attempts_in_run=attempts if len(attempts) > 1 else None,
             baseline_commit=baseline_commit,
             days=days,
+            deadline=deadline,
+            repo_dir=repo_dir,
+            feedback_store_path=feedback_store_path,
         )
+        classification.evidence_refs = sorted({attempt.evidence_id for attempt in attempts if attempt.evidence_id})
         classifications.append(classification)
 
     return classifications

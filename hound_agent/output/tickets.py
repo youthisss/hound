@@ -101,7 +101,7 @@ def build_ticket(
             body.append(f"- **PR**: #{escape_text(artifacts.run.pr_number)}")
     if any(vars(artifacts.deployment).values()):
         body += ["", "### Deployment context"]
-        for key in ("platform", "environment", "namespace", "target", "release", "revision", "artifact", "outcome", "recovery"):
+        for key in ("platform", "environment", "namespace", "target", "service", "workload", "release", "revision", "commit", "image_digest", "artifact", "strategy", "outcome", "recovery", "customer_impact"):
             value = getattr(artifacts.deployment, key)
             if value:
                 body.append(f"- **{key.title()}**: {escape_text(value)}")

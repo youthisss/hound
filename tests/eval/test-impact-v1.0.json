@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "repo": "../..",
+  "minimum_recall": 0.9,
+  "cases": [
+    {
+      "id": "source-impact",
+      "source_evidence": [
+        {
+          "file": "hound_agent/source/impact.py",
+          "line": 84,
+          "symbol": {"name": "recommendation_recall", "snippet": ""},
+          "changed": true,
+          "related_tests": ["tests/source/test_impact.py"]
+        }
+      ],
+      "expected_tests": ["tests/source/test_impact.py"]
+    },
+    {
+      "id": "devops-investigation",
+      "source_evidence": [
+        {
+          "file": "hound_agent/devops/investigation.py",
+          "line": 1,
+          "symbol": {"name": "build_investigation", "snippet": ""},
+          "changed": true,
+          "related_tests": ["tests/devops/test_investigation.py"]
+        }
+      ],
+      "expected_tests": ["tests/devops/test_investigation.py"]
+    }
+  ]
+}

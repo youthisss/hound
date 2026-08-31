@@ -135,6 +135,61 @@ def test_reuse_disabled_always_calls_llm(tmp_path, monkeypatch):
     assert calls["n"] == 3
 
 
+def test_reviewed_known_issue_feedback_skips_llm(tmp_path, monkeypatch):
+    from hound_agent.feedback import default_feedback_store, record_feedback
+    from hound_agent.pipeline import analyze
+
+    log = tmp_path / "x.log"
+    log.write_text("FAILED tests/test_x.py::test_x - assert 1 == 2\n", encoding="utf-8")
+    output_root = tmp_path / "out"
+    first_dir = output_root / "run-001"
+    first = analyze(
+        log, first_dir, offline=True, no_dedup=True, feedback_output_root=output_root,
+    )
+    record_feedback(
+        default_feedback_store(output_root),
+        first_dir / "report.json",
+        "run-001",
+        usefulness="useful",
+        actual_outcome="root_cause_confirmed",
+        review_status="reviewed",
+    )
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("reviewed known issue must skip the provider")
+
+    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", boom)
+    second = analyze(
+        log,
+        output_root / "run-002",
+        _config=Config(api_key="test-key"),
+        no_dedup=True,
+        feedback_output_root=output_root,
+    )
+    assert second["meta"]["reused"] is True
+    assert second["meta"]["reused_from_key"] == first["triage"]["dedup_key"]
+    assert "Known issue matched reviewed feedback" in second["analysis"]["missing_information"][-1]
+
+
+def test_llm_preview_is_redacted_and_never_calls_provider(tmp_path, monkeypatch):
+    log = tmp_path / "x.log"
+    secret = "sk-abcdefghijklmnopqrstuvwxyz123456"
+    log.write_text(f"FAILED tests/test_x.py::test_x - token={secret}\n", encoding="utf-8")
+    calls = {"n": 0}
+
+    def boom(*_args, **_kwargs):
+        calls["n"] += 1
+        raise AssertionError("preview must not call the provider")
+
+    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", boom)
+    out = tmp_path / "out"
+    assert main(["analyze", "--log", str(log), "--out", str(out), "--llm-preview"]) == 1
+    preview = (out / "llm-preview.json").read_text(encoding="utf-8")
+    assert calls["n"] == 0
+    assert secret not in preview
+    assert "[REDACTED:" in preview
+
+
 # ------------------------------------------------------------------ batch budget
 
 
@@ -188,13 +243,43 @@ def test_parallel_batch_does_not_overshoot_max_llm_calls(tmp_path, monkeypatch):
     assert sum(not row["budget_skipped"] for row in summary) == 1
 
 
-def test_failed_batch_attempt_releases_reserved_call_slot():
+def test_failed_provider_attempt_still_consumes_batch_call_cap(tmp_path, monkeypatch):
+    d = _write_logs(tmp_path, ["a.log", "b.log"])
+    calls = {"n": 0}
+
+    def failing_llm(_artifacts, _config):
+        calls["n"] += 1
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", failing_llm)
+    monkeypatch.setenv("TH_API_KEY", "test-key")
+    assert main(["batch", "--logs", str(d), "--out", str(tmp_path / "out"), "--max-llm-calls", "1"]) == 1
+    assert calls["n"] == 1
+
+
+def test_failed_batch_attempt_consumes_call_slot():
     from hound_agent.cli import _BatchBudget
 
     budget = _BatchBudget(max_calls=1, max_cost=None)
     assert budget.reserve_llm() is True
-    budget.record(False, 0.0, False, False, {})
+    budget.record(False, 0.0, True, False, {})
     assert budget.reserve_llm() is True
+    budget.record(False, 0.0, False, False, {})
+    assert budget.reserve_llm() is False
+
+
+def test_cached_batch_result_refunds_unused_call_slot():
+    from hound_agent.cli import _BatchBudget
+
+    budget = _BatchBudget(max_calls=1, max_cost=None)
+    assert budget.reserve_llm() is True
+
+
+def test_zero_batch_budget_allows_no_provider_attempts():
+    from hound_agent.cli import _BatchBudget
+
+    assert _BatchBudget(max_calls=0, max_cost=None).reserve_llm() is False
+    assert _BatchBudget(max_calls=None, max_cost=0.0).reserve_llm() is False
 
 
 def test_batch_writes_usage_telemetry(tmp_path, monkeypatch):

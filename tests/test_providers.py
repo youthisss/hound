@@ -29,3 +29,9 @@ def test_model_discovery_openai_shape(monkeypatch):
 
     monkeypatch.setattr("hound_agent.providers.urlopen", lambda request, timeout: Response())
     assert discover_models("http://127.0.0.1:20128/v1", "secret") == ["a", "z"]
+
+
+def test_authenticated_model_discovery_disables_redirects():
+    from hound_agent.providers import _NoRedirect
+
+    assert _NoRedirect().redirect_request(None, None, 302, "Found", {}, "https://other.example/models") is None

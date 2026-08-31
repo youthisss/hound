@@ -5,17 +5,22 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
-  artifacts:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - run: uv sync --frozen --extra dev
+      - name: Verify release tag matches package version
+        shell: bash
+        run: |
+          package_version="$(uv run python -c 'import hound_agent; print(hound_agent.__version__)')"
+          test "$GITHUB_REF_NAME" = "v${package_version}"
       - run: uv run ruff check .
       - run: uv run mypy hound_agent
       - run: uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
@@ -23,18 +28,159 @@ jobs:
         run: |
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
           uv run pip-audit --requirement audited-requirements.txt
-      - run: uv build
+      - name: Build package artifacts
+        run: uv build
+      - name: Validate package metadata
+        run: uv run twine check dist/*.whl dist/*.tar.gz
       - name: Smoke-test wheel
         shell: bash
         run: |
-          uv venv release-venv
-          uv pip install --python release-venv/bin/python dist/*.whl
-          release-venv/bin/hound --version
+          smoke="$RUNNER_TEMP/hound-release-smoke"
+          mkdir -p "$smoke"
+          wheel="$(realpath dist/*.whl)"
+          sdist="$(realpath dist/*.tar.gz)"
+          uv venv "$smoke/wheel-venv"
+          uv pip install --python "$smoke/wheel-venv/bin/python" "$wheel"
+          uv venv "$smoke/sdist-venv"
+          uv pip install --python "$smoke/sdist-venv/bin/python" "$sdist"
+          cd "$smoke"
+          wheel-venv/bin/python -c 'import hound_agent'
+          wheel-venv/bin/hound --version
+          wheel-venv/bin/hound doctor --out wheel-doctor --json
+          sdist-venv/bin/python -c 'import hound_agent'
+          sdist-venv/bin/hound --version
+          sdist-venv/bin/hound doctor --out sdist-doctor --json
       - name: Checksums
-        run: sha256sum dist/* > dist/SHA256SUMS
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        run: sha256sum dist/*.whl dist/*.tar.gz > SHA256SUMS
+      - name: Upload distributions
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+      - name: Upload checksums
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: checksums
+          path: SHA256SUMS
+          if-no-files-found: error
+
+  provenance:
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: distributions
+          path: dist
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: dist/*
+
+  container-gate:
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build runtime and Action images
+        run: |
+          docker build -t hound:release .
+          docker build -f Dockerfile.action -t hound-action:release .
+      - name: Smoke-test Action output contract
+        shell: bash
+        run: |
+          mkdir action-smoke
+          cp tests/fixtures/pytest_fail.log action-smoke/failure.log
+          touch action-smoke/github-output
+          set +e
+          docker run --rm -e GITHUB_WORKSPACE=/workspace -e GITHUB_OUTPUT=/workspace/github-output \
+            -v "$PWD/action-smoke:/workspace" hound-action:release \
+            analyze --log failure.log --repo . --out out --offline-value true
+          status=$?
+          set -e
+          test "$status" -eq 1
+          test -f action-smoke/out/report.json
+          grep -q '^report=' action-smoke/github-output
+          grep -q '^severity=' action-smoke/github-output
+      - name: Scan runtime image
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        with:
+          image-ref: hound:release
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Scan Action image
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        with:
+          image-ref: hound-action:release
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  windows:
+    needs: [build]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: distributions
+          path: dist
+      - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
+      - shell: pwsh
+        run: |
+          $smoke = Join-Path $env:RUNNER_TEMP "hound-release-wheel"
+          uv venv "$smoke\venv"
+          $wheel = (Get-ChildItem dist\*.whl | Select-Object -First 1).FullName
+          uv pip install --python "$smoke\venv\Scripts\python.exe" $wheel
+          Push-Location $smoke
+          & "$smoke\venv\Scripts\hound.exe" --version
+          & "$smoke\venv\Scripts\hound.exe" doctor --out doctor-output --json
+          Pop-Location
+
+  publish-pypi:
+    needs: [build, provenance, container-gate, windows]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/hound-agent
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: distributions
+          path: dist
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@76f52e6636d8691d1b9ae758667450a41738159e # v1.12.4
+        with:
+          packages-dir: dist/
+
+  release:
+    needs: [build, provenance, publish-pypi]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: distributions
+          path: dist
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: checksums
+          path: dist
       - uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           generate_release_notes: true

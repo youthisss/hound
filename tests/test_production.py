@@ -192,6 +192,15 @@ class TestLlm:
             setattr(cfg, k, v)
         return cfg
 
+    def test_sdk_retries_are_disabled(self, monkeypatch):
+        import openai
+        from hound_agent.analyze.llm import _make_client
+
+        captured = {}
+        monkeypatch.setattr(openai, "OpenAI", lambda **kwargs: captured.update(kwargs) or object())
+        _make_client(self._config())
+        assert captured["max_retries"] == 0
+
     def test_retries_then_raises(self, monkeypatch):
         from hound_agent.analyze.llm import LlmError, analyze_with_llm
 

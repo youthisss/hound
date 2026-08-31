@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 
 from hound_agent.models import FailureEvent
@@ -116,6 +117,22 @@ RATE_LIMIT_RE = re.compile(
     r"HTTP 429|429 Too Many Requests|secondary rate limit|rate limit exceeded|"
     r"\btoomanyrequests\b|API rate limit",
     re.IGNORECASE,
+)
+
+# M7 causal-link wire format. We prefer explicit structured fields
+# (``trace_id=... span_id=... parent_span_id=...``) emitted by instrumented
+# runtimes (e.g. OpenTelemetry structured logs) and fall back to W3C Trace
+# Context ``traceparent`` where the trace/span fields are aligned. In a
+# traceparent the third field is the span that initiated the request, which we
+# map to ``parent_span_id`` for the event line that carries it.
+_TRACEPARENT_RE = re.compile(r"00-([0-9a-fA-F]{32})-([0-9a-fA-F]{16})-([0-9a-fA-F]{2})")
+_TRACE_ID_RE = re.compile(r"\b(?:trace_id|traceId|trace-id)\s*[=:]\s*([0-9a-fA-F]{16,32})")
+_SPAN_ID_RE = re.compile(r"\b(?:span_id|spanId|span-id)\s*[=:]\s*([0-9a-fA-F]{8,16})")
+_PARENT_SPAN_RE = re.compile(r"\b(?:parent_span_id|parentSpanId|parent-span-id)\s*[=:]\s*([0-9a-fA-F]{8,16})")
+_NS_RE = re.compile(r"\b(?:timestamp_ns|time_ns|ts_ns)\s*[=:]\s*(\d{13,19})")
+_SEQUENCE_RE = re.compile(r"\b(?:sequence|seq)\s*[=:]\s*(\d{1,9})")
+_ISO_TS_RE = re.compile(
+    r"(?<!\d)(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})?)(?!\d)"
 )
 
 ERROR_LINE_RE = re.compile(r"error|failed|fail|exception|traceback|crash|panic", re.IGNORECASE)
@@ -345,10 +362,17 @@ def _is_flaky_test(text: str) -> bool:
 
 
 def extract_events(text: str, primary_stage: str, primary_kind: str, primary_message: str) -> list[FailureEvent]:
-    """Return the root failure followed by distinct downstream failures in log order."""
+    """Return the root failure followed by distinct downstream failures in log order.
+
+    Each event is enriched with stable ``event_id``, causal-link fields
+    (``trace_id``/``span_id``/``parent_span_id``), an optional high-precision
+    clock (``timestamp_ns``), and a deterministic ``sequence`` fallback. When a
+    log line carries no explicit structured trace fields, W3C ``traceparent`` is
+    parsed and its initiating span is mapped to ``parent_span_id``.
+    """
     if primary_kind == "unknown":
         return []
-    events = [FailureEvent(primary_stage, primary_kind, primary_message, "primary")]
+    events = [_event_from_log_line(primary_stage, primary_kind, primary_message, "primary", text, global_trace_fallback=True)]
     seen = {(primary_stage, primary_kind, primary_message)}
     for line in text.splitlines():
         if not ERROR_LINE_RE.search(line):
@@ -357,12 +381,113 @@ def extract_events(text: str, primary_stage: str, primary_kind: str, primary_mes
         kind = detect_kind(line, stage)
         if kind == "unknown":
             continue
-        event = (stage, kind, line.strip()[:500])
-        if event in seen:
+        signature = (stage, kind, line.strip()[:500])
+        if signature in seen:
             continue
-        seen.add(event)
-        events.append(FailureEvent(*event, role="downstream"))
+        seen.add(signature)
+        events.append(_event_from_log_line(stage, kind, line.strip()[:500], "downstream", text))
+    for index, event in enumerate(events):
+        event.event_id = f"ev-{index + 1:03d}"
+        if event.sequence is None:
+            event.sequence = index + 1
     return events[:20]
+
+
+def _event_from_log_line(
+    stage: str,
+    kind: str,
+    message: str,
+    role: str,
+    text: str,
+    global_trace_fallback: bool = False,
+) -> FailureEvent:
+    """Build one failure event.
+
+    Trace/time metadata is pulled from the event's own log line. The primary
+    event may additionally fall back to the first trace context anywhere in the
+    log window (its causal context often appears on an earlier line). Downstream
+    events never inherit a global trace context, so partially instrumented
+    services stay visibly unlinked (partial-trace preservation).
+    """
+    trace_id, span_id, parent_span_id = _extract_trace(message)
+    if global_trace_fallback and not (trace_id or span_id or parent_span_id):
+        trace_id, span_id, parent_span_id = _first_trace(text)
+    timestamp, timestamp_ns = _extract_timestamp(message)
+    sequence = _extract_sequence(message)
+    return FailureEvent(
+        stage=stage,
+        kind=kind,
+        message=message,
+        role=role,
+        trace_id=trace_id,
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        timestamp=timestamp,
+        timestamp_ns=timestamp_ns,
+        sequence=sequence,
+    )
+
+
+def _extract_trace(line: str) -> tuple[str, str, str | None]:
+    """Return ``(trace_id, span_id, parent_span_id)`` from a log line."""
+    trace = ""
+    span = ""
+    parent: str | None = None
+    match = _TRACE_ID_RE.search(line)
+    if match:
+        trace = match.group(1)
+    match = _SPAN_ID_RE.search(line)
+    if match:
+        span = match.group(1)
+    match = _PARENT_SPAN_RE.search(line)
+    if match:
+        parent = match.group(1)
+    if not (trace or span or parent):
+        match = _TRACEPARENT_RE.search(line)
+        if match:
+            trace = match.group(1)
+            parent = match.group(2)
+    return trace, span, parent
+
+
+def _first_trace(text: str) -> tuple[str, str, str | None]:
+    for line in text.splitlines():
+        trace_id, span_id, parent_span_id = _extract_trace(line)
+        if trace_id or span_id or parent_span_id:
+            return trace_id, span_id, parent_span_id
+    return "", "", None
+
+
+def _extract_timestamp(line: str) -> tuple[str, int | None]:
+    """Return ``(iso_timestamp, timestamp_ns)`` from a log line.
+
+    An explicit ``timestamp_ns`` value wins; otherwise a timezone-aware ISO
+    timestamp is parsed. Naive timestamps are kept as the readable string but do
+    not produce an authoritative ``timestamp_ns`` (no reliable clock basis).
+    """
+    match = _NS_RE.search(line)
+    if match:
+        return "", int(match.group(1))
+    match = _ISO_TS_RE.search(line)
+    if not match:
+        return "", None
+    iso = match.group(1)
+    return iso, _iso_to_ns(iso)
+
+
+def _iso_to_ns(value: str) -> int | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return int(parsed.timestamp() * 1_000_000_000)
+
+
+def _extract_sequence(line: str) -> int | None:
+    match = _SEQUENCE_RE.search(line)
+    return int(match.group(1)) if match else None
 
 
 def read_log_window(

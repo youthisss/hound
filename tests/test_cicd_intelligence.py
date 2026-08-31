@@ -4,6 +4,7 @@ import pytest
 
 from hound_agent.ingest.logs import parse_log
 from hound_agent.pipeline import analyze
+from tests.conftest import FIXTURES
 
 
 def test_junit_report_produces_test_failure(tmp_path):
@@ -55,6 +56,36 @@ def test_context_sidecar_pr_diff_owners_and_events(tmp_path):
     assert doc["context"]["run"]["run_id"] == "42"
     assert doc["context"]["owners"] == ["@platform"]
     assert doc["failure"]["events"]
+
+
+def test_deployment_fixture_produces_stable_distinct_timeline(tmp_path):
+    log = tmp_path / "deployment.log"
+    log.write_text((FIXTURES / "deployment_timeline.log").read_text(encoding="utf-8"), encoding="utf-8")
+    context = tmp_path / "context.json"
+    context.write_text(json.dumps({
+        "run": {"provider": "github-actions", "run_id": "42", "job_name": "deploy"},
+        "deployment": {
+            "environment": "production",
+            "service": "api",
+            "workload": "deployment/api",
+            "release": "api-42",
+            "revision": "42",
+            "previous_revision": "41",
+            "outcome": "failed",
+            "recovery": "rollback_pending",
+        },
+    }), encoding="utf-8")
+
+    first = analyze(log, tmp_path / "out-1", context_path=str(context), offline=True, no_dedup=True)
+    second = analyze(log, tmp_path / "out-2", context_path=str(context), offline=True, no_dedup=True)
+
+    timeline = first["timeline"]
+    assert timeline == second["timeline"]
+    assert timeline["primary_event_id"] == "ev-001"
+    assert timeline["downstream_event_ids"]
+    assert timeline["recovery_event_ids"] == ["rec-001"]
+    assert timeline["customer_impact"] == "unknown"
+    assert timeline["release_changed"] is True
 
 
 def test_environment_policy_overrides_severity(tmp_path):

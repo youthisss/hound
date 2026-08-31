@@ -7,6 +7,33 @@ from git import Repo
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
+_INTEGRATION_MODULES = {
+    "test_context.py", "test_dedup.py", "test_delivery_ledger.py", "test_enrich.py",
+    "test_feedback.py", "test_git.py", "test_github.py", "test_log_collector.py",
+    "test_pipeline.py", "test_qa_gate.py", "test_qa_history.py", "test_server_http.py",
+    "test_source_context.py", "test_cicd_intelligence.py", "test_investigation.py",
+    "test_observability.py", "test_impact.py", "test_timeline.py",
+}
+_E2E_MODULES = {
+    "test_action_entrypoint.py", "test_batch.py", "test_cli.py", "test_cli_commands.py",
+    "test_cli_gh.py", "test_demo_project.py", "test_eval.py", "test_tui.py",
+}
+_SLOW_MODULES = {"test_demo_project.py", "test_eval.py", "test_offline_accuracy.py", "test_tui.py"}
+
+
+def pytest_collection_modifyitems(items):
+    """Classify tests by their dominant runtime boundary for bounded CI suites."""
+    for item in items:
+        name = Path(str(item.fspath)).name
+        if name in _E2E_MODULES:
+            item.add_marker(pytest.mark.e2e)
+        elif name in _INTEGRATION_MODULES:
+            item.add_marker(pytest.mark.integration)
+        else:
+            item.add_marker(pytest.mark.unit)
+        if name in _SLOW_MODULES:
+            item.add_marker(pytest.mark.slow)
+
 
 def fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")

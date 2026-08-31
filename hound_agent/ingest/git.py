@@ -9,6 +9,7 @@ import re
 
 from hound_agent.models import GitInfo
 from hound_agent.pathutil import path_matches
+from hound_agent.executables import trusted_executable
 
 _GIT_TIMEOUT = 10
 _REVISION = re.compile(r"[0-9a-fA-F]{7,64}")
@@ -21,6 +22,9 @@ def _warn(context: str, exc: Exception) -> None:
 
 
 def _run(repo: Path, *args: str) -> str:
+    executable = trusted_executable("git", repo)
+    if not executable:
+        raise OSError("trusted git executable not found")
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -29,7 +33,7 @@ def _run(repo: Path, *args: str) -> str:
     }
     environment.update(GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0")
     command = [
-        "git", "-C", str(repo),
+        executable, "-C", str(repo),
         "-c", "core.fsmonitor=false",
         "-c", f"core.hooksPath={os.devnull}",
         *args,
@@ -120,6 +124,26 @@ def correlated_commit_subjects(
             continue
         subjects.append(f"{path} ({short_sha} {subject})")
     return subjects
+
+
+def blame_line(repo_dir: str | Path, path: str, line: int) -> dict:
+    """Return bounded commit metadata for one safe source line."""
+    if line <= 0 or not _safe_repo_path(path):
+        return {}
+    repo = Path(repo_dir).resolve()
+    try:
+        output = _run(repo, "blame", "--porcelain", f"-L{line},{line}", "--", path)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    values: dict[str, str] = {}
+    first = output.splitlines()[0].split() if output else []
+    if first and _REVISION.fullmatch(first[0]):
+        values["commit"] = first[0]
+    for row in output.splitlines()[1:]:
+        key, separator, value = row.partition(" ")
+        if separator and key in {"author", "author-time", "summary"}:
+            values[key.replace("-", "_")] = value[:240]
+    return values
 
 
 def _safe_repo_path(path: str) -> bool:

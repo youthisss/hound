@@ -97,3 +97,21 @@ def test_source_snippet_is_rendered_in_report_and_ticket(tmp_path):
     ticket_path = write_ticket(ticket, tmp_path)
     assert "value = compute" in report_path.read_text(encoding="utf-8")
     assert "value = compute" in ticket_path.read_text(encoding="utf-8")
+
+
+def test_terminal_and_markdown_outputs_strip_control_sequences():
+    from hound_agent.analyze.fallback import build_root_cause
+    from hound_agent.formatters import format_document
+    from hound_agent.models import Triage
+
+    artifacts = make_artifacts("pytest_fail.log")
+    root_cause = build_root_cause(artifacts)
+    root_cause.hypothesis = "unsafe\x1b]8;;https://example.test\x07link"
+    triage = Triage(component="tests", dedup_key="abc")
+    ticket = build_ticket(artifacts, root_cause, triage)
+    doc = build_doc(artifacts, root_cause, triage, ticket, "2026-01-01T00:00:00Z")
+
+    assert "\x1b" not in format_document(doc)
+    assert "\x07" not in format_document(doc)
+    assert "\x1b" not in render_md(doc)
+    assert "\x07" not in render_md(doc)

@@ -1,0 +1,5 @@
+2026-08-28T12:30:00Z trace_id=aabbccddeeff00112233445566778899 span_id=1111111111111111 level=error msg="api service unavailable"
+kubectl rollout status deployment/api
+deployment "api" exceeded its progress deadline
+pod/api-7d9f4b CrashLoopBackOff
+[billing] billing service failed to process checkout: connection error

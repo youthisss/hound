@@ -195,3 +195,40 @@ Verification evidence:
 - `uv run hound qa analyze --help`: command available and documented.
 - `uv run ruff check .`: clean.
 - `uv run mypy hound_agent`: clean across 43 source files.
+
+## Production Maturity Repository Gate — 2026-08-31
+
+- Repository implementation status: passed. External publication and pilot
+  evidence remain separate release approvals and are not claimed here.
+- Server operations now provide safe text/JSON logs, configurable levels,
+  request/job correlation, response `X-Request-ID`, bounded client tracking,
+  SIGTERM shutdown, and tested loopback proxy guidance.
+- Unit, integration, e2e, slow, and network taxonomy is active. CI separates
+  fast required checks from scheduled/manual extended gates and aggregates the
+  result. The Action failure smoke explicitly requires exit code 1.
+- Dependabot, dependency policy, expanded threat model, repository/artifact/image
+  scans, TestPyPI OIDC workflow, clean wheel/sdist smoke, Windows, Docker, Action,
+  provenance, and protected release jobs are defined.
+- Damaged jobs, history, and delivery SQLite stores preserve original files in
+  timestamped recovery directories. Backup/restore and release checklists are
+  documented.
+- Scale evidence: 5,000 inputs produced 5,000 reports in 196.412 seconds on the
+  documented Windows runner (`docs/benchmark-2026-08-31.md`).
+
+Local verification:
+
+- Full suite: 641 passed, 6 skipped, 85.10% coverage.
+- `uv run ruff check .`: clean.
+- `uv run mypy hound_agent`: clean across 64 source files.
+- Dependency audit: no known vulnerabilities.
+- Wheel and source distribution: build, Twine metadata, outside-checkout clean
+  installation, import, version, and doctor checks passed.
+
+External release gates still requiring operator infrastructure:
+
+- Docker/Action/Trivy jobs must run on the configured GitHub runner because this
+  workstation has no Docker runtime.
+- TestPyPI and PyPI environments, Trusted Publisher identities, tag ruleset, and
+  branch/environment reviewers must be configured in GitHub/PyPI.
+- The mandatory two-repository, 100-300-real-failure pilot must be completed and
+  reviewed using `docs/pilot-evidence-template.md`.

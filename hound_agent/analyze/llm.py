@@ -49,7 +49,9 @@ def _make_client(config: Config):
     except ImportError as exc:  # pragma: no cover
         raise LlmError("openai package not installed") from exc
 
-    kwargs: dict = {"api_key": config.api_key or "sk-no-key"}
+    # Hound owns the bounded retry loop below. Disable SDK-level retries so
+    # configured attempt and timeout limits remain accurate.
+    kwargs: dict = {"api_key": config.api_key or "sk-no-key", "max_retries": 0}
     if config.base_url:
         kwargs["base_url"] = config.base_url
     if config.timeout:
@@ -68,11 +70,9 @@ def _make_client(config: Config):
         raise LlmError(f"Failed to create LLM client: {exc}") from exc
 
 
-def analyze_with_llm(artifacts: Artifacts, config: Config) -> tuple[dict, dict]:
-    """Call the LLM and return ``(data_dict, usage_dict)``. Raises LlmError on failure."""
-    client = _make_client(config)
-
-    kwargs: dict = {
+def build_request_preview(artifacts: Artifacts, config: Config) -> dict:
+    """Build the exact bounded message payload without creating a client."""
+    payload: dict = {
         "model": config.model,
         "messages": [
             {"role": "system", "content": prompts.SYSTEM_PROMPT},
@@ -80,9 +80,17 @@ def analyze_with_llm(artifacts: Artifacts, config: Config) -> tuple[dict, dict]:
         ],
     }
     if config.max_tokens:
-        kwargs["max_tokens"] = int(config.max_tokens)
+        payload["max_tokens"] = int(config.max_tokens)
     if config.temperature is not None:
-        kwargs["temperature"] = float(config.temperature)
+        payload["temperature"] = float(config.temperature)
+    return payload
+
+
+def analyze_with_llm(artifacts: Artifacts, config: Config) -> tuple[dict, dict]:
+    """Call the LLM and return ``(data_dict, usage_dict)``. Raises LlmError on failure."""
+    client = _make_client(config)
+
+    kwargs = build_request_preview(artifacts, config)
     # response_format is not supported by every OpenAI-compatible backend
     # (Ollama, some gateways). Ask for JSON in the prompt, fallback without response_format if rejected.
     resp = None

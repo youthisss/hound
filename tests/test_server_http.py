@@ -42,6 +42,15 @@ def _request(server, method, path, body=None, authorized=True):
     return response.status, payload
 
 
+def test_http_responses_include_request_correlation_id(http_server):
+    connection = http.client.HTTPConnection("127.0.0.1", http_server.server_port, timeout=5)
+    connection.request("GET", "/health")
+    response = connection.getresponse()
+    response.read()
+    assert len(response.getheader("X-Request-ID")) == 32
+    connection.close()
+
+
 def _wait_for_job(server, job_id):
     for _ in range(100):
         status, job = _request(server, "GET", f"/jobs/{job_id}")
@@ -79,6 +88,7 @@ def test_http_rate_limits_failed_authentication(http_server):
     http_server.config.rate_limit = 1
     assert _request(http_server, "POST", "/analyze", {"log": "run.log"}, authorized=False)[0] == 401
     assert _request(http_server, "POST", "/analyze", {"log": "run.log"}, authorized=False)[0] == 429
+    assert _request(http_server, "GET", "/jobs/" + "0" * 32, authorized=True)[0] == 404
 
 
 def test_http_failed_job_lifecycle(http_server, monkeypatch):
@@ -163,6 +173,26 @@ def test_job_store_finished_ttl_uses_restart_safe_wall_clock(tmp_path):
     store.update("expired", updated=time.time() - 100)
     store.cleanup(10)
     assert store.get("expired") is None
+
+
+def test_server_cleanup_removes_expired_report_directory(http_server):
+    job_id = "a" * 32
+    report_dir = http_server.config.output_root / job_id
+    report_dir.mkdir()
+    report = report_dir / "report.json"
+    report.write_text("{}", encoding="utf-8")
+    http_server.config.jobs_store.create(job_id, status="completed")
+    http_server.config.jobs_store.update(
+        job_id,
+        report=str(report),
+        updated=time.time() - 100,
+    )
+    http_server.config.job_ttl = 30
+
+    http_server.cleanup_expired()
+
+    assert http_server.config.jobs_store.get(job_id) is None
+    assert not report_dir.exists()
 
 
 def test_server_selects_ipv6_address_family(tmp_path):
@@ -255,3 +285,14 @@ def test_server_job_store_survives_restart(tmp_path):
     reopened = _JobStore(tmp_path / "jobs.sqlite3")
     assert reopened.get("persisted")["status"] == "completed"
     assert reopened.get("persisted")["report"] == "r.json"
+
+
+def test_job_store_preserves_corrupt_database(tmp_path):
+    from hound_agent.server import _JobStore
+
+    path = tmp_path / "jobs.sqlite3"
+    path.write_bytes(b"not a sqlite database")
+    with pytest.raises(ValueError, match="original preserved"):
+        _JobStore(path)
+    recovery = next(tmp_path.glob("jobs.sqlite3.corrupt-*"))
+    assert (recovery / "jobs.sqlite3").read_bytes() == b"not a sqlite database"

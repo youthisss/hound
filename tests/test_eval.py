@@ -11,8 +11,8 @@ from hound_agent.eval import DEFAULT_CORPUS, MAX_ARTIFACT_BYTES, evaluate, load_
 def test_evaluator_reports_offline_baseline_without_secrets():
     report = evaluate(DEFAULT_CORPUS)
 
-    assert report["case_count"] == 7
-    assert report["split_counts"] == {"dev": 4, "held_out": 3}
+    assert report["case_count"] == 8
+    assert report["split_counts"] == {"dev": 5, "held_out": 3}
     assert report["metrics"]["redaction_recall"] == 1.0
     assert report["metrics"]["failed_tests"] == {"precision": 1.0, "recall": 1.0}
     assert report["metrics"]["throughput_cases_per_second"] > 0
@@ -28,6 +28,12 @@ def test_evaluator_can_select_held_out_split():
     report = evaluate(DEFAULT_CORPUS, "held_out")
     assert report["case_count"] == 3
     assert report["split_counts"] == {"held_out": 3}
+
+
+def test_test_impact_suite_meets_labeled_recall_threshold():
+    report = evaluate(DEFAULT_CORPUS, "test-impact")
+    assert report["suite"] == "test-impact"
+    assert report["metrics"]["recommendation_recall"] >= report["minimum_recall"]
 
 
 def test_committed_baseline_matches_deterministic_metrics():

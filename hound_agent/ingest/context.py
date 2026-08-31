@@ -106,7 +106,55 @@ def _detect_deployment(text: str) -> DeploymentContext:
     recovery = "rollback_succeeded" if re.search(r"(?:rollback|rolled back).*(?:succeed|complete)", text, re.I) else ""
     outcome = "failed" if re.search(r"\b(?:failed|error|deadline exceeded|progress deadline)\b", text, re.I) else ""
     revision = _match(r"(?:revision\s*(?:[=:]\s*|\s+)|version\s*[=:]\s*)([A-Za-z0-9._-]+)", text)
-    return DeploymentContext(platform=platform, namespace=namespace, target=target, release=release, revision=revision, artifact=artifact, outcome=outcome, recovery=recovery)
+    previous_revision = _match(r"(?:previous_revision|prev_revision|previous revision)\s*[=:]\s*([A-Za-z0-9._-]+)", text)
+    service = _match(r"(?:service[/= ])([A-Za-z0-9._-]+)", text)
+    workload = _match(r"(?:workload[/= ])([A-Za-z0-9._-]+)", text)
+    commit = _match(r"\b(?:commit|commit_sha|release commit)[=\s:]+([0-9a-f]{7,40})", text)
+    image_digest = _match(r"\b(sha256:[0-9a-f]{64})", text)
+    started_at = _match(r"(?:started_at|started at|deployment started)[=: ]\s*([0-9TZ:.\-+ ]{8,40})", text)
+    finished_at = _match(r"(?:finished_at|completed_at|ended_at|finished at)[=: ]\s*([0-9TZ:.\-+ ]{8,40})", text)
+    strategy = _match(r"(?:strategy|rollout strategy)[=: ]\s*([A-Za-z0-9._-]+)", text)
+    migration_version = _match(r"(?:migration|schema version|migration_version)[=: ]\s*([A-Za-z0-9._-]+)", text)
+    customer_impact = _detect_customer_impact(text)
+    return DeploymentContext(
+        platform=platform,
+        namespace=namespace,
+        target=target,
+        release=release,
+        revision=revision,
+        previous_revision=previous_revision,
+        artifact=artifact,
+        outcome=outcome,
+        recovery=recovery,
+        service=service,
+        workload=workload,
+        commit=commit,
+        image_digest=image_digest,
+        started_at=started_at,
+        finished_at=finished_at,
+        strategy=strategy,
+        migration_version=migration_version,
+        customer_impact=customer_impact,
+    )
+
+
+def _detect_customer_impact(text: str) -> str:
+    """Derive a customer-impact marker from untrusted log text.
+
+    Fail-closed: returns ``""`` (empty) unless an explicit signal is present;
+    the timeline classifier applies the ``unknown`` default so reports stay
+    consistent offline without polluting the deployment context.
+    """
+    lower = text.lower()
+    if re.search(r"\b(?:outage|service disruption|major incident|customer[- ]?facing|"
+                 r"unavailable(?: to customers)?|error budget(?: exhausted)?|sla breach)\b", lower):
+        return "outage"
+    if re.search(r"\b(?:degraded|partial(?:ly)?|error rate|latency|p95|p99|"
+                 r"slow(?:ing|ed)?|intermittent|impacted(?: customers)?)\b", lower):
+        return "degraded"
+    if re.search(r"\b(?:no (?:customer )?impact|recovered|rollback(?:ed|ing)? (?:succeed|complete))", lower):
+        return "none"
+    return ""
 
 
 def _match(pattern: str, text: str) -> str:

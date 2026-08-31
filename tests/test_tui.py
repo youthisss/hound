@@ -6,6 +6,14 @@ import anyio
 FIXTURES = __import__("pathlib").Path(__file__).parent / "fixtures"
 
 
+def test_tui_markdown_rewrites_fences_as_indented_code():
+    from hound_agent.tui import _markdown_without_fences
+
+    rendered = _markdown_without_fences("before\n```python\nprint('ok')\n```\nafter")
+    assert "```" not in rendered
+    assert "    print('ok')" in rendered
+
+
 def _run(app):
     async def main():
         async with app.run_test() as pilot:
@@ -97,12 +105,12 @@ def test_tui_has_fixed_bold_app_title(tmp_path):
         async with app.run_test(size=(130, 35)) as pilot:
             await pilot.pause()
             title = app.query_one("#app-title", Static)
-            assert str(title.content) == "Hound CI/CD Investigator"
+            assert str(title.renderable) == "Hound CI/CD Investigator"
             assert title.styles.height.value == 1
             assert str(title.styles.text_style) == "bold"
             status = app.query_one("#statusbar", Static)
-            assert "path" in str(status.content)
-            assert "offline" in str(status.content)
+            assert "path" in str(status.renderable)
+            assert "offline" in str(status.renderable)
 
     anyio.run(main)
 
@@ -122,11 +130,11 @@ def test_tui_analyze(tmp_path):
             app.action_analyze()
             overview = app.query_one("#overview", Static)
             for _ in range(200):
-                txt = str(overview.content) if overview.content else ""
+                txt = str(overview.renderable) if overview.renderable else ""
                 if "severity" in txt and "Analyzing" not in txt:
                     break
                 await pilot.pause(0.02)
-            assert "severity" in str(overview.content)
+            assert "severity" in str(overview.renderable)
             reports = list((tmp_path / "out").glob("*/report.md"))
             assert len(reports) == 1
             md = reports[0].read_text(encoding="utf-8")
@@ -151,9 +159,9 @@ def test_tui_no_logs(tmp_path):
             await pilot.pause()
             assert app._log_files == []
             assert app.query_one("#analyze", Button).disabled
-            assert "No analysis selected" in str(app.query_one("#overview", Static).content)
-            assert "WORKFLOW" in str(app.query_one("#home-workflow", Static).content)
-            assert "No supported artifacts" in str(app.query_one("#workflow-status", Static).content)
+            assert "No analysis selected" in str(app.query_one("#overview", Static).renderable)
+            assert "WORKFLOW" in str(app.query_one("#home-workflow", Static).renderable)
+            assert "No supported artifacts" in str(app.query_one("#workflow-status", Static).renderable)
 
     anyio.run(main)
 
@@ -173,9 +181,9 @@ def test_tui_analyze_all_button_runs_visible_logs(tmp_path):
             overview = app.query_one("#overview", Static)
             for _ in range(400):
                 await pilot.pause(0.02)
-                if "Batch analysis complete" in str(overview.content):
+                if "Batch analysis complete" in str(overview.renderable):
                     break
-            assert "Analyzed [b]2/2[/b]" in str(overview.content)
+            assert "Analyzed [b]2/2[/b]" in str(overview.renderable)
             assert len(list((tmp_path / "out").glob("*/report.json"))) == 2
 
     anyio.run(main)
@@ -237,10 +245,10 @@ def test_tui_parallel_analyze_all_respects_llm_call_cap(tmp_path, monkeypatch):
             overview = app.query_one("#overview", Static)
             for _ in range(500):
                 await pilot.pause(0.02)
-                if "Batch analysis complete" in str(overview.content):
+                if "Batch analysis complete" in str(overview.renderable):
                     break
             assert calls["n"] == 1
-            assert "budget-skipped: 5" in str(overview.content)
+            assert "budget-skipped: 5" in str(overview.renderable)
 
     anyio.run(main)
 
@@ -256,16 +264,16 @@ def test_tui_labels_deployment_log_and_run(tmp_path):
         async with app.run_test() as pilot:
             await pilot.pause()
             log_list = app.query_one("#log-list", ListView)
-            assert "DEPLOY" in str(log_list.children[0].query_one(Static).content)
+            assert "DEPLOY" in str(log_list.children[0].query_one(Static).renderable)
             app.action_analyze()
             for _ in range(400):
                 await pilot.pause(0.02)
                 run_list = app.query_one("#run-list", ListView)
-                if app._runs and any("DEPLOY" in str(item.content) for item in run_list.query(Static)):
+                if app._runs and any("DEPLOY" in str(item.renderable) for item in run_list.query(Static)):
                     break
             assert app._runs
-            assert any("DEPLOY" in str(item.content) for item in run_list.query(Static))
-            assert "stage" in str(app.query_one("#overview", Static).content)
+            assert any("DEPLOY" in str(item.renderable) for item in run_list.query(Static))
+            assert "stage" in str(app.query_one("#overview", Static).renderable)
 
     anyio.run(main)
 
@@ -274,7 +282,7 @@ def test_tui_settings_overlay(tmp_path):
     """Settings opens from sidebar instead of main tab row."""
     from hound_agent.tui import RcaTui, SettingsScreen
     from textual.containers import Vertical
-    from textual.widgets import Select
+    from textual.widgets import Select, Static
 
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True, provider="openai")
 
@@ -299,8 +307,8 @@ def test_tui_settings_overlay(tmp_path):
             app.provider = "gemini"
             app.offline = False
             app._update_statusbar()
-            sb = app.query_one("#statusbar")
-            assert "llm:gemini" in str(sb.content)
+            sb = app.screen_stack[0].query_one("#statusbar", Static)
+            assert "llm:gemini" in str(sb.renderable)
 
     anyio.run(main)
 
@@ -357,7 +365,7 @@ def test_tui_settings_updates_provider_hint_and_cancels(tmp_path):
             select = screen.query_one("#settings-provider", Select)
             screen.on_select_changed(type("E", (), {"select": select, "value": "gemini"})())
             hint = screen.query_one("#provider-hint", Static)
-            assert "generativelanguage.googleapis.com" in str(hint.content)
+            assert "generativelanguage.googleapis.com" in str(hint.renderable)
             cancel = screen.query_one("#settings-cancel")
             screen.on_button_pressed(type("E", (), {"button": cancel})())
             await pilot.pause()
@@ -405,7 +413,7 @@ def test_tui_directory_metadata_and_filter(tmp_path):
     async def main():
         async with app.run_test() as pilot:
             await pilot.pause()
-            assert "2 log files" in str(app.query_one("#dir-meta", Static).content)
+            assert "2 log files" in str(app.query_one("#dir-meta", Static).renderable)
             assert not app.query_one("#analyze", Button).disabled
             app.query_one("#log-filter", Input).value = "pytest"
             await pilot.pause(0.4)
@@ -428,7 +436,7 @@ def test_tui_raw_header_tracks_selected_log(tmp_path):
             await pilot.pause()
             app.query_one("#log-list", ListView).index = app._log_files.index(tmp_path / "build_error.log")
             app.action_select_log()
-            header = str(app.query_one("#raw-header", Static).content)
+            header = str(app.query_one("#raw-header", Static).renderable)
             assert "build_error.log" in header
 
     anyio.run(main)
@@ -450,34 +458,34 @@ def test_tui_caps_widgets_but_keeps_all_visible_targets(tmp_path, monkeypatch):
             assert len(app._visible_log_files) == total
             assert len(app._log_files) == total
             assert len(app.query_one("#log-list", ListView).children) == total
-            assert f"{total} visible" in str(app.query_one("#home-artifacts", Static).content)
+            assert f"{total} visible" in str(app.query_one("#home-artifacts", Static).renderable)
 
             # Open artifacts workspace
             await pilot.press("f")
             await pilot.pause()
             # Paginated at 100 per page on workspace list
             assert len(app.query_one("#artifact-workspace-list", ListView).children) == 100
-            assert "Page 1/3" in str(app.query_one("#artifact-pagination-label", Static).content)
+            assert "Page 1/3" in str(app.query_one("#artifact-pagination-label", Static).renderable)
 
             # Move to next page with ']'
             await pilot.press("]")
             await pilot.pause()
             assert app._artifact_page == 2
-            assert "Page 2/3" in str(app.query_one("#artifact-pagination-label", Static).content)
+            assert "Page 2/3" in str(app.query_one("#artifact-pagination-label", Static).renderable)
             assert len(app.query_one("#artifact-workspace-list", ListView).children) == 100
 
             # Move to page 3
             await pilot.press("]")
             await pilot.pause()
             assert app._artifact_page == 3
-            assert "Page 3/3" in str(app.query_one("#artifact-pagination-label", Static).content)
+            assert "Page 3/3" in str(app.query_one("#artifact-pagination-label", Static).renderable)
             assert len(app.query_one("#artifact-workspace-list", ListView).children) == 75
 
             # Test space to toggle artifact selection
             await pilot.press("space")
             await pilot.pause()
             assert len(app._selected_artifacts) == 1
-            assert "1 selected" in str(app.query_one("#artifact-workspace-meta", Static).content)
+            assert "1 selected" in str(app.query_one("#artifact-workspace-meta", Static).renderable)
 
             # Toggle off
             await pilot.press("space")
@@ -578,7 +586,7 @@ def test_tui_settings_follows_workflow_and_shortcut_opens_overlay(tmp_path):
             settings = app.query_one("#open-settings", Button)
             workflow = next(
                 widget for widget in sidebar.query(Static)
-                if "WORKFLOW" in str(widget.content)
+                if "WORKFLOW" in str(widget.renderable)
             )
             assert children.index(workflow) < children.index(settings)
 
@@ -658,7 +666,7 @@ def test_tui_sidebar_layout_and_tabs_are_uniform(tmp_path):
         async with app.run_test() as pilot:
             await pilot.pause()
             sidebar = app.query_one("#sidebar")
-            labels = [str(widget.content) for widget in sidebar.query(Static)]
+            labels = [str(widget.renderable) for widget in sidebar.query(Static)]
             assert "Log directory" in labels
             assert "Filter logs (optional)" in labels
             assert not any(label.startswith(("1  ", "2  ", "3  ")) for label in labels)
@@ -716,7 +724,7 @@ def test_tui_sidebar_uses_proportional_bounded_width(tmp_path):
 
 def test_tui_sidebar_can_minimize_and_keeps_workspace_navigation(tmp_path):
     from hound_agent.tui import RcaTui
-    from textual.widgets import Button
+    from textual.widgets import Button, Static
 
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
 
@@ -737,7 +745,7 @@ def test_tui_sidebar_can_minimize_and_keeps_workspace_navigation(tmp_path):
             assert app.query_one("#show-sidebar", Button).display is False
             assert app.query_one("#log-list").display is True
 
-            shortcutbar = str(app.query_one("#shortcutbar").content)
+            shortcutbar = str(app.query_one("#shortcutbar", Static).renderable)
             assert "sidebar" in shortcutbar
             assert not app.query("#sidebar-toggle")
 
@@ -764,21 +772,21 @@ def test_tui_artifact_workspace_multi_select_and_batch_analyze(tmp_path, monkeyp
             app.query_one("#workspace-select-all", Button).press()
             await pilot.pause()
             assert len(app._selected_artifacts) == 5
-            assert "5 selected" in str(app.query_one("#artifact-workspace-meta", Static).content)
-            assert app.query_one("#workspace-analyze", Button).label == "Analyze 5 selected"
+            assert "5 selected" in str(app.query_one("#artifact-workspace-meta", Static).renderable)
+            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze 5 selected"
 
             # Deselect all button
             app.query_one("#workspace-deselect-all", Button).press()
             await pilot.pause()
             assert len(app._selected_artifacts) == 0
-            assert "selected" not in str(app.query_one("#artifact-workspace-meta", Static).content)
-            assert app.query_one("#workspace-analyze", Button).label == "Analyze selected"
+            assert "selected" not in str(app.query_one("#artifact-workspace-meta", Static).renderable)
+            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze selected"
 
             # Space selection
             await pilot.press("space")
             await pilot.pause()
             assert len(app._selected_artifacts) == 1
-            assert "1 selected" in str(app.query_one("#artifact-workspace-meta", Static).content)
+            assert "1 selected" in str(app.query_one("#artifact-workspace-meta", Static).renderable)
 
             # Test Enter key or click to toggle selection
             await pilot.press("enter")
@@ -823,15 +831,17 @@ def test_tui_recent_run_loads_all_panes(tmp_path):
             await pilot.pause()
             assert app._runs == [out]
             app._load_run(out)
-            assert "STATUS" in str(app.query_one("#overview", Static).content)
+            await pilot.pause(0.1)
+            assert "STATUS" in str(app.query_one("#overview", Static).renderable)
             assert any(
-                "Investigation summary" in str(header.content)
+                "Investigation summary" in str(header.renderable)
                 for header in app.query(".result-header").results(Static)
             )
-            assert "Root cause" in app.query_one("#report", Markdown).source
-            assert not app.query_one("#report", Markdown).source.startswith("# RCA Report")
-            assert app.query_one("#ticket", Markdown).source
-            assert "AssertionError" in str(app.query_one("#raw", Static).content)
+            report = app.query_one("#report", Markdown)
+            ticket = app.query_one("#ticket", Markdown)
+            assert any("Root cause" in str(block._text) for block in report.query("MarkdownBlock"))
+            assert list(ticket.query("MarkdownBlock"))
+            assert "AssertionError" in str(app.query_one("#raw", Static).renderable)
 
     anyio.run(main)
 
@@ -1185,7 +1195,7 @@ def test_tui_workspace_pagination_buttons(tmp_path, monkeypatch):
 
             # Verify page 1
             assert app._artifact_page == 1
-            label = str(app.query_one("#artifact-pagination-label", Static).content)
+            label = str(app.query_one("#artifact-pagination-label", Static).renderable)
             assert "Page 1/3" in label
             assert app.query_one("#artifact-prev", Button).disabled is True
             assert app.query_one("#artifact-next", Button).disabled is False

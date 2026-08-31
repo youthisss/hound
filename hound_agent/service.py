@@ -101,6 +101,8 @@ def analyze_directory(
         source_class=kwargs.get("source_class"),
     )
     state_path = default_state_path(root, config.state_file, bool(kwargs.get("no_dedup", False)), backend=config.state_backend)
+    kwargs.setdefault("feedback_output_root", root)
+    kwargs.setdefault("feedback_store_path", root / ".hound-agent" / "feedback.sqlite3")
 
     def _one(item: tuple[int, Path]) -> AnalysisRun:
         index, log_path = item

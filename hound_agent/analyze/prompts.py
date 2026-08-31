@@ -63,6 +63,14 @@ def build_user_prompt(artifacts: Artifacts) -> str:
         "available_evidence": build_evidence_items(artifacts),
         **asdict(artifacts),
     }
+    payload["source_evidence"] = [
+        item for item in payload.get("source_evidence", []) if item.get("send_to_llm") is True
+    ]
+    payload["available_evidence"] = [
+        item for item in payload["available_evidence"]
+        if item.get("provenance", {}).get("collector") != "source.context"
+        or (isinstance(item.get("value"), dict) and item["value"].get("send_to_llm") is True)
+    ]
     payload["log_text"] = artifacts.log_text[-LOG_TEXT_LIMIT:]
     payload["frames"] = payload["frames"][:15]
     payload["failed_tests"] = payload["failed_tests"][:10]

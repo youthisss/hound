@@ -4,29 +4,57 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hound-agent"
-version = "0.4.0"
+dynamic = ["version"]
 description = "Hound Agent: all-in-one QA/QC agent that auto-investigates CI/build/test failures, finds root cause, triages, and drafts tickets."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "MIT"
 license-files = ["LICENSE"]
-dependencies = [
-    "defusedxml>=0.7.1",
-    "openai",
-    "gitpython",
-    "pyyaml",
-    "textual>=0.86",
-    "keyring>=25",
-    "platformdirs>=4",
+authors = [
+    { name = "Hound Agent Maintainers", email = "maintainers@hound-agent.local" },
 ]
+keywords = ["ci-cd", "root-cause-analysis", "triage", "devops", "qa", "testing"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "defusedxml>=0.7.1,<1.0.0",
+    "openai>=1.30.0,<2.0.0",
+    "gitpython>=3.1.40,<4.0.0",
+    "pyyaml>=6.0,<7.0",
+    "textual>=0.86.0,<1.0.0",
+    "rich>=13.3.3,<15.0.0",
+    "keyring>=25.0.0,<26.0.0",
+    "platformdirs>=4.0.0,<5.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/youthisss/hound-agent"
+Documentation = "https://github.com/youthisss/hound-agent/tree/main/docs"
+Repository = "https://github.com/youthisss/hound-agent.git"
+Issues = "https://github.com/youthisss/hound-agent/issues"
+Changelog = "https://github.com/youthisss/hound-agent/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
+    "jsonschema>=4.23,<5",
     "mypy>=1.17",
     "pip-audit>=2.9",
     "pytest",
     "pytest-cov>=6",
     "ruff>=0.12",
+    "twine>=6,<7",
 ]
 
 [project.scripts]
@@ -34,12 +62,24 @@ hound = "hound_agent.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["hound_agent"]
+core-metadata-version = "2.4"
+
+[tool.hatch.version]
+path = "hound_agent/__init__.py"
 
 [tool.hatch.build.targets.sdist]
 exclude = ["/demo", "/dist"]
+core-metadata-version = "2.4"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "unit: fast in-process logic tests",
+    "integration: multi-component or store integration tests",
+    "e2e: end-to-end command and workflow tests",
+    "slow: heavyweight or high-iteration benchmark/stress tests",
+    "network: tests targeting external network boundaries",
+]
 
 [tool.ruff]
 line-length = 140
@@ -52,4 +92,4 @@ ignore = ["E501"]
 python_version = "3.10"
 ignore_missing_imports = true
 check_untyped_defs = true
-exclude = "(?x)(hound_agent[\\\\/]analyze[\\\\/](llm|rca)\\.py|hound_agent[\\\\/](collector|pipeline|server|tui)\\.py|hound_agent[\\\\/]ingest[\\\\/]context\\.py)"
+exclude = "(?x)(hound_agent[\\\\/]analyze[\\\\/](llm|rca)\\.py|hound_agent[\\\\/](collector|tui)\\.py|hound_agent[\\\\/]ingest[\\\\/]context\\.py)"

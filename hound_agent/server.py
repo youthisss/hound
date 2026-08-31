@@ -10,7 +10,8 @@ import os
 import socket
 import sqlite3
 import stat
-import sys
+import shutil
+import signal
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,8 +20,11 @@ from uuid import uuid4
 
 from hound_agent import service
 from hound_agent.config import load_config
+from hound_agent.operational_logging import configure_server_logging, server_logger
 from hound_agent.output.report import ensure_outdir
 from hound_agent.pipeline import default_state_path
+from hound_agent.state_recovery import preserve_corrupt_sqlite
+from hound_agent.telemetry import telemetry
 
 DEFAULT_PORT = 8123
 MAX_BODY_BYTES = 1024 * 1024
@@ -31,22 +35,24 @@ CLIENT_READ_TIMEOUT_SECONDS = 15
 JOB_TTL_SECONDS = 3600
 RATE_WINDOW_SECONDS = 60
 MAX_REQUESTS_PER_WINDOW = 60
+MAX_TRACKED_CLIENTS = 1024
 MAX_SERVER_LOG_BYTES = 16 * 1024 * 1024
 COPY_CHUNK_BYTES = 64 * 1024
+LOG = server_logger()
 
 
 def _env_int(name: str, explicit: int | None, *, default: int, lo: int, hi: int) -> int:
     """Resolve a numeric server limit: explicit CLI arg wins, then env, then default."""
-    if explicit is None:
-        raw = os.environ.get(name)
-        if raw is None or not str(raw).strip():
+    candidate: int | str | None = explicit
+    if candidate is None:
+        candidate = os.environ.get(name)
+        if candidate is None or not str(candidate).strip():
             return default
-        explicit = str(raw)
     label = name.removeprefix("TH_SERVER_").lower()
     try:
-        value = int(explicit)
+        value = int(candidate)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"{label} must be an integer, got {explicit!r}") from exc
+        raise ValueError(f"{label} must be an integer, got {candidate!r}") from exc
     if not lo <= value <= hi:
         raise ValueError(f"{label} must be in [{lo}, {hi}], got {value}")
     return value
@@ -62,15 +68,23 @@ class _JobStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
+        try:
+            self._init_schema()
+        except sqlite3.DatabaseError as exc:
+            recovery = preserve_corrupt_sqlite(self.path)
+            raise ValueError(f"job store is damaged; original preserved at {recovery}") from exc
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.path), timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            return conn
+        except Exception:
+            conn.close()
+            raise
 
     @contextlib.contextmanager
     def _session(self):
@@ -175,15 +189,20 @@ class _JobStore:
             "fallback_reasons": {row["error"]: int(row["count"]) for row in fallbacks},
         }
 
-    def cleanup(self, ttl: float) -> None:
-        """Drop finished jobs older than ``ttl`` seconds. Active jobs are kept."""
+    def cleanup(self, ttl: float) -> list[str]:
+        """Drop expired finished jobs and return their report paths."""
         cutoff = time.time() - ttl
         with self._session() as conn:
+            rows = conn.execute(
+                "SELECT report FROM jobs WHERE updated < ? AND status IN ('completed','failed')",
+                (cutoff,),
+            ).fetchall()
             conn.execute(
                 "DELETE FROM jobs WHERE updated < ? AND status IN ('completed','failed')",
                 (cutoff,),
             )
             conn.commit()
+        return [str(row["report"]) for row in rows if row["report"]]
 
     def mark_interrupted(self) -> None:
         """Jobs left queued/running by a previous process are marked failed."""
@@ -266,7 +285,28 @@ class _Server(ThreadingHTTPServer):
         self.config = config
         self.jobs_lock = threading.Lock()
         self.request_times: dict[str, list[float]] = {}
+        self.unauthorized_times: dict[str, list[float]] = {}
         self.client_slots = threading.BoundedSemaphore(MAX_CLIENT_CONNECTIONS)
+        self.cleanup_stop = threading.Event()
+        self.cleanup_thread = threading.Thread(
+            target=self._cleanup_loop,
+            name="hound_agent_cleanup",
+            daemon=True,
+        )
+        self.cleanup_thread.start()
+
+    def cleanup_expired(self) -> None:
+        try:
+            expired_reports = self.config.jobs_store.cleanup(self.config.job_ttl)
+            for report in expired_reports:
+                _remove_expired_report(self.config.output_root, report)
+        except sqlite3.Error:
+            LOG.error("job store cleanup failed", extra={"event": "cleanup_failed", "failure_category": "persistence"})
+
+    def _cleanup_loop(self) -> None:
+        interval = min(60.0, max(1.0, self.config.job_ttl / 2))
+        while not self.cleanup_stop.wait(interval):
+            self.cleanup_expired()
 
     def process_request(self, request, client_address) -> None:
         if not self.client_slots.acquire(blocking=False):
@@ -281,9 +321,18 @@ class _Server(ThreadingHTTPServer):
             self.client_slots.release()
 
     def server_close(self) -> None:
+        LOG.info("server shutdown started", extra={"event": "shutdown_started"})
+        if hasattr(self, "cleanup_stop"):
+            self.cleanup_stop.set()
+            self.cleanup_thread.join(timeout=5)
         if hasattr(self, "executor"):
             self.executor.shutdown(wait=True, cancel_futures=True)
+            try:
+                self.config.jobs_store.mark_interrupted()
+            except sqlite3.Error:
+                pass
         super().server_close()
+        LOG.info("server shutdown completed", extra={"event": "shutdown_completed"})
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -293,12 +342,14 @@ class _Handler(BaseHTTPRequestHandler):
     def setup(self) -> None:
         super().setup()
         self.connection.settimeout(CLIENT_READ_TIMEOUT_SECONDS)
+        self.request_id = uuid4().hex
 
     def _json(self, code: int, obj: dict) -> None:
         body = json.dumps(obj).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Request-ID", self.request_id)
         self.end_headers()
         self.wfile.write(body)
 
@@ -310,26 +361,44 @@ class _Handler(BaseHTTPRequestHandler):
     def _require_auth(self) -> bool:
         if self._authorized():
             return True
-        self._json(401, {"error": "unauthorized"})
+        now = time.monotonic()
+        client = self.client_address[0]
+        with self.server.jobs_lock:
+            self.server.unauthorized_times = {
+                ip: [value for value in values if now - value < RATE_WINDOW_SECONDS]
+                for ip, values in self.server.unauthorized_times.items()
+                if any(now - value < RATE_WINDOW_SECONDS for value in values)
+            }
+            if client not in self.server.unauthorized_times and len(self.server.unauthorized_times) >= MAX_TRACKED_CLIENTS:
+                self.server.unauthorized_times.pop(next(iter(self.server.unauthorized_times)))
+            times = self.server.unauthorized_times.get(client, [])
+            limited = len(times) >= self.server.config.rate_limit
+            if not limited:
+                times.append(now)
+            self.server.unauthorized_times[client] = times
+        self._json(429 if limited else 401, {"error": "rate limit exceeded" if limited else "unauthorized"})
+        LOG.warning("request rejected", extra={"event": "request_rejected", "request_id": self.request_id,
+                    "status": 429 if limited else 401, "failure_category": "authentication"})
         return False
 
     def _admit_request(self) -> bool:
         now = time.monotonic()
         client = self.client_address[0]
-        try:
-            self.server.config.jobs_store.cleanup(self.server.config.job_ttl)
-        except sqlite3.Error as exc:
-            sys.stderr.write(f"server: job store cleanup failed: {exc}\n")
+        self.server.cleanup_expired()
         with self.server.jobs_lock:
             self.server.request_times = {
                 ip: [value for value in values if now - value < RATE_WINDOW_SECONDS]
                 for ip, values in self.server.request_times.items()
                 if any(now - value < RATE_WINDOW_SECONDS for value in values)
             }
+            if client not in self.server.request_times and len(self.server.request_times) >= MAX_TRACKED_CLIENTS:
+                self.server.request_times.pop(next(iter(self.server.request_times)))
             times = self.server.request_times.get(client, [])
             if len(times) >= self.server.config.rate_limit:
                 self.server.request_times[client] = times
                 self._json(429, {"error": "rate limit exceeded"})
+                LOG.warning("request rejected", extra={"event": "request_rejected", "request_id": self.request_id,
+                            "status": 429, "failure_category": "rate_limit"})
                 return False
             times.append(now)
             self.server.request_times[client] = times
@@ -343,14 +412,17 @@ class _Handler(BaseHTTPRequestHandler):
             ready = self.server.config.jobs_store.ready() and os.access(self.server.config.output_root, os.W_OK)
             self._json(200 if ready else 503, {"status": "ready" if ready else "not_ready"})
             return
-        if not self._admit_request():
-            return
         if not self._require_auth():
             return
+        if not self._admit_request():
+            return
         if self.path.rstrip("/") == "/stats":
+            counts = self.server.config.jobs_store.counts()
+            telemetry.gauge("server_queue_depth", float(counts["queued"] + counts["running"]))
             self._json(200, {
-                "jobs": self.server.config.jobs_store.counts(),
+                "jobs": counts,
                 "analysis": self.server.config.jobs_store.telemetry(),
+                "hound": telemetry.snapshot(),
             })
             return
         prefix = "/jobs/"
@@ -365,12 +437,12 @@ class _Handler(BaseHTTPRequestHandler):
         self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
-        if not self._admit_request():
-            return
         if self.path.rstrip("/") != "/analyze":
             self._json(404, {"error": "not found"})
             return
         if not self._require_auth():
+            return
+        if not self._admit_request():
             return
         try:
             length = int(self.headers.get("Content-Length", "-1"))
@@ -398,8 +470,10 @@ class _Handler(BaseHTTPRequestHandler):
         with self.server.jobs_lock:
             if self.server.config.jobs_store.active_count() >= self.server.config.max_queue:
                 self._json(429, {"error": "server queue full"})
+                LOG.warning("request rejected", extra={"event": "queue_rejected", "request_id": self.request_id, "status": 429})
                 return
             self.server.config.jobs_store.create(job_id, status="queued")
+        LOG.info("job created", extra={"event": "job_created", "request_id": self.request_id, "job_id": job_id})
         try:
             log_path = _snapshot_log(self.server.config.log_root, log_path, self.server.config.output_root, job_id)
         except FileNotFoundError:
@@ -415,7 +489,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(500, {"error": "could not snapshot log"})
             return
         try:
-            self.server.executor.submit(self._run_job, job_id, log_path, repo_path, bool(payload.get("offline", False)))
+            self.server.executor.submit(
+                self._run_job, job_id, log_path, repo_path,
+                bool(payload.get("offline", False)), self.request_id,
+            )
         except RuntimeError:
             log_path.unlink(missing_ok=True)
             self._drop_job(job_id)
@@ -427,10 +504,11 @@ class _Handler(BaseHTTPRequestHandler):
         with self.server.jobs_lock:
             self.server.config.jobs_store.delete(job_id)
 
-    def _run_job(self, job_id: str, log_path: Path, repo_path: Path | None, offline: bool) -> None:
+    def _run_job(self, job_id: str, log_path: Path, repo_path: Path | None, offline: bool, request_id: str) -> None:
         self.server.config.jobs_store.update(job_id, status="running")
+        LOG.info("job started", extra={"event": "job_started", "request_id": request_id, "job_id": job_id})
+        output = self.server.config.output_root / job_id
         try:
-            output = self.server.config.output_root / job_id
             options = dict(self.server.config.analysis_options)
             options.update(repo_dir=repo_path, offline=offline or bool(options.get("offline", False)))
             options["state_path"] = self.server.config.state_path
@@ -446,14 +524,23 @@ class _Handler(BaseHTTPRequestHandler):
                 engine=doc["meta"]["engine"],
                 error=(doc["meta"].get("llm") or {}).get("fallback_reason") or "",
             )
-        except Exception as exc:
-            sys.stderr.write(f"server: analysis job {job_id} failed: {exc}\n")
-            self.server.config.jobs_store.update(job_id, status="failed", error="analysis failed")
+            LOG.info("job completed", extra={"event": "job_completed", "request_id": request_id,
+                     "job_id": job_id, "status": "completed"})
+        except Exception:
+            LOG.error("analysis job failed", extra={"event": "job_failed", "request_id": request_id, "job_id": job_id,
+                      "status": "failed", "failure_category": "analysis"})
+            self.server.config.jobs_store.update(
+                job_id,
+                status="failed",
+                report=str(output / "report.json"),
+                error="analysis failed",
+            )
         finally:
             log_path.unlink(missing_ok=True)
 
     def log_message(self, fmt: str, *args) -> None:
-        sys.stderr.write(f"server: {fmt % args!r}\n")
+        LOG.info("request completed", extra={"event": "request_completed", "request_id": self.request_id,
+                 "method": self.command, "path": self.path.split("?", 1)[0]})
 
 
 def _contained_path(root: Path, relative_path: str) -> Path:
@@ -512,15 +599,31 @@ def _copy_limited(source, target, size: int) -> None:
         remaining -= len(chunk)
 
 
+def _remove_expired_report(output_root: Path, report: str) -> None:
+    """Remove only a job-owned output directory below the configured root."""
+    try:
+        report_path = Path(report).resolve()
+        job_dir = report_path.parent
+        job_dir.relative_to(output_root)
+        if report_path.name != "report.json" or len(job_dir.name) != 32 or not job_dir.name.isalnum():
+            return
+        shutil.rmtree(job_dir)
+    except (OSError, ValueError):
+        return
+
+
 def run_server(host: str = "127.0.0.1", port: int = DEFAULT_PORT, *, token: str | None = None, log_root: str | Path = ".", output_root: str | Path = "hound-agent-server-output", repo_root: str | Path | None = None, **analysis_options) -> None:
     if host not in {"127.0.0.1", "::1", "localhost"}:
         raise ValueError("server only supports loopback HTTP; terminate TLS at a reverse proxy")
+    log_level = analysis_options.pop("log_level", "info")
+    log_format = analysis_options.pop("log_format", "text")
+    configure_server_logging(log_level, log_format)
     workers = analysis_options.pop("workers", None)
     max_queue = analysis_options.pop("max_queue", None)
     rate_limit = analysis_options.pop("rate_limit", None)
     job_ttl = analysis_options.pop("job_ttl", None)
     config = ServerConfig(
-        token or os.environ.get("TH_SERVER_TOKEN", ""),
+        token or os.environ.get("HOUND_SERVER_TOKEN") or os.environ.get("TH_SERVER_TOKEN", ""),
         log_root,
         output_root,
         repo_root,
@@ -531,10 +634,18 @@ def run_server(host: str = "127.0.0.1", port: int = DEFAULT_PORT, *, token: str 
         job_ttl=job_ttl,
     )
     httpd = _Server((host, port), config)
-    print(f"Hound Agent server listening on http://{host}:{port}")
+    LOG.info("server listening", extra={"event": "server_started", "host": host, "port": port})
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+    def stop_server(_signum, _frame) -> None:
+        LOG.info("termination signal received", extra={"event": "shutdown_requested"})
+        threading.Thread(target=httpd.shutdown, name="hound_agent_shutdown", daemon=True).start()
+
+    signal.signal(signal.SIGTERM, stop_server)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        signal.signal(signal.SIGTERM, previous_sigterm)
         httpd.server_close()

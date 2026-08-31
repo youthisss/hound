@@ -250,26 +250,24 @@ def _iso_days_ago(days: int) -> str:
 
 def _sqlite_prune(state_path: str | os.PathLike) -> None:
     """Opportunistic retention: drop delivered entries past retention_days,
-    then keep the table under max_entries (filed entries evicted oldest-first).
+    then keep the table under max_entries (delivered entries evicted first).
     """
     global _prune_counter
     _prune_counter += 1
-    if _prune_counter % _SQLITE_PRUNE_EVERY != 0:
-        return
     try:
         with _sqlite_session(state_path) as conn:
-            conn.execute(
-                "DELETE FROM incidents WHERE filed = 1 AND last_seen < ?",
-                (_iso_days_ago(_SQLITE_RETENTION_DAYS),),
-            )
+            if _prune_counter % _SQLITE_PRUNE_EVERY == 0:
+                conn.execute(
+                    "DELETE FROM incidents WHERE filed = 1 AND last_seen < ?",
+                    (_iso_days_ago(_SQLITE_RETENTION_DAYS),),
+                )
             total = int(conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0])
             if total > _SQLITE_MAX_ENTRIES:
                 excess = total - _SQLITE_MAX_ENTRIES
                 conn.execute(
                     """DELETE FROM incidents WHERE key IN (
                            SELECT key FROM incidents
-                           WHERE filed = 1
-                           ORDER BY last_seen ASC
+                           ORDER BY filed DESC, last_seen ASC
                            LIMIT ?
                        )""",
                     (excess,),

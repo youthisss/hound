@@ -280,7 +280,7 @@ def test_tui_analyze_all_processes_visible_logs(tmp_path):
             assert not app._analyzing
             reports = list((tmp_path / "out").glob("*/report.md"))
             assert len(reports) == 2
-            overview = str(app.query_one("#overview", Static).content)
+            overview = str(app.query_one("#overview", Static).renderable)
             assert "Batch analysis complete" in overview
             assert "Analyzed [b]2/2[/b]" in overview
 
@@ -298,7 +298,7 @@ def test_tui_analyze_all_empty_selection_is_noop(tmp_path):
             app.action_analyze_all()
             await pilot.pause()
             assert not app._analyzing
-            assert "No visible logs" in str(app.query_one("#workflow-status", Static).content)
+            assert "No visible logs" in str(app.query_one("#workflow-status", Static).renderable)
             assert app.query_one("#analyze-all", Button).disabled
 
     anyio.run(main)
@@ -316,8 +316,8 @@ def test_tui_lists_structured_artifacts_alongside_logs(tmp_path):
             app.action_refresh()
             await pilot.pause()
             items = app.query_one("#log-list", ListView)
-            names = {str(child.query_one(Static).content).splitlines()[0].split()[0] for child in items.children}
+            names = {str(child.query_one(Static).renderable).splitlines()[0].split()[0] for child in items.children}
             assert names == {"junit.xml"}
-            assert "TEST" in str(items.children[0].query_one(Static).content)
+            assert "TEST" in str(items.children[0].query_one(Static).renderable)
 
     anyio.run(main)

@@ -6,6 +6,13 @@ demo
 demo_batch
 demo_tui
 .pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+dist
+plans
+.vscode
 .git
 .env
 .env.*

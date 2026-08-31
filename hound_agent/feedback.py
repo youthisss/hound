@@ -189,6 +189,41 @@ def read_feedback(store_path: str | Path, *, reviewed_only: bool = False) -> lis
         return [dict(row) for row in connection.execute(query, params).fetchall()]
 
 
+def find_known_issue(
+    store_path: str | Path,
+    output_root: str | Path,
+    dedup_key: str,
+) -> dict | None:
+    """Return a hash-verified report for one reviewed, resolved fingerprint."""
+    store = Path(store_path)
+    if not store.is_file() or store.is_symlink() or not dedup_key:
+        return None
+    with _connect(store) as connection:
+        row = connection.execute(
+            """SELECT * FROM feedback
+               WHERE dedup_key = ?
+                 AND review_status = 'reviewed'
+                 AND usefulness IN ('useful', 'partial')
+                 AND actual_outcome IN ('root_cause_confirmed', 'resolved')
+               ORDER BY created_at DESC, feedback_id DESC
+               LIMIT 1""",
+            (dedup_key,),
+        ).fetchone()
+    if row is None:
+        return None
+    record = dict(row)
+    try:
+        report_path = resolve_report(output_root, record["run_id"])
+        report, digest = _load_report(report_path)
+    except (FileNotFoundError, ValueError):
+        return None
+    if digest != record["report_sha256"]:
+        return None
+    if report.get("triage", {}).get("dedup_key") != dedup_key:
+        return None
+    return {"feedback": record, "report": report}
+
+
 def export_feedback(store_path: str | Path, *, reviewed_only: bool = False, candidates: bool = False) -> dict:
     """Return sanitized records or explicit candidate-fixture manifests."""
     records = read_feedback(store_path, reviewed_only=reviewed_only or candidates)

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from hound_agent.output.markdown import escape_code, escape_text
+from hound_agent.output.markdown import escape_code, escape_text, sanitize_text
 from hound_agent.models import validate
 from hound_agent.service import AnalysisRun
 
@@ -27,8 +27,8 @@ def format_runs(runs: list[AnalysisRun], output_format: str) -> str:
             ensure_ascii=False,
         )
     if output_format == "markdown":
-        return "\n\n".join(_format_markdown_run(run) for run in runs)
-    return "\n\n".join(_format_text_run(run) for run in runs)
+        return sanitize_text("\n\n".join(_format_markdown_run(run) for run in runs))
+    return sanitize_text("\n\n".join(_format_text_run(run) for run in runs))
 
 
 def format_document(document: dict, output_format: str = "text") -> str:
@@ -66,8 +66,8 @@ def format_document(document: dict, output_format: str = "text") -> str:
             "",
             escape_text(root_cause["fix_suggestion"]),
         ]
-        return "\n".join(lines)
-    return _format_fields(document, request)
+        return sanitize_text("\n".join(lines))
+    return sanitize_text(_format_fields(document, request))
 
 
 def _format_text_run(run: AnalysisRun) -> str:

@@ -30,6 +30,7 @@ KINDS = {
     "liveness_probe_failed",
     "readiness_probe_failed",
     "scheduling_failed",
+    "permission_error",
     "quota_exceeded",
     "network_failure",
     "registry_auth_failure",
@@ -106,6 +107,31 @@ class DeploymentContext:
     migration_version: str = ""
     outcome: str = ""
     recovery: str = ""
+    # M7: explicit deployment context for the DevOps investigation contract.
+    # Legacy sidecars that omit these fields remain readable; every field below
+    # is optional and additive relative to schema v2.0.
+    service: str = ""
+    workload: str = ""
+    commit: str = ""
+    image_digest: str = ""
+    finished_at: str = ""
+    previous_commit: str = ""
+    previous_image_digest: str = ""
+    customer_impact: str = ""
+    manifest_digest: str = ""
+    previous_manifest_digest: str = ""
+    resource_fingerprint: str = ""
+    previous_resource_fingerprint: str = ""
+    previous_migration_version: str = ""
+    runtime_version: str = ""
+    previous_runtime_version: str = ""
+    dependency_fingerprint: str = ""
+    previous_dependency_fingerprint: str = ""
+    feature_flag_version: str = ""
+    previous_feature_flag_version: str = ""
+    slo_target: str = ""
+    error_budget_remaining: str = ""
+    runbook_url: str = ""
 
 
 @dataclass
@@ -125,6 +151,20 @@ class FailureEvent:
     kind: str = "unknown"
     message: str = ""
     role: str = "primary"
+    # M7 causal-link wire format. ``trace_id`` scopes one execution/request/pipeline
+    # run; ``span_id`` identifies the event's own span; ``parent_span_id`` (nullable)
+    # links to the causal parent and supports partial traces. ``timestamp_ns`` is an
+    # optional high-precision clock; ``sequence`` is the fallback ordering when clocks
+    # are unreliable or too coarse for concurrency. ``event_id`` is a stable run-scoped
+    # identifier used by the timeline builder.
+    event_id: str = ""
+    service: str = ""
+    trace_id: str = ""
+    span_id: str = ""
+    parent_span_id: str | None = None
+    timestamp: str = ""
+    timestamp_ns: int | None = None
+    sequence: int | None = None
 
 
 @dataclass
@@ -141,6 +181,10 @@ class Artifacts:
     deployment: DeploymentContext = field(default_factory=DeploymentContext)
     events: list[FailureEvent] = field(default_factory=list)
     enrichment: list[str] = field(default_factory=list)
+    connector_audits: list[dict] = field(default_factory=list)
+    metric_samples: list[dict] = field(default_factory=list)
+    trace_spans: list[dict] = field(default_factory=list)
+    source_evidence: list[dict] = field(default_factory=list)
     log_path: str = ""
     redacted: bool = False
     request: RequestContext = field(default_factory=RequestContext)
@@ -182,11 +226,72 @@ class Ticket:
     labels: list[str] = field(default_factory=list)
 
 
+@dataclass
+class TimelineEntry:
+    """One event in the deterministic deployment timeline.
+
+    Ordering is deterministic and never invented: ``timestamp_ns`` is used when
+    available, else ``sequence``, else the original (log) order. ``ordering_basis``
+    and ``uncertainty`` record *why* the entry is where it is so consumers can
+    distinguish high-confidence clocks from fallback ordering.
+    """
+
+    event_id: str = ""
+    position: int = 0
+    timestamp_ns: int | None = None
+    timestamp: str = ""
+    sequence: int | None = None
+    stage: str = "unknown"
+    kind: str = "unknown"
+    role: str = "downstream"
+    message: str = ""
+    trace_id: str = ""
+    span_id: str = ""
+    parent_span_id: str | None = None
+    service: str = ""
+    source: str = ""  # "failure_event" | "deployment" | "ci" | "recovery"
+    ordering_basis: str = "log_order"  # timestamp_ns | sequence | log_order
+    uncertainty: str = ""
+
+
+@dataclass
+class Timeline:
+    """Aggregated, deterministically ordered event timeline.
+
+    ``grouping`` reports the causal-linking scheme observed: ``runtime``
+    (request-level ``trace_id``), ``pipeline`` (CI job/step structure),
+    ``mixed`` (partial instrumentation), or ``none``. ``has_cycles`` surfaces
+    mis-assigned ``parent_span_id`` values without failing the build — the
+    fallback is a flat, deterministic list. ``distinction`` separates the
+    primary failure, downstream symptoms, recovery, and unknown-impact status
+    per the M7 exit criteria.
+    """
+
+    entries: list[TimelineEntry] = field(default_factory=list)
+    grouping: str = "none"  # runtime | pipeline | mixed | none
+    ordering_basis: str = "log_order"  # timestamp_ns | sequence | log_order | mixed
+    has_cycles: bool = False
+    cycle_warning: str = ""
+    primary_event_id: str = ""
+    downstream_event_ids: list[str] = field(default_factory=list)
+    recovery_event_ids: list[str] = field(default_factory=list)
+    customer_impact: str = "unknown"  # unknown | none | degraded | outage
+    release_changed: bool | None = None
+    release_changed_fields: list[str] = field(default_factory=list)
+
+
 def build_evidence_items(artifacts: Artifacts, observed_at: str = "") -> list[dict]:
     """Return bounded deterministic evidence with stable run-scoped IDs."""
     items: list[dict] = []
 
-    def add(kind: str, value, source_type: str, locator: str, collector: str) -> None:
+    def add(
+        kind: str,
+        value,
+        source_type: str,
+        locator: str,
+        collector: str,
+        evidence_observed_at: str | None = None,
+    ) -> None:
         if value in (None, "", [], {}):
             return
         items.append({
@@ -198,7 +303,7 @@ def build_evidence_items(artifacts: Artifacts, observed_at: str = "") -> list[di
                 "artifact": artifacts.log_path,
                 "locator": locator,
                 "collector": collector,
-                "observed_at": observed_at or None,
+                "observed_at": (evidence_observed_at if evidence_observed_at is not None else observed_at) or None,
             },
         })
 
@@ -214,6 +319,21 @@ def build_evidence_items(artifacts: Artifacts, observed_at: str = "") -> list[di
     add("correlated_commits", list(artifacts.git.correlated_commits[:10]), "repository", "git.correlated_commits", "ingest.git")
     for index, value in enumerate(artifacts.enrichment[:20]):
         add("connector_observation", value, "connector", f"enrichment[{index}]", "ingest.enrich")
+    for index, audit in enumerate(artifacts.connector_audits[:20]):
+        add(
+            "connector_audit",
+            audit,
+            "connector",
+            f"context.connector_audits[{index}]",
+            "connectors.deployment",
+            str(audit.get("observed_at") or ""),
+        )
+    for index, sample in enumerate(artifacts.metric_samples[:20]):
+        add("metric_sample", sample, "connector", f"devops.metric_samples[{index}]", "connectors.observability")
+    for index, span in enumerate(artifacts.trace_spans[:20]):
+        add("trace_span", span, "connector", f"devops.trace_spans[{index}]", "connectors.observability")
+    for index, source in enumerate(artifacts.source_evidence[:20]):
+        add("source_context", source, "repository", f"context.source_evidence[{index}]", "source.context")
     if any(vars(artifacts.run).values()):
         add("run_context", asdict(artifacts.run), "context", "context.run", "ingest.context")
     if any(vars(artifacts.deployment).values()):
@@ -326,6 +446,9 @@ def build_doc(
     reused: bool = False,
     reused_from_key: str | None = None,
     trust_context: dict | None = None,
+    timeline: dict | None = None,
+    devops: dict | None = None,
+    test_impact: dict | None = None,
 ) -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -366,6 +489,8 @@ def build_doc(
             "deployment": asdict(artifacts.deployment),
             "request": asdict(artifacts.request),
             "owners": artifacts.git.owners,
+            "connector_audits": artifacts.connector_audits,
+            "source_evidence": artifacts.source_evidence,
         },
         "root_cause": {
             "hypothesis": root_cause.hypothesis,
@@ -376,6 +501,9 @@ def build_doc(
         "analysis": _analysis_section(artifacts, root_cause, generated_at),
         "triage": asdict(triage),
         "ticket": asdict(ticket),
+        **({"timeline": timeline} if timeline is not None else {}),
+        **({"devops": devops} if devops is not None else {}),
+        **({"test_impact": test_impact} if test_impact is not None else {}),
     }
 
 
@@ -398,6 +526,14 @@ def validate(doc: dict) -> None:
            f"schema_version must be one of {sorted(SUPPORTED_SCHEMA_VERSIONS)}")
 
     current_schema = doc["schema_version"] == SCHEMA_VERSION
+    if current_schema:
+        _check(
+            set(doc) <= {
+                "schema_version", "meta", "failure", "context", "root_cause",
+                "analysis", "triage", "ticket", "timeline", "devops", "test_impact",
+            },
+            "document contains unsupported fields",
+        )
     meta = doc["meta"]
     for key in ("engine", "model", "log_file", "generated_at", "redacted", "usage"):
         _check(key in meta, f"meta.{key} missing")
@@ -455,6 +591,26 @@ def validate(doc: dict) -> None:
         _check(event.get("kind") in KINDS, "event kind invalid")
         _check(isinstance(event.get("message"), str), "event message must be str")
         _check(event.get("role") in {"primary", "downstream"}, "event role invalid")
+        # M7 causal-link wire format (optional, additive; legacy events may omit it).
+        if "event_id" in event:
+            _check(isinstance(event["event_id"], str), "event event_id must be str")
+        if "service" in event:
+            _check(isinstance(event["service"], str), "event service must be str")
+        if "trace_id" in event:
+            _check(isinstance(event["trace_id"], str), "event trace_id must be str")
+        if "span_id" in event:
+            _check(isinstance(event["span_id"], str), "event span_id must be str")
+        if "parent_span_id" in event:
+            _check(event["parent_span_id"] is None or isinstance(event["parent_span_id"], str),
+                   "event parent_span_id must be str or null")
+        if "timestamp" in event:
+            _check(isinstance(event["timestamp"], str), "event timestamp must be str")
+        if "timestamp_ns" in event:
+            _check(event["timestamp_ns"] is None or (type(event["timestamp_ns"]) is int and event["timestamp_ns"] >= 0),
+                   "event timestamp_ns must be a non-negative int or null")
+        if "sequence" in event:
+            _check(event["sequence"] is None or (type(event["sequence"]) is int and event["sequence"] >= 0),
+                   "event sequence must be a non-negative int or null")
     for frame in failure["stacktrace"]:
         _check(isinstance(frame, dict), "stacktrace entries must be objects")
         _check(isinstance(frame.get("file"), str), "stacktrace.file must be str")
@@ -469,6 +625,13 @@ def validate(doc: dict) -> None:
         _check(isinstance(test.get("assertion"), str), "failed_tests.assertion must be str")
 
     context = doc["context"]
+    if current_schema:
+        _check(
+            set(context) <= {
+                "run", "deployment", "request", "owners", "connector_audits", "source_evidence",
+            },
+            "context contains unsupported fields",
+        )
     _check(isinstance(context.get("owners"), list) and all(isinstance(owner, str) for owner in context["owners"]), "context.owners must be list[str]")
     for section, fields in {
         "run": {"provider", "run_id", "run_url", "job_id", "job_name", "workflow", "branch", "commit_sha", "step_name", "attempt", "conclusion", "duration_ms", "pr_number", "base_sha", "head_sha"},
@@ -489,6 +652,56 @@ def validate(doc: dict) -> None:
                        f"context.request.users must contain at most {MAX_REQUEST_USERS} users")
             else:
                 _check(isinstance(item, str), f"context.{section}.{key} must be str")
+    # M7 additive deployment fields (optional; legacy v2.0 sidecars omit them).
+    deployment = context.get("deployment")
+    assert isinstance(deployment, dict)
+    for key in (
+        "service", "workload", "commit", "image_digest", "finished_at",
+        "previous_commit", "previous_image_digest", "customer_impact",
+        "manifest_digest", "previous_manifest_digest", "resource_fingerprint",
+        "previous_resource_fingerprint", "previous_migration_version",
+        "runtime_version", "previous_runtime_version", "dependency_fingerprint",
+        "previous_dependency_fingerprint", "feature_flag_version",
+        "previous_feature_flag_version", "slo_target", "error_budget_remaining",
+        "runbook_url",
+    ):
+        if key in deployment:
+            _check(isinstance(deployment[key], str), f"context.deployment.{key} must be str")
+
+    if "connector_audits" in context:
+        connector_audits = context["connector_audits"]
+        _check(isinstance(connector_audits, list), "context.connector_audits must be a list")
+        assert isinstance(connector_audits, list)
+        for audit in connector_audits:
+            _check(isinstance(audit, dict), "context.connector_audits entries must be objects")
+            assert isinstance(audit, dict)
+            for key in ("connector", "operation", "resource", "namespace", "status", "observed_at", "error"):
+                _check(isinstance(audit.get(key), str), f"context.connector_audits.{key} must be str")
+            _check(type(audit.get("duration_ms")) is int and audit["duration_ms"] >= 0,
+                   "context.connector_audits.duration_ms must be a non-negative int")
+            _check(type(audit.get("output_bytes")) is int and audit["output_bytes"] >= 0,
+                   "context.connector_audits.output_bytes must be a non-negative int")
+            _check(audit.get("returncode") is None or type(audit.get("returncode")) is int,
+                   "context.connector_audits.returncode must be int or null")
+    if "source_evidence" in context:
+        source_evidence = context["source_evidence"]
+        _check(isinstance(source_evidence, list), "context.source_evidence must be a list")
+        assert isinstance(source_evidence, list)
+        for source in source_evidence:
+            _check(isinstance(source, dict), "context.source_evidence entries must be objects")
+            assert isinstance(source, dict)
+            _check(isinstance(source.get("file"), str), "context.source_evidence.file must be str")
+            _check(type(source.get("line")) is int and source["line"] >= 0,
+                   "context.source_evidence.line must be a non-negative int")
+            _check(type(source.get("send_to_llm")) is bool,
+                   "context.source_evidence.send_to_llm must be bool")
+
+    if "timeline" in doc:
+        _validate_timeline(doc["timeline"])
+    if "devops" in doc:
+        _validate_devops(doc["devops"])
+    if "test_impact" in doc:
+        _validate_test_impact(doc["test_impact"])
 
     rc = doc["root_cause"]
     for key in ("confidence", "hypothesis", "evidence", "fix_suggestion"):
@@ -612,3 +825,75 @@ def _validate_analysis(doc: dict) -> None:
             _check(isinstance(hypothesis.get(key), list)
                    and all(isinstance(value, str) for value in hypothesis[key]),
                    f"analysis.hypotheses.{key} must be list[str]")
+
+
+def _validate_timeline(timeline: object) -> None:
+    """Validate the M7 timeline section when present (optional for legacy docs)."""
+    _check(isinstance(timeline, dict), "timeline must be an object")
+    assert isinstance(timeline, dict)
+    _check(timeline.get("grouping") in {"runtime", "pipeline", "mixed", "none"},
+           "timeline.grouping invalid")
+    _check(timeline.get("ordering_basis") in {"timestamp_ns", "sequence", "log_order", "mixed"},
+           "timeline.ordering_basis invalid")
+    _check(type(timeline.get("has_cycles")) is bool, "timeline.has_cycles must be bool")
+    _check(isinstance(timeline.get("cycle_warning"), str), "timeline.cycle_warning must be str")
+    _check(isinstance(timeline.get("primary_event_id"), str), "timeline.primary_event_id must be str")
+    for key in ("downstream_event_ids", "recovery_event_ids", "release_changed_fields"):
+        _check(isinstance(timeline.get(key), list)
+               and all(isinstance(item, str) for item in timeline[key]),
+               f"timeline.{key} must be list[str]")
+    _check(timeline.get("customer_impact") in {"unknown", "none", "degraded", "outage"},
+           "timeline.customer_impact invalid")
+    _check(timeline.get("release_changed") is None or type(timeline.get("release_changed")) is bool,
+           "timeline.release_changed must be bool or null")
+    entries = timeline.get("entries")
+    _check(isinstance(entries, list), "timeline.entries must be a list")
+    assert isinstance(entries, list)
+    for entry in entries:
+        _check(isinstance(entry, dict), "timeline.entries entries must be objects")
+        assert isinstance(entry, dict)
+        _check(isinstance(entry.get("event_id"), str), "timeline entry event_id must be str")
+        _check(type(entry.get("position")) is int and entry["position"] >= 0,
+               "timeline entry position must be a non-negative int")
+        if "timestamp_ns" in entry:
+            _check(entry["timestamp_ns"] is None or (type(entry["timestamp_ns"]) is int and entry["timestamp_ns"] >= 0),
+                   "timeline entry timestamp_ns must be a non-negative int or null")
+        _check(isinstance(entry.get("stage"), str) and entry["stage"] in STAGES, "timeline entry stage invalid")
+        _check(entry.get("kind") in KINDS, "timeline entry kind invalid")
+        _check(entry.get("role") in {"primary", "downstream", "recovery", "context", "unknown"},
+               "timeline entry role invalid")
+        _check(isinstance(entry.get("message"), str), "timeline entry message must be str")
+        _check(entry.get("parent_span_id") is None or isinstance(entry.get("parent_span_id"), str),
+               "timeline entry parent_span_id must be str or null")
+        _check(entry.get("ordering_basis") in {"timestamp_ns", "sequence", "log_order"},
+               "timeline entry ordering_basis invalid")
+        _check(isinstance(entry.get("uncertainty"), str), "timeline entry uncertainty must be str")
+
+        # Validate optional TimelineEntry attributes when present.
+        _check(entry.get("timestamp") is None or isinstance(entry.get("timestamp"), str), "timeline entry timestamp must be str or null")
+        _check(entry.get("sequence") is None or type(entry.get("sequence")) is int, "timeline entry sequence must be int or null")
+        _check(entry.get("trace_id") is None or isinstance(entry.get("trace_id"), str), "timeline entry trace_id must be str or null")
+        _check(entry.get("span_id") is None or isinstance(entry.get("span_id"), str), "timeline entry span_id must be str or null")
+        _check(entry.get("service") is None or isinstance(entry.get("service"), str), "timeline entry service must be str or null")
+        _check(entry.get("source") is None or isinstance(entry.get("source"), str), "timeline entry source must be str or null")
+
+
+def _validate_devops(devops: object) -> None:
+    _check(isinstance(devops, dict), "devops must be an object")
+    assert isinstance(devops, dict)
+    for key in ("release_changes", "metric_samples", "trace_spans", "service_boundaries"):
+        _check(isinstance(devops.get(key), list), f"devops.{key} must be a list")
+    for key in ("critical_path", "slo", "runbook"):
+        _check(isinstance(devops.get(key), dict), f"devops.{key} must be an object")
+    _check(isinstance(devops.get("static_severity"), str), "devops.static_severity must be str")
+    _check(isinstance(devops.get("effective_severity"), str), "devops.effective_severity must be str")
+
+
+def _validate_test_impact(test_impact: object) -> None:
+    _check(isinstance(test_impact, dict), "test_impact must be an object")
+    assert isinstance(test_impact, dict)
+    _check(type(test_impact.get("advisory")) is bool, "test_impact.advisory must be bool")
+    _check(test_impact.get("language") == "python", "test_impact.language invalid")
+    _check(isinstance(test_impact.get("call_graph"), list), "test_impact.call_graph must be a list")
+    _check(isinstance(test_impact.get("recommendations"), list), "test_impact.recommendations must be a list")
+    _check(type(test_impact.get("missing_coverage")) is bool, "test_impact.missing_coverage must be bool")

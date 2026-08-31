@@ -16,7 +16,7 @@ import yaml
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.markup import escape
+from rich.markup import escape as rich_escape
 from textual.screen import ModalScreen
 from textual import work
 from textual.widgets import (
@@ -39,6 +39,11 @@ from hound_agent.ingest.structured import parse_structured_artifact
 from hound_agent.credentials import delete_api_key, get_api_key, set_api_key
 from hound_agent.providers import cache_models, cached_models, discover_models, load_custom_providers, save_custom_provider
 from hound_agent.preferences import load_tui_preferences, save_tui_preferences
+from hound_agent.output.markdown import sanitize_text
+
+
+def escape(value: object) -> str:
+    return rich_escape(sanitize_text(value))
 
 PAGE_SIZE = 100
 RAW_LIMIT = 256 * 1024
@@ -330,6 +335,18 @@ def _fmt_age(path: Path) -> str:
 def _compact(text: object, limit: int = 72) -> str:
     value = " ".join(str(text or "").split())
     return value if len(value) <= limit else value[: limit - 1] + "…"
+
+
+def _markdown_without_fences(content: str) -> str:
+    """Render fenced blocks as indented code to avoid Textual 0.89 mount races."""
+    lines: list[str] = []
+    in_fence = False
+    for line in content.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        lines.append(f"    {line}" if in_fence else line)
+    return "\n".join(lines)
 
 
 def _result_header(label: str, title: str, description: str) -> str:
@@ -924,7 +941,7 @@ class RcaTui(App):
                     f"[b]path[/b] {escape(_compact(self.logs_dir, 54))}  "
                     f"[b]mode[/b] {mode}  [b]state[/b] {state}"
                 )
-            self.query_one("#statusbar", Static).update(content)
+            self.screen_stack[0].query_one("#statusbar", Static).update(content)
         except Exception:
             pass
 
@@ -2170,12 +2187,12 @@ class RcaTui(App):
         report_content = render_md(doc)
         if report_content.startswith("# RCA Report\n"):
             report_content = report_content.removeprefix("# RCA Report\n").lstrip("\n")
-        self.query_one("#report", Markdown).update(report_content)
+        self.query_one("#report", Markdown).update(_markdown_without_fences(report_content))
         ticket_file = target_dir / "ticket.md"
         if not ticket_file.exists():
             ticket_file = self.out_dir / "ticket.md"
         ticket_content = ticket_file.read_text(encoding="utf-8", errors="replace") if ticket_file.exists() else "_Ticket draft unavailable._"
-        self.query_one("#ticket", Markdown).update(ticket_content)
+        self.query_one("#ticket", Markdown).update(_markdown_without_fences(ticket_content))
         raw_path = self._resolve_raw_path(doc)
         self._selected_log = raw_path if raw_path.is_file() else self._selected_log
         self._show_raw(raw_path)
