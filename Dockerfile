@@ -9,15 +9,15 @@ COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src ./src
 
 RUN uv sync --frozen --no-dev \
-    && useradd --create-home --uid 10001 hound-agent \
-    && chown -R hound-agent:hound-agent /app
+    && useradd --create-home --uid 10001 hound \
+    && chown -R hound:hound /app
 
-USER hound-agent
+USER hound
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-LABEL org.opencontainers.image.title="Hound Agent" \
+LABEL org.opencontainers.image.title="Hound" \
       org.opencontainers.image.licenses="MIT"
 
 ENTRYPOINT ["/app/.venv/bin/hound"]

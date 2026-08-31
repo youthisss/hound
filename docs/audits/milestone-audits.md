@@ -36,13 +36,13 @@ Findings fixed:
 
 Verification evidence:
 
-- `uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q`:
+- `uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q`:
   456 passed, 5 skipped, 83.52% coverage.
-- `uv run python -m hound_agent.eval --offline --format json`: exit 0; committed
+- `uv run python -m hound.eval --offline --format json`: exit 0; committed
   deterministic snapshot at `tests/eval/baseline-v1.0.json`.
 - Held-out-only evaluator: exit 0.
 - `uv run ruff check .`: clean.
-- `uv run mypy src/hound_agent`: clean across 35 source files.
+- `uv run mypy src/hound`: clean across 35 source files.
 
 ## M2 - Evidence, Provenance, and Uncertainty Schema
 
@@ -84,7 +84,7 @@ Verification evidence:
 - Post-review regression gate: 21 passed.
 - Full suite: 462 passed, 5 skipped.
 - `uv run ruff check src tests`: clean.
-- `uv run mypy src/hound_agent`: clean across 35 source files.
+- `uv run mypy src/hound`: clean across 35 source files.
 - JSON syntax check for `docs/schema/rca-v2.0.schema.json`: clean.
 
 ## M3 - Feedback, Calibration, and Trust Policy
@@ -105,7 +105,7 @@ Verification evidence:
 Findings fixed:
 
 1. `MEDIUM` - the `hound feedback` CLI, trust policy (`--source-class`,
-   `trust.source_class`, `TH_SOURCE_CLASS`), and confidence-band calibration
+   `trust.source_class`, `HOUND_SOURCE_CLASS`), and confidence-band calibration
    were implemented but undocumented. `docs/guides/usage.md` now covers feedback and
    trust policy workflows, `docs/architecture.md` documents the trust profiles,
    feedback store, and calibration meaning, and `docs/prd.md` adds FR-30/31/32.
@@ -122,16 +122,16 @@ Verification evidence:
   (including `--candidate-fixtures`) available.
 - `uv run hound config show --json`: exit 0; includes `trust.source_class`,
   `source_context`, `enrichment`, `llm`, `delivery`.
-- `uv run python -m hound_agent.eval --offline --format json`: exit 0; reports
+- `uv run python -m hound.eval --offline --format json`: exit 0; reports
   `confidence_calibration` per band.
 - `uv run ruff check .`: clean.
-- `uv run mypy src/hound_agent`: clean across 37 source files.
+- `uv run mypy src/hound`: clean across 37 source files.
 
 ## M4 — Normalized Test Results and Historical Store
 
 - Exit status: passed on 2026-08-26.
 - Code-review lane: `APPROVE`. The history store is isolated from dedup and
-  feedback state (`<out>/.hound-agent/history.sqlite3`), uses WAL plus atomic
+  feedback state (`<out>/.hound/history.sqlite3`), uses WAL plus atomic
   `ON CONFLICT` upserts keyed by `(suite, test, run_id, attempt)`, and never
   stores raw logs — rows reference `run_id`/`evidence_id` instead. Import is
   bounded and rejects DOCTYPE XML and symlinked sources.
@@ -171,7 +171,7 @@ Verification evidence:
 - Retention test: deleting rows older than the window leaves recomputed
   aggregates intact (0.75 before, 0.50 after pruning).
 - `uv run ruff check .`: clean.
-- `uv run mypy src/hound_agent`: clean across 41 source files.
+- `uv run mypy src/hound`: clean across 41 source files.
 
 ## M5 — Regression and Flaky-Test Intelligence
 
@@ -191,10 +191,10 @@ Findings fixed:
 
 Verification evidence:
 - `uv run pytest tests/integration/test_qa_history.py tests/integration/test_qa_classifier.py -v`: 33 passed.
-- `uv run python -m hound_agent.eval --offline --suite qa-history --format json`: 100% precision/recall across 7 cases.
+- `uv run python -m hound.eval --offline --suite qa-history --format json`: 100% precision/recall across 7 cases.
 - `uv run hound insights analyze --help`: command available and documented.
 - `uv run ruff check .`: clean.
-- `uv run mypy src/hound_agent`: clean across 43 source files.
+- `uv run mypy src/hound`: clean across 43 source files.
 
 ## Production Maturity Repository Gate — 2026-08-31
 
@@ -219,7 +219,7 @@ Local verification:
 
 - Full suite: 654 passed, 6 skipped, 85.84% coverage.
 - `uv run ruff check .`: clean.
-- `uv run mypy src/hound_agent`: clean across 64 source files.
+- `uv run mypy src/hound`: clean across 64 source files.
 - Dependency audit: no known vulnerabilities.
 - Wheel and source distribution: build, Twine metadata, outside-checkout clean
   installation, import, version, and doctor checks passed.

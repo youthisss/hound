@@ -1,4 +1,4 @@
-# PRD — Hound Agent
+# PRD — Hound
 
 **Version:** 0.4.0 · **Schema:** RCA v2.0 (v1.4 reader compatible)
 
@@ -13,7 +13,7 @@ CI/CD, build, and test failures are frequently left uninvestigated:
 
 ## 2. Goal
 
-Hound Agent is a Python CLI and core library (`hound_agent`) that
+Hound is a Python CLI and core library (`hound`) that
 auto-investigates a failure artifact:
 
 ```
@@ -67,7 +67,7 @@ log + repo context → parse → root cause analysis → triage → report + tic
 | FR-28 | Offline detection accuracy: failed-test parsing for Jest/Vitest, Go, RSpec, Cargo, and dotnet runners; stacktrace recognition for Java/V8/C# formats; chained-traceback message extraction (final exception wins), descriptive npm summaries, Kubernetes `Events:` warning priority; and additional failure kinds `dependency_resolution`, `disk_full`, `tls_certificate_error`, `api_rate_limited`. All deterministic — no network, no LLM |
 | FR-29 | Offline evaluation harness: validate versioned sanitized cases, keep development and held-out sets separate, and report machine-readable classification, extraction, dedup, redaction, throughput, and memory baselines without changing production classifiers |
 | FR-30 | Structured feedback: rate root-cause usefulness, kind/severity/owner/duplicate correctness, and confirmed actual outcome; store separately from dedup state with audit metadata and redaction; CLI record/export (`hound feedback`); reviewed feedback exports explicit regression-fixture candidate manifests without mutating classifiers |
-| FR-31 | Trust policy: source classes `trusted_branch`/`fork_pr`/`local_artifact` gate source context, enrichment, LLM, and delivery (`--source-class`, YAML `trust.source_class`, `TH_SOURCE_CLASS`, CI detection); untrusted fork analysis defaults to offline with no source enrichment and no delivery |
+| FR-31 | Trust policy: source classes `trusted_branch`/`fork_pr`/`local_artifact` gate source context, enrichment, LLM, and delivery (`--source-class`, YAML `trust.source_class`, `HOUND_SOURCE_CLASS`, CI detection); untrusted fork analysis defaults to offline with no source enrichment and no delivery |
 | FR-32 | Confidence calibration: deterministic `high`/`medium`/`low` bands calibrated against the evaluation set; evaluator reports support, empirical accuracy, mean deterministic score, and gap per band with documented meaning |
 | FR-33 | QA test history: normalized `(suite, leaf test)` identity across pytest/JUnit/Jest/Vitest/Go/RSpec/Cargo/dotnet evidence; SQLite store (`hound insights`) with WAL atomic upserts keyed by `(suite, test, run_id, attempt)`, retention, migrations, queries (counts, failure-rate windows, first/last seen, duration median/p95, environment breakdown), explicit `insufficient_history` instead of guessing, and sanitized import/export without storing raw logs |
 

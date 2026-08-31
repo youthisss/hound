@@ -18,8 +18,8 @@ always reviewed separately and are never automatically merged.
 
 ```sh
 uv run ruff check .
-uv run mypy src/hound_agent
-uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
+uv run mypy src/hound
+uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q
 uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
 uv run pip-audit --requirement audited-requirements.txt
 uv build

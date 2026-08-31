@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from hound_agent.ingest.logs import parse_log
-from hound_agent.pipeline import analyze
+from hound.ingest.logs import parse_log
+from hound.pipeline import analyze
 from tests.conftest import FIXTURES
 
 
@@ -100,8 +100,8 @@ def test_environment_policy_overrides_severity(tmp_path):
 
 
 def test_github_output_is_published(tmp_path, monkeypatch):
-    from hound_agent.cli import _write_github_outputs
-    from hound_agent import service
+    from hound.cli import _write_github_outputs
+    from hound import service
 
     output = tmp_path / "github-output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
@@ -118,8 +118,8 @@ def test_github_output_is_published(tmp_path, monkeypatch):
 
 
 def test_github_output_uses_multiline_safe_encoding(tmp_path, monkeypatch):
-    from hound_agent.cli import _write_github_outputs
-    from hound_agent import service
+    from hound.cli import _write_github_outputs
+    from hound import service
 
     output = tmp_path / "github-output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))

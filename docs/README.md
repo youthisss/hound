@@ -1,7 +1,7 @@
-# Hound Agent Documentation
+# Hound Documentation
 
 This directory contains the product contract, operator guidance, and the
-evidence records used to evolve Hound Agent without hiding release assumptions
+evidence records used to evolve Hound without hiding release assumptions
 in the root README.
 
 ## Start Here

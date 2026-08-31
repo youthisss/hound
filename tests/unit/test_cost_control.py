@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from hound_agent.cli import main
-from hound_agent.config import Config, load_config
+from hound.cli import main
+from hound.config import Config, load_config
 from tests.conftest import make_artifacts
 
 
@@ -54,19 +54,19 @@ def test_config_rejects_invalid_cost_control(tmp_path):
 
 
 def test_routing_exclude_kinds_skips_llm(monkeypatch):
-    from hound_agent.analyze.rca import run_analysis
+    from hound.analyze.rca import run_analysis
 
     def boom(*_args, **_kwargs):
         raise AssertionError("LLM must not be called for a skipped kind")
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", boom)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", boom)
     cfg = Config(api_key="x", routing="exclude-kinds", skip_kinds=["flaky"])
     rc = run_analysis(make_artifacts("flaky.log"), cfg)
     assert rc.engine == "fallback"
 
 
 def test_routing_all_keeps_llm(monkeypatch):
-    from hound_agent.analyze.rca import run_analysis
+    from hound.analyze.rca import run_analysis
 
     calls = {"n": 0}
 
@@ -74,7 +74,7 @@ def test_routing_all_keeps_llm(monkeypatch):
         calls["n"] += 1
         return {"hypothesis": "h", "confidence": "high", "evidence_refs": ["ev-001"], "contradicting_evidence_refs": [], "missing_information": [], "recommended_checks": ["check"], "fix_suggestion": "f"}, {}
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", fake_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", fake_llm)
     cfg = Config(api_key="x", routing="all")
     rc = run_analysis(make_artifacts("flaky.log"), cfg)
     assert calls["n"] == 1
@@ -86,7 +86,7 @@ def test_routing_all_keeps_llm(monkeypatch):
 
 @pytest.mark.parametrize("backend", ["file", "sqlite"])
 def test_reuse_skips_llm_after_threshold(tmp_path, monkeypatch, backend):
-    from hound_agent.pipeline import analyze
+    from hound.pipeline import analyze
 
     log = tmp_path / "x.log"
     log.write_text("FAILED tests/test_x.py::test_x - assert 1 == 2\n", encoding="utf-8")
@@ -99,7 +99,7 @@ def test_reuse_skips_llm_after_threshold(tmp_path, monkeypatch, backend):
             {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", fake_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", fake_llm)
     cfg = Config(api_key="x", reuse=True, reuse_after_occurrences=2, state_backend=backend)
     state = str(tmp_path / f"state.{'sqlite3' if backend == 'sqlite' else 'json'}")
     docs = [analyze(log, tmp_path / "out" / f"r{i}", _config=cfg, state_path=state) for i in range(3)]
@@ -117,7 +117,7 @@ def test_reuse_skips_llm_after_threshold(tmp_path, monkeypatch, backend):
 
 
 def test_reuse_disabled_always_calls_llm(tmp_path, monkeypatch):
-    from hound_agent.pipeline import analyze
+    from hound.pipeline import analyze
 
     log = tmp_path / "x.log"
     log.write_text("FAILED tests/test_x.py::test_x - assert 1 == 2\n", encoding="utf-8")
@@ -127,7 +127,7 @@ def test_reuse_disabled_always_calls_llm(tmp_path, monkeypatch):
         calls["n"] += 1
         return {"hypothesis": "h", "confidence": "high", "evidence_refs": ["ev-001"], "contradicting_evidence_refs": [], "missing_information": [], "recommended_checks": ["check"], "fix_suggestion": "f"}, {}
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", fake_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", fake_llm)
     cfg = Config(api_key="x", reuse=False)
     state = str(tmp_path / "state.json")
     for i in range(3):
@@ -136,8 +136,8 @@ def test_reuse_disabled_always_calls_llm(tmp_path, monkeypatch):
 
 
 def test_reviewed_known_issue_feedback_skips_llm(tmp_path, monkeypatch):
-    from hound_agent.feedback import default_feedback_store, record_feedback
-    from hound_agent.pipeline import analyze
+    from hound.feedback import default_feedback_store, record_feedback
+    from hound.pipeline import analyze
 
     log = tmp_path / "x.log"
     log.write_text("FAILED tests/test_x.py::test_x - assert 1 == 2\n", encoding="utf-8")
@@ -158,7 +158,7 @@ def test_reviewed_known_issue_feedback_skips_llm(tmp_path, monkeypatch):
     def boom(*_args, **_kwargs):
         raise AssertionError("reviewed known issue must skip the provider")
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", boom)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", boom)
     second = analyze(
         log,
         output_root / "run-002",
@@ -181,7 +181,7 @@ def test_llm_preview_is_redacted_and_never_calls_provider(tmp_path, monkeypatch)
         calls["n"] += 1
         raise AssertionError("preview must not call the provider")
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", boom)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", boom)
     out = tmp_path / "out"
     assert main(["analyze", "--log", str(log), "--out", str(out), "--llm-preview"]) == 1
     preview = (out / "llm-preview.json").read_text(encoding="utf-8")
@@ -211,7 +211,7 @@ def test_batch_max_llm_calls_forces_fallback(tmp_path, monkeypatch):
         calls["n"] += 1
         return {"hypothesis": "h", "confidence": "high", "evidence_refs": ["ev-001"], "contradicting_evidence_refs": [], "missing_information": [], "recommended_checks": ["check"], "fix_suggestion": "f"}, {}
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", fake_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", fake_llm)
     monkeypatch.setenv("TH_API_KEY", "test-key")
     out = tmp_path / "out"
     assert main(["batch", "--logs", str(d), "--out", str(out), "--max-llm-calls", "1"]) == 1
@@ -233,7 +233,7 @@ def test_parallel_batch_does_not_overshoot_max_llm_calls(tmp_path, monkeypatch):
         calls["n"] += 1
         return {"hypothesis": "h", "confidence": "high", "evidence_refs": ["ev-001"], "contradicting_evidence_refs": [], "missing_information": [], "recommended_checks": ["check"], "fix_suggestion": "f"}, {}
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", fake_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", fake_llm)
     monkeypatch.setenv("TH_API_KEY", "test-key")
     out = tmp_path / "out"
     assert main(["batch", "--logs", str(d), "--out", str(out), "--max-llm-calls", "1", "--jobs", "6"]) == 1
@@ -251,14 +251,14 @@ def test_failed_provider_attempt_still_consumes_batch_call_cap(tmp_path, monkeyp
         calls["n"] += 1
         raise RuntimeError("provider unavailable")
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", failing_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", failing_llm)
     monkeypatch.setenv("TH_API_KEY", "test-key")
     assert main(["batch", "--logs", str(d), "--out", str(tmp_path / "out"), "--max-llm-calls", "1"]) == 1
     assert calls["n"] == 1
 
 
 def test_failed_batch_attempt_consumes_call_slot():
-    from hound_agent.cli import _BatchBudget
+    from hound.cli import _BatchBudget
 
     budget = _BatchBudget(max_calls=1, max_cost=None)
     assert budget.reserve_llm() is True
@@ -269,14 +269,14 @@ def test_failed_batch_attempt_consumes_call_slot():
 
 
 def test_cached_batch_result_refunds_unused_call_slot():
-    from hound_agent.cli import _BatchBudget
+    from hound.cli import _BatchBudget
 
     budget = _BatchBudget(max_calls=1, max_cost=None)
     assert budget.reserve_llm() is True
 
 
 def test_zero_batch_budget_allows_no_provider_attempts():
-    from hound_agent.cli import _BatchBudget
+    from hound.cli import _BatchBudget
 
     assert _BatchBudget(max_calls=0, max_cost=None).reserve_llm() is False
     assert _BatchBudget(max_calls=None, max_cost=0.0).reserve_llm() is False
@@ -292,7 +292,7 @@ def test_batch_writes_usage_telemetry(tmp_path, monkeypatch):
             {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", fake_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", fake_llm)
     out = tmp_path / "out"
     assert main(["batch", "--logs", str(d), "--out", str(out), "--max-llm-calls", "1"]) == 1
 
@@ -310,7 +310,7 @@ def test_batch_writes_usage_telemetry(tmp_path, monkeypatch):
 
 
 def test_estimate_cost():
-    from hound_agent.analyze.cost import estimate_cost
+    from hound.analyze.cost import estimate_cost
 
     usage = {"prompt_tokens": 1_000_000, "completion_tokens": 500_000, "total_tokens": 1_500_000}
     cfg = Config(
@@ -335,9 +335,9 @@ def test_estimate_cost():
 
 
 def _doc(reused: bool = False):
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.models import Triage, build_doc
-    from hound_agent.output.tickets import build_ticket
+    from hound.analyze.fallback import build_root_cause
+    from hound.models import Triage, build_doc
+    from hound.output.tickets import build_ticket
 
     artifacts = make_artifacts("pytest_fail.log")
     rc = build_root_cause(artifacts)
@@ -355,7 +355,7 @@ def _doc(reused: bool = False):
 
 
 def test_schema_v2_reused_fields():
-    from hound_agent.models import validate
+    from hound.models import validate
 
     doc = _doc(reused=True)
     assert doc["schema_version"] == "2.0"
@@ -365,7 +365,7 @@ def test_schema_v2_reused_fields():
 
 
 def test_validate_rejects_missing_reused_field():
-    from hound_agent.models import validate
+    from hound.models import validate
 
     doc = _doc()
     del doc["meta"]["reused"]

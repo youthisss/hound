@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from hound_agent.cli import main
-from hound_agent.qa.classifier import QAClassification
-from hound_agent.qa.coverage import (
+from hound.cli import main
+from hound.qa.classifier import QAClassification
+from hound.qa.coverage import (
     FileCoverage,
     NormalizedCoverage,
     get_git_changed_lines,
@@ -23,12 +23,12 @@ from hound_agent.qa.coverage import (
     parse_lcov_coverage,
     parse_unified_diff_changed_lines,
 )
-from hound_agent.qa.gate import evaluate_gate, load_gate_policy
-from hound_agent.qa.sarif import parse_sarif_dict
-from hound_agent.qa.service import run_quality_gate
-from hound_agent.qa.history import upsert_results
-from hound_agent.qa.model import NormalizedTestResult
-from hound_agent.qa.normalize import parse_test_json_results
+from hound.qa.gate import evaluate_gate, load_gate_policy
+from hound.qa.sarif import parse_sarif_dict
+from hound.qa.service import run_quality_gate
+from hound.qa.history import upsert_results
+from hound.qa.model import NormalizedTestResult
+from hound.qa.normalize import parse_test_json_results
 
 
 def _classification(decision: str, *, duration: bool = False) -> QAClassification:
@@ -600,7 +600,7 @@ rules:
 def test_cli_gate_maps_internal_error_to_exit_three(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from hound_agent.qa import service as qa_service
+    from hound.qa import service as qa_service
 
     monkeypatch.setattr(qa_service, "run_quality_gate", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
     code = main([

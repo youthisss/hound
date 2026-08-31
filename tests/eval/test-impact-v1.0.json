@@ -7,7 +7,7 @@
       "id": "source-impact",
       "source_evidence": [
         {
-          "file": "hound_agent/source/impact.py",
+          "file": "hound/source/impact.py",
           "line": 84,
           "symbol": {"name": "recommendation_recall", "snippet": ""},
           "changed": true,
@@ -20,7 +20,7 @@
       "id": "devops-investigation",
       "source_evidence": [
         {
-          "file": "hound_agent/devops/investigation.py",
+          "file": "hound/devops/investigation.py",
           "line": 1,
           "symbol": {"name": "build_investigation", "snippet": ""},
           "changed": true,

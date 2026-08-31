@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from hound_agent.analyze.fallback import build_root_cause
-from hound_agent.cli import main
-from hound_agent.feedback import default_feedback_store, export_feedback, read_feedback
-from hound_agent.models import Triage, build_doc
-from hound_agent.output.report import ensure_outdir
-from hound_agent.output.tickets import build_ticket
+from hound.analyze.fallback import build_root_cause
+from hound.cli import main
+from hound.feedback import default_feedback_store, export_feedback, read_feedback
+from hound.models import Triage, build_doc
+from hound.output.report import ensure_outdir
+from hound.output.tickets import build_ticket
 from tests.conftest import make_artifacts
 
 

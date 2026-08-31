@@ -15,8 +15,8 @@ htmlcov/
 .ruff_cache/
 .uv-cache/
 .tmp/
-.hound-agent/
-hound-agent-output/
+.hound/
+hound-output/
 examples/demo/output/
 examples/demo/work/
 examples/demo/**/work/

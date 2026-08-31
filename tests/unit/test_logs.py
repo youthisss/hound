@@ -1,4 +1,4 @@
-from hound_agent.ingest.logs import parse_log
+from hound.ingest.logs import parse_log
 from tests.conftest import fixture
 
 IMPORT_TEXT = """Traceback (most recent call last):

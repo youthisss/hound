@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hound-agent.local/schema/rca-v2.0.schema.json",
-  "title": "Hound Agent RCA Document v2.0",
+  "$id": "https://hound.local/schema/rca-v2.0.schema.json",
+  "title": "Hound RCA Document v2.0",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "meta", "failure", "context", "root_cause", "analysis", "triage", "ticket"],

@@ -1,12 +1,12 @@
-# WORKFLOW — Hound Agent
+# WORKFLOW — Hound
 
 Process rules to keep the project linear. Deviations require updating this file, `docs/prd.md`, or the relevant record under `docs/plans/` **first**.
 
 ## Repo context
 
-- Works inside the Hound Agent repository.
+- Works inside the Hound repository.
 - Do not touch files outside the repository.
-- Package name `hound_agent`, import module `hound_agent`.
+- Package name `hound`, import module `hound`.
 
 ## Change flow (strict order)
 
@@ -31,9 +31,9 @@ Within each stage: **one area at a time**. Never edit two modules in parallel; f
 
 ```sh
 uv run ruff check .
-uv run mypy src/hound_agent
-uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
-uv run python -m hound_agent.eval --offline --format json
+uv run mypy src/hound
+uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q
+uv run python -m hound.eval --offline --format json
 uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
 uv run pip-audit --requirement audited-requirements.txt
 uv run hound analyze tests/fixtures --offline

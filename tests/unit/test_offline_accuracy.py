@@ -2,13 +2,13 @@
 
 import pytest
 
-from hound_agent.analyze.fallback import build_root_cause
-from hound_agent.ingest.logs import parse_log
-from hound_agent.ingest.stacktrace import parse_stacktrace
-from hound_agent.ingest.structured import parse_structured_artifact
-from hound_agent.ingest.tests import parse_failed_tests
-from hound_agent.pipeline import analyze
-from hound_agent.triage.severity import classify
+from hound.analyze.fallback import build_root_cause
+from hound.ingest.logs import parse_log
+from hound.ingest.stacktrace import parse_stacktrace
+from hound.ingest.structured import parse_structured_artifact
+from hound.ingest.tests import parse_failed_tests
+from hound.pipeline import analyze
+from hound.triage.severity import classify
 from tests.conftest import FIXTURES, fixture, make_artifacts
 
 

@@ -1,6 +1,6 @@
 # RCA schema migration: v1.4 to v2.0
 
-Hound Agent writes RCA schema v2.0 and continues to read persisted v1.4
+Hound writes RCA schema v2.0 and continues to read persisted v1.4
 reports. Existing report files do not need an in-place migration.
 
 ## Reader and writer contract

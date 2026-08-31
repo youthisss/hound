@@ -1,8 +1,8 @@
 import json
 import shutil
 
-from hound_agent.cli import main
-from hound_agent.models import validate
+from hound.cli import main
+from hound.models import validate
 
 FIXTURES = __import__("pathlib").Path(__file__).resolve().parents[1] / "fixtures"
 

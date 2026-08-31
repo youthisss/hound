@@ -1,4 +1,4 @@
-from hound_agent.ingest.tests import parse_failed_tests
+from hound.ingest.tests import parse_failed_tests
 from tests.conftest import fixture
 
 

@@ -2,11 +2,11 @@ import json
 
 import pytest
 
-from hound_agent.analyze.rca import run_analysis
-from hound_agent.cli import build_parser, run_analyze
-from hound_agent.config import Config
-from hound_agent.models import validate
-from hound_agent.pipeline import analyze
+from hound.analyze.rca import run_analysis
+from hound.cli import build_parser, run_analyze
+from hound.config import Config
+from hound.models import validate
+from hound.pipeline import analyze
 from tests.conftest import make_artifacts
 
 
@@ -40,7 +40,7 @@ def test_pipeline_warns_when_reuse_snapshot_is_not_persisted(tmp_path, monkeypat
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("hound_agent.pipeline.record_triage", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr("hound.pipeline.record_triage", lambda *_args, **_kwargs: False)
 
     analyze(log, tmp_path / "out", offline=True)
 
@@ -84,12 +84,12 @@ def test_pipeline_legacy_log_has_empty_request_context(tmp_path):
     }
     validate(doc)
 def test_offline_pipeline_deterministic(tmp_path):
-    from hound_agent.triage.component import assign
-    from hound_agent.triage.dedup import check_duplicate
-    from hound_agent.triage.severity import classify
-    from hound_agent.output.report import write_json
-    from hound_agent.models import build_doc
-    from hound_agent.output.tickets import build_ticket
+    from hound.triage.component import assign
+    from hound.triage.dedup import check_duplicate
+    from hound.triage.severity import classify
+    from hound.output.report import write_json
+    from hound.models import build_doc
+    from hound.output.tickets import build_ticket
 
     a = make_artifacts("pytest_fail.log", changed_files=["app/cart.py"])
     rc = run_analysis(a, Config(offline=True))

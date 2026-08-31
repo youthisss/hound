@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from hound_agent.output.tickets import GithubError, create_github_ticket
+from hound.output.tickets import GithubError, create_github_ticket
 from tests.conftest import make_artifacts
 
 
@@ -22,9 +22,9 @@ class FakeResponse:
 
 
 def _ticket():
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.models import Triage
-    from hound_agent.output.tickets import build_ticket
+    from hound.analyze.fallback import build_root_cause
+    from hound.models import Triage
+    from hound.output.tickets import build_ticket
 
     artifacts = make_artifacts("pytest_fail.log")
     rc = build_root_cause(artifacts)
@@ -41,7 +41,7 @@ def test_create_github_ticket_success(monkeypatch):
         captured["payload"] = json.loads(request.data.decode("utf-8"))
         return FakeResponse({"html_url": "https://github.com/acme/app/issues/7"})
 
-    monkeypatch.setattr("hound_agent.output.tickets.urlopen", fake_urlopen)
+    monkeypatch.setattr("hound.output.tickets.urlopen", fake_urlopen)
     url = create_github_ticket(_ticket(), "acme/app", "tok123")
     assert url == "https://github.com/acme/app/issues/7"
     assert captured["url"] == "https://api.github.com/repos/acme/app/issues"
@@ -66,20 +66,20 @@ def test_create_github_ticket_http_error(monkeypatch):
         def __exit__(self, *exc):
             return False
 
-    monkeypatch.setattr("hound_agent.output.tickets.urlopen", lambda r, timeout=30: Boom())
+    monkeypatch.setattr("hound.output.tickets.urlopen", lambda r, timeout=30: Boom())
     with pytest.raises(GithubError):
         create_github_ticket(_ticket(), "acme/app", "bad")
 
 
 def test_tracker_clients_reject_non_object_success(monkeypatch):
-    from hound_agent.output.tickets import (
+    from hound.output.tickets import (
         GitlabError,
         JiraError,
         create_gitlab_ticket,
         create_jira_ticket,
     )
 
-    monkeypatch.setattr("hound_agent.output.tickets.urlopen", lambda *_args, **_kwargs: FakeResponse([]))
+    monkeypatch.setattr("hound.output.tickets.urlopen", lambda *_args, **_kwargs: FakeResponse([]))
     with pytest.raises(GithubError, match="non-object"):
         create_github_ticket(_ticket(), "acme/app", "token")
     with pytest.raises(JiraError, match="non-object"):
@@ -89,7 +89,7 @@ def test_tracker_clients_reject_non_object_success(monkeypatch):
 
 
 def test_tracker_clients_wrap_invalid_https_ports():
-    from hound_agent.output.tickets import (
+    from hound.output.tickets import (
         GitlabError,
         JiraError,
         create_gitlab_ticket,

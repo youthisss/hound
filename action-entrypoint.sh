@@ -70,7 +70,7 @@ if [ -n "${GITHUB_WORKSPACE:-}" ]; then
                 exit 2
             fi
             mkdir -p "$output"
-            chown hound-agent:hound-agent "$output"
+            chown hound:hound "$output"
             ;;
         esac
     fi
@@ -78,6 +78,6 @@ fi
 
 # Analyze untrusted repository artifacts without root privileges.
 if [ -n "${GITHUB_OUTPUT:-}" ] && [ -e "$GITHUB_OUTPUT" ]; then
-    chown hound-agent:hound-agent "$GITHUB_OUTPUT"
+    chown hound:hound "$GITHUB_OUTPUT"
 fi
-exec su -s /bin/sh hound-agent -c 'exec /app/.venv/bin/hound "$@"' -- "$@"
+exec su -s /bin/sh hound -c 'exec /app/.venv/bin/hound "$@"' -- "$@"

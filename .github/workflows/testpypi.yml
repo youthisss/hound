@@ -18,8 +18,8 @@ jobs:
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - run: uv sync --frozen --extra dev
       - run: uv run ruff check .
-      - run: uv run mypy src/hound_agent
-      - run: uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
+      - run: uv run mypy src/hound
+      - run: uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q
       - run: uv build
       - run: uv run twine check dist/*.whl dist/*.tar.gz
       - uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/hound-agent
+      url: https://test.pypi.org/p/hound
     permissions:
       id-token: write
     steps:
@@ -54,7 +54,7 @@ jobs:
       - name: Install the exact published wheel
         shell: bash
         run: |
-          metadata="$(curl --fail --retry 6 --retry-delay 5 https://test.pypi.org/pypi/hound-agent/json)"
+          metadata="$(curl --fail --retry 6 --retry-delay 5 https://test.pypi.org/pypi/hound/json)"
           wheel_url="$(jq -r '[.urls[] | select(.packagetype == "bdist_wheel")][0].url' <<<"$metadata")"
           wheel_file="$(jq -r '[.urls[] | select(.packagetype == "bdist_wheel")][0].filename' <<<"$metadata")"
           expected="$(jq -r '[.urls[] | select(.packagetype == "bdist_wheel")][0].digests.sha256' <<<"$metadata")"

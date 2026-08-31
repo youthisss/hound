@@ -37,7 +37,7 @@ def test_pid_alive_reports_dead_process_as_dead():
     Windows raises plain OSError (winerror 87) instead of
     ProcessLookupError; the pre-fix code treated that as "alive".
     """
-    from hound_agent.triage.dedup import _pid_alive
+    from hound.triage.dedup import _pid_alive
 
     proc = subprocess.Popen([sys.executable, "-c", "pass"])
     proc.wait()
@@ -51,7 +51,7 @@ def test_pid_alive_reports_dead_process_as_dead():
 
 
 def test_pid_alive_reports_live_process_as_alive():
-    from hound_agent.triage.dedup import _pid_alive
+    from hound.triage.dedup import _pid_alive
 
     proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
@@ -74,7 +74,7 @@ def test_live_owner_lock_blocks_but_dead_owner_lock_recovered(tmp_path, monkeypa
     """Discrimination proof: a live owner keeps blocking; a dead one recovers."""
     import os
 
-    from hound_agent.triage import dedup
+    from hound.triage import dedup
     from tests.conftest import make_artifacts
 
     monkeypatch.setattr(dedup, "_LOCK_RETRIES", 3)
@@ -99,8 +99,8 @@ def test_live_owner_lock_blocks_but_dead_owner_lock_recovered(tmp_path, monkeypa
 
 
 def test_unknown_kind_never_touches_dedup_store(tmp_path, capsys):
-    from hound_agent import service
-    from hound_agent.triage.dedup import load_state
+    from hound import service
+    from hound.triage.dedup import load_state
 
     healthy = tmp_path / "healthy.log"
     healthy.write_text("everything fine\nbuild finished\nexit code 0\n", encoding="utf-8")
@@ -110,14 +110,14 @@ def test_unknown_kind_never_touches_dedup_store(tmp_path, capsys):
 
     assert doc["failure"]["kind"] == "unknown"
     assert doc["triage"]["dedup_key"]  # key still reported for traceability
-    state_file = out / ".hound-agent" / "state.json"
+    state_file = out / ".hound" / "state.json"
     assert load_state(str(state_file)) == []
     capsys.readouterr()
 
 
 def test_unknown_kind_skips_occurrence_counting_across_runs(tmp_path):
-    from hound_agent import service
-    from hound_agent.triage.dedup import load_state
+    from hound import service
+    from hound.triage.dedup import load_state
 
     healthy = tmp_path / "healthy.log"
     healthy.write_text("still fine\nexit code 0\n", encoding="utf-8")
@@ -130,9 +130,11 @@ def test_unknown_kind_skips_occurrence_counting_across_runs(tmp_path):
 # ---------------------------------------------------------------- G1
 
 
-def test_collector_sidecar_autoloaded_as_context(tmp_path):
-    from hound_agent import service
+def test_collector_sidecar_autoloaded_as_context(tmp_path, monkeypatch):
+    from hound import service
 
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_RUN_ID", "github-run-id")
     log = tmp_path / "app.log"
     shutil.copy(FIXTURES / "pytest_fail.log", log)
     sidecar = tmp_path / "app.json"
@@ -148,7 +150,7 @@ def test_collector_sidecar_autoloaded_as_context(tmp_path):
 
 
 def test_explicit_context_wins_over_sidecar(tmp_path):
-    from hound_agent.ingest.context import load_context
+    from hound.ingest.context import load_context
 
     log = tmp_path / "x.log"
     log.write_text("hello\n", encoding="utf-8")
@@ -164,7 +166,7 @@ def test_explicit_context_wins_over_sidecar(tmp_path):
 
 
 def test_batch_picks_up_junit_and_log(tmp_path, capsys):
-    from hound_agent.cli import main
+    from hound.cli import main
 
     logs_dir = tmp_path / "artifacts"
     logs_dir.mkdir()
@@ -185,7 +187,7 @@ def test_batch_picks_up_junit_and_log(tmp_path, capsys):
 
 
 def test_batch_ignores_collector_sidecars(tmp_path, capsys):
-    from hound_agent.cli import main
+    from hound.cli import main
 
     logs_dir = tmp_path / "artifacts"
     logs_dir.mkdir()
@@ -205,7 +207,7 @@ def test_batch_ignores_collector_sidecars(tmp_path, capsys):
 
 
 def test_print_result_suppresses_ansi_when_redirected(tmp_path, capsys, monkeypatch):
-    from hound_agent.cli import _print_result
+    from hound.cli import _print_result
 
     doc = {
         "failure": {"stage": "test", "kind": "test_failure"},
@@ -227,7 +229,7 @@ def test_print_result_suppresses_ansi_when_redirected(tmp_path, capsys, monkeypa
 
 
 def test_validate_names_duration_ms_in_error():
-    from hound_agent.models import (
+    from hound.models import (
         Artifacts,
         RootCause,
         Ticket,
@@ -254,7 +256,7 @@ def test_validate_names_duration_ms_in_error():
 
 
 def _write_app(tmp_path: Path):
-    from hound_agent.tui import RcaTui
+    from hound.tui import RcaTui
 
     return RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
 
@@ -262,7 +264,7 @@ def _write_app(tmp_path: Path):
 def test_tui_analyze_all_processes_visible_logs(tmp_path):
     from textual.widgets import Static
 
-    from hound_agent.tui import RcaTui
+    from hound.tui import RcaTui
 
     shutil.copy(FIXTURES / "pytest_fail.log", tmp_path / "a.log")
     shutil.copy(FIXTURES / "flaky.log", tmp_path / "b.log")

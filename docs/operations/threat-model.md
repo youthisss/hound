@@ -1,6 +1,6 @@
 # Threat Model
 
-Hound Agent is an observational, read-only failure-analysis tool. Logs,
+Hound is an observational, read-only failure-analysis tool. Logs,
 repositories, structured artifacts, provider responses, delivery responses, and
 fork pull requests are separate trust boundaries. Offline analysis is the safest
 default and requires no outbound network access.

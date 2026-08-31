@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hound_agent.source.impact import build_test_impact, recommendation_recall
+from hound.source.impact import build_test_impact, recommendation_recall
 
 
 def _source(file, symbol, tests, changed=True):

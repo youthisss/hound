@@ -13,12 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive distribution and production maturity roadmap.
 
 ### Changed
-- Reorganized the package into `src/hound_agent`, grouped tests by runtime boundary,
+- Reorganized the package into `src/hound`, grouped tests by runtime boundary,
   and grouped documentation under purpose-specific directories.
 - Refreshed README navigation and added a documentation hub plus a runnable demo
   under `examples/demo`.
 - Made canonical CLI command and option spellings primary while retaining legacy
   spellings as compatibility aliases.
+- Renamed the distribution, import package, persisted paths, generated filenames,
+  container/action identity, and public URLs to Hound. This is a breaking rename;
+  legacy Python imports and distribution names are not provided.
 
 ## [0.4.0] - 2026-08-07
 

@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import json
 
-from hound_agent.connectors import observability
-from hound_agent.config import load_config
-from hound_agent.devops.investigation import build_investigation
-from hound_agent.models import Artifacts, DeploymentContext
-from hound_agent.pipeline import analyze
+from hound.connectors import observability
+from hound.config import load_config
+from hound.devops.investigation import build_investigation
+from hound.models import Artifacts, DeploymentContext
+from hound.pipeline import analyze
 
 
 class _Response:

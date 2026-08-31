@@ -3,10 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 
-from hound_agent.cli import _maybe_file
-from hound_agent.config import Config, load_config
-from hound_agent.pipeline import analyze
-from hound_agent.trust import resolve_source_class
+from hound.cli import _maybe_file
+from hound.config import Config, load_config
+from hound.pipeline import analyze
+from hound.trust import resolve_source_class
 
 
 def test_fork_profile_forces_offline_and_forbids_optional_capabilities(monkeypatch):
@@ -43,6 +43,12 @@ def test_github_fork_is_detected_from_event(tmp_path):
     assert source == "fork_pr"
 
 
+def test_canonical_source_class_env_precedes_legacy_alias(capsys):
+    assert resolve_source_class(environment={"HOUND_SOURCE_CLASS": "fork_pr", "TH_SOURCE_CLASS": "local_artifact"}) == "fork_pr"
+    assert resolve_source_class(environment={"TH_SOURCE_CLASS": "local_artifact"}) == "local_artifact"
+    assert "TH_SOURCE_CLASS is deprecated" in capsys.readouterr().err
+
+
 def test_fork_pipeline_does_not_call_source_enrichment_or_llm(tmp_path, monkeypatch):
     log = tmp_path / "failure.log"
     log.write_text("FAILED tests/test_x.py::test_x - assert 1 == 2", encoding="utf-8")
@@ -52,10 +58,10 @@ def test_fork_pipeline_does_not_call_source_enrichment_or_llm(tmp_path, monkeypa
     def forbidden(*_args, **_kwargs):
         raise AssertionError("forbidden capability was called")
 
-    monkeypatch.setattr("hound_agent.pipeline.gather", forbidden)
-    monkeypatch.setattr("hound_agent.pipeline.attach_snippets", forbidden)
-    monkeypatch.setattr("hound_agent.pipeline.collect_deployment_evidence", forbidden)
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", forbidden)
+    monkeypatch.setattr("hound.pipeline.gather", forbidden)
+    monkeypatch.setattr("hound.pipeline.attach_snippets", forbidden)
+    monkeypatch.setattr("hound.pipeline.collect_deployment_evidence", forbidden)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", forbidden)
     config = Config(
         api_key="test-key",
         offline=True,
@@ -88,7 +94,7 @@ def test_fork_pipeline_does_not_call_source_enrichment_or_llm(tmp_path, monkeypa
 
 def test_fork_policy_blocks_delivery_before_connector_call(tmp_path, monkeypatch):
     called = []
-    monkeypatch.setattr("hound_agent.cli._file_github_ticket", lambda *_args, **_kwargs: called.append(True))
+    monkeypatch.setattr("hound.cli._file_github_ticket", lambda *_args, **_kwargs: called.append(True))
     args = argparse.Namespace(
         gh=True, jira=False, gitlab=False, slack_webhook=False,
         provider=None, model=None, base_url=None, api_key=None, max_retries=None,

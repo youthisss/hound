@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from hound_agent.analyze.fallback import build_root_cause
-from hound_agent.formatters import format_document
-from hound_agent.models import SCHEMA_VERSION, Triage, build_doc, build_evidence_items, validate
-from hound_agent.output.report import render_md
-from hound_agent.output.tickets import build_ticket
-from hound_agent.tui import _overview_text
+from hound.analyze.fallback import build_root_cause
+from hound.formatters import format_document
+from hound.models import SCHEMA_VERSION, Triage, build_doc, build_evidence_items, validate
+from hound.output.report import render_md
+from hound.output.tickets import build_ticket
+from hound.tui import _overview_text
 from tests.conftest import make_artifacts
 
 
@@ -23,7 +23,7 @@ GOLDEN = Path(__file__).resolve().parents[1] / "golden"
 def test_golden_documents_are_readable(name):
     doc = json.loads((GOLDEN / name).read_text(encoding="utf-8"))
     validate(doc)
-    assert format_document(doc, "markdown").startswith("# Hound Agent report")
+    assert format_document(doc, "markdown").startswith("# Hound report")
     assert render_md(doc).startswith("# RCA Report")
 
 

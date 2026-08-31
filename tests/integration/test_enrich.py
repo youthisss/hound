@@ -5,11 +5,11 @@ import subprocess
 
 import pytest
 
-from hound_agent.connectors import deployment as connector
-from hound_agent.connectors.deployment import collect_deployment_bundle
-from hound_agent.ingest.enrich import collect_deployment_evidence
-from hound_agent.models import DeploymentContext
-from hound_agent.pipeline import analyze
+from hound.connectors import deployment as connector
+from hound.connectors.deployment import collect_deployment_bundle
+from hound.ingest.enrich import collect_deployment_evidence
+from hound.models import DeploymentContext
+from hound.pipeline import analyze
 
 
 def _available(monkeypatch):

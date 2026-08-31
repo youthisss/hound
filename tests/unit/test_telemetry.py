@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from hound_agent.pipeline import analyze
-from hound_agent.telemetry import TelemetryRegistry, telemetry
+from hound.pipeline import analyze
+from hound.telemetry import TelemetryRegistry, telemetry
 
 
 def test_registry_reports_bounded_percentiles_and_gauges():

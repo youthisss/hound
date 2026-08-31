@@ -1,6 +1,6 @@
 # GitHub Action Usage and Upgrade Guide
 
-`hound-agent` can run directly inside GitHub Actions as a container action.
+`hound` can run directly inside GitHub Actions as a container action.
 
 ## Recommended workflow
 
@@ -20,12 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run Hound Agent
+      - name: Run Hound
         id: hound
-        uses: youthisss/hound-agent@v0.4.0
+        uses: youthisss/hound@v0.4.0
         with:
           log: ./ci-logs/failure.log
-          out: ./hound-agent-output
+          out: ./hound-output
           offline: "true"
 
       - name: Inspect outputs
@@ -39,7 +39,7 @@ jobs:
 ## Inputs
 
 - `log` (required): failure log file path relative to the workspace.
-- `out` (optional, default `hound-agent-output`): output directory.
+- `out` (optional, default `hound-output`): output directory.
 - `offline` (optional, default `"true"`): set to `"false"` to allow configured LLM provider calls.
 - `repo` (optional): local Git checkout directory for source context.
 

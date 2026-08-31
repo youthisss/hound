@@ -1,4 +1,4 @@
-from hound_agent.ingest.entity import MAX_USERS, extract_entity_context
+from hound.ingest.entity import MAX_USERS, extract_entity_context
 from tests.conftest import fixture
 
 
@@ -51,9 +51,9 @@ def test_extract_entity_context_leaves_legacy_logs_empty():
 def test_request_context_is_required_and_validated():
     import pytest
 
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.models import Triage, build_doc, validate
-    from hound_agent.output.tickets import build_ticket
+    from hound.analyze.fallback import build_root_cause
+    from hound.models import Triage, build_doc, validate
+    from hound.output.tickets import build_ticket
     from tests.conftest import make_artifacts
 
     artifacts = make_artifacts("pytest_fail.log")
@@ -74,9 +74,9 @@ def test_request_context_is_required_and_validated():
 def test_request_context_rejects_more_than_maximum_users():
     import pytest
 
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.models import Triage, build_doc, validate
-    from hound_agent.output.tickets import build_ticket
+    from hound.analyze.fallback import build_root_cause
+    from hound.models import Triage, build_doc, validate
+    from hound.output.tickets import build_ticket
     from tests.conftest import make_artifacts
 
     artifacts = make_artifacts("pytest_fail.log")

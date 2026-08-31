@@ -1,7 +1,7 @@
 # Delivery reliability and recovery (M12)
 
 External delivery remains opt-in. Hound maintains a separate SQLite ledger at
-`<output>/.hound-agent/deliveries.sqlite3`; it does not rely only on dedup state.
+`<output>/.hound/deliveries.sqlite3`; it does not rely only on dedup state.
 
 ## State model
 

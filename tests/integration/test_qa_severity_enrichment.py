@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from hound_agent.qa.classifier import QAClassification, classify_test_result
-from hound_agent.qa.gate import evaluate_gate
-from hound_agent.qa.model import NormalizedTestResult, now_iso
-from hound_agent.feedback import record_feedback
+from hound.qa.classifier import QAClassification, classify_test_result
+from hound.qa.gate import evaluate_gate
+from hound.qa.model import NormalizedTestResult, now_iso
+from hound.feedback import record_feedback
 
 
 def test_qa_classifier_attaches_codeowners_and_related_incidents(tmp_path: Path):
@@ -17,7 +17,7 @@ def test_qa_classifier_attaches_codeowners_and_related_incidents(tmp_path: Path)
 
     # Setup Feedback DB with reviewed incident
     out = tmp_path / "out"
-    fb_store = out / ".hound-agent" / "feedback.sqlite3"
+    fb_store = out / ".hound" / "feedback.sqlite3"
     report_dir = out / "run-1"
     report_dir.mkdir(parents=True)
     report_file = report_dir / "report.json"

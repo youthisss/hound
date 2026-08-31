@@ -3,8 +3,8 @@ import json
 from pathlib import Path
 import sys
 
-from hound_agent.cli import main
-from hound_agent.collector import collect_command
+from hound.cli import main
+from hound.collector import collect_command
 
 
 class Pipe(io.StringIO):
@@ -67,7 +67,7 @@ def test_log_rejects_missing_or_empty_source(tmp_path, monkeypatch, capsys):
 
 
 def test_log_rejects_missing_command(tmp_path, capsys):
-    assert main(["log", "--output", str(tmp_path / "x.log"), "--", "missing-hound_agent-command"]) == 2
+    assert main(["log", "--output", str(tmp_path / "x.log"), "--", "missing-hound-command"]) == 2
     assert "command not found" in capsys.readouterr().err
 
 
@@ -99,7 +99,7 @@ def test_log_analyze_uses_shared_service(tmp_path, monkeypatch, capsys):
         calls.append((Path(log_path), Path(output_dir), kwargs))
         return document
 
-    monkeypatch.setattr("hound_agent.cli.service.analyze_log", fake_analyze)
+    monkeypatch.setattr("hound.cli.service.analyze_log", fake_analyze)
     code = main([
         "log", "--analyze", "--offline", "--output", str(output), "--",
         sys.executable, "-c", "print('FAILED')",
@@ -108,14 +108,14 @@ def test_log_analyze_uses_shared_service(tmp_path, monkeypatch, capsys):
     assert code == 0
     assert calls[0][0] == output
     assert calls[0][2]["offline"] is True
-    assert calls[0][2]["state_path"].endswith("hound-agent-output\\.hound-agent\\state.json") or calls[0][2]["state_path"].endswith("hound-agent-output/.hound-agent/state.json")
+    assert calls[0][2]["state_path"].endswith("hound-output\\.hound\\state.json") or calls[0][2]["state_path"].endswith("hound-output/.hound/state.json")
     assert "severity: high" in capsys.readouterr().err
 
 
 def test_log_analysis_error_maps_to_internal_error(tmp_path, monkeypatch, capsys):
     output = tmp_path / "analyze-error.log"
     monkeypatch.setattr(
-        "hound_agent.cli.service.analyze_log",
+        "hound.cli.service.analyze_log",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("analysis boom")),
     )
 

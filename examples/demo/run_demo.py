@@ -1,4 +1,4 @@
-"""Run end-to-end smoke and large-scale acceptance tests for Hound Agent."""
+"""Run end-to-end smoke and large-scale acceptance tests for Hound."""
 from __future__ import annotations
 
 import argparse
@@ -78,7 +78,7 @@ def run(profile: str, count: int, jobs: int, work_dir: Path) -> dict:
     manifest = generate(inputs, count)
     (work_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     command = [
-        sys.executable, "-m", "hound_agent.cli", "batch", "--logs", str(inputs),
+        sys.executable, "-m", "hound.cli", "batch", "--logs", str(inputs),
         "--output-dir", str(output), "--offline", "--jobs", str(jobs),
         "--config", str(Path(__file__).with_name("scale-config.yml")),
     ]

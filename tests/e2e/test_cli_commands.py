@@ -5,9 +5,9 @@ import sys
 import anyio
 import pytest
 
-from hound_agent import service
-from hound_agent.cli import build_parser, main
-from hound_agent.models import RootCause, Ticket, Triage, build_doc
+from hound import service
+from hound.cli import build_parser, main
+from hound.models import RootCause, Ticket, Triage, build_doc
 from tests.conftest import make_artifacts
 
 
@@ -37,7 +37,7 @@ def test_no_args_opens_tui_only_on_tty(monkeypatch):
     called = []
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
-    monkeypatch.setattr("hound_agent.cli.run_tui", lambda args: called.append(args) or 0)
+    monkeypatch.setattr("hound.cli.run_tui", lambda args: called.append(args) or 0)
 
     assert main([]) == 0
     assert len(called) == 1
@@ -123,14 +123,14 @@ def test_output_file_follows_format(tmp_path, monkeypatch, capsys):
 
 
 def test_init_list_runs_and_clean(tmp_path, capsys):
-    config = tmp_path / ".hound-agent.yml"
+    config = tmp_path / ".hound.yml"
     assert main(["init", "--config", str(config)]) == 0
     assert config.exists()
     assert main(["init", "--config", str(config)]) == 2
     capsys.readouterr()
 
     out = tmp_path / "out"
-    from hound_agent.output.report import ensure_outdir
+    from hound.output.report import ensure_outdir
 
     ensure_outdir(out)
     run = out / "sample"
@@ -151,11 +151,11 @@ def test_exit_codes_success_failure_and_internal_error(tmp_path, monkeypatch):
     def fake_runs(failure):
         return [service.AnalysisRun("run", logs / "run.log", tmp_path / "out" / "run", _document(failure=failure))]
 
-    monkeypatch.setattr("hound_agent.cli.service.analyze_directory", lambda *args, **kwargs: fake_runs(False))
+    monkeypatch.setattr("hound.cli.service.analyze_directory", lambda *args, **kwargs: fake_runs(False))
     assert main(["analyze", str(logs), "--offline"]) == 0
-    monkeypatch.setattr("hound_agent.cli.service.analyze_directory", lambda *args, **kwargs: fake_runs(True))
+    monkeypatch.setattr("hound.cli.service.analyze_directory", lambda *args, **kwargs: fake_runs(True))
     assert main(["analyze", str(logs), "--offline"]) == 1
-    monkeypatch.setattr("hound_agent.cli.service.analyze_directory", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr("hound.cli.service.analyze_directory", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
     assert main(["analyze", str(logs), "--offline"]) == 3
 
 
@@ -167,7 +167,7 @@ def test_ci_stage_with_unknown_kind_returns_success_exit(tmp_path, monkeypatch):
     document["failure"]["stage"] = "ci"
     document["failure"]["kind"] = "unknown"
     monkeypatch.setattr(
-        "hound_agent.cli.service.analyze_directory",
+        "hound.cli.service.analyze_directory",
         lambda *args, **kwargs: [service.AnalysisRun("run", logs / "run.log", tmp_path / "out" / "run", document)],
     )
 
@@ -182,7 +182,7 @@ def test_deploy_stage_returns_failure_exit(tmp_path, monkeypatch):
     document["failure"]["stage"] = "deploy"
     document["failure"]["kind"] = "deployment_failed"
     monkeypatch.setattr(
-        "hound_agent.cli.service.analyze_directory",
+        "hound.cli.service.analyze_directory",
         lambda *args, **kwargs: [service.AnalysisRun("run", logs / "run.log", tmp_path / "out" / "run", document)],
     )
 
@@ -196,7 +196,7 @@ def test_deploy_unknown_kind_is_not_a_failure_exit(tmp_path, monkeypatch):
     document["failure"]["stage"] = "deploy"
     document["failure"]["kind"] = "unknown"
     monkeypatch.setattr(
-        "hound_agent.cli.service.analyze_directory",
+        "hound.cli.service.analyze_directory",
         lambda *args, **kwargs: [service.AnalysisRun("run", logs / "run.log", tmp_path / "out" / "run", document)],
     )
     assert main(["analyze", str(logs), "--offline"]) == 0
@@ -230,10 +230,10 @@ def test_explicit_cli_does_not_import_tui(tmp_path):
     logs = tmp_path / "logs"
     logs.mkdir()
     (logs / "clean.log").write_text("job complete", encoding="utf-8")
-    sys.modules.pop("hound_agent.tui", None)
+    sys.modules.pop("hound.tui", None)
 
     assert main(["analyze", str(logs), "--offline"]) == 0
-    assert "hound_agent.tui" not in sys.modules
+    assert "hound.tui" not in sys.modules
 
 
 def test_directory_run_ids_and_formatted_paths_do_not_leak_log_name(tmp_path, capsys):
@@ -273,9 +273,9 @@ def test_offline_rejects_network_integrations(tmp_path, capsys):
 
 
 def test_config_set_model_preserves_config(tmp_path, capsys):
-    from hound_agent.config import PROVIDERS
+    from hound.config import PROVIDERS
 
-    config = tmp_path / ".hound-agent.yml"
+    config = tmp_path / ".hound.yml"
     config.write_text("redact: true\ncomponents:\n  src/*: core\n", encoding="utf-8")
 
     assert main(["config", "set", "model", "gemini", "--config", str(config)]) == 0
@@ -296,7 +296,7 @@ def test_report_reads_run_by_id(tmp_path, capsys):
 
 
 def test_tui_and_cli_use_shared_service(tmp_path, monkeypatch):
-    from hound_agent.tui import RcaTui
+    from hound.tui import RcaTui
     from textual.widgets import ListView
 
     log = tmp_path / "run.log"
@@ -307,7 +307,7 @@ def test_tui_and_cli_use_shared_service(tmp_path, monkeypatch):
         calls.append(Path(log_path))
         return _document(failure=True)
 
-    monkeypatch.setattr("hound_agent.service.analyze_log", fake_analyze)
+    monkeypatch.setattr("hound.service.analyze_log", fake_analyze)
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
 
     async def exercise():

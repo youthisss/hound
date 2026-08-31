@@ -1,6 +1,6 @@
 import json
 
-from hound_agent.cli import main
+from hound.cli import main
 from tests.integration.test_github import FakeResponse
 
 FIXTURE_ROOT = __import__("pathlib").Path(__file__).resolve().parents[1] / "fixtures"
@@ -14,7 +14,7 @@ def test_cli_gh_success(tmp_path, monkeypatch, capsys):
         captured["payload"] = json.loads(request.data.decode("utf-8"))
         return FakeResponse({"html_url": "https://github.com/acme/app/issues/9"})
 
-    monkeypatch.setattr("hound_agent.output.tickets.urlopen", fake_urlopen)
+    monkeypatch.setattr("hound.output.tickets.urlopen", fake_urlopen)
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("GH_REPO", "acme/app")
     out = tmp_path / "out"
@@ -57,7 +57,7 @@ def test_cli_gh_skips_duplicate(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("GH_REPO", "acme/app")
     out = tmp_path / "out"
     args = ["analyze", "--log", str(FIXTURE_ROOT / "pytest_fail.log"), "--out", str(out), "--gh"]
-    monkeypatch.setattr("hound_agent.cli._file_github_ticket", lambda *args, **kwargs: "https://github.example/1")
+    monkeypatch.setattr("hound.cli._file_github_ticket", lambda *args, **kwargs: "https://github.example/1")
     assert main(args) == 1
     assert main(args) == 1
     out_txt = capsys.readouterr().out

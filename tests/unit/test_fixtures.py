@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from hound_agent.ingest.logs import parse_log
-from hound_agent.pipeline import analyze
-from hound_agent.triage.severity import classify
-from hound_agent.models import validate
-from hound_agent.analyze.fallback import build_root_cause
+from hound.ingest.logs import parse_log
+from hound.pipeline import analyze
+from hound.triage.severity import classify
+from hound.models import validate
+from hound.analyze.fallback import build_root_cause
 from tests.conftest import fixture, make_artifacts
 
 FIXTURE_ROOT = __import__("pathlib").Path(__file__).resolve().parents[1] / "fixtures"
@@ -44,7 +44,7 @@ def test_classify_unique_events():
 
 
 def test_failed_tests_parsed():
-    from hound_agent.ingest.tests import parse_failed_tests
+    from hound.ingest.tests import parse_failed_tests
 
     for name, (_, kind, _, _) in CASES.items():
         tests = parse_failed_tests(fixture(name))

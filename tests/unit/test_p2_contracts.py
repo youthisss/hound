@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from hound_agent import __version__
-from hound_agent.cli import build_parser, main
-from hound_agent.config import load_config
+from hound import __version__
+from hound.cli import build_parser, main
+from hound.config import load_config
 
 
 def test_package_metadata_version_matches_init():
-    # hatch dynamic version resolves hound_agent.__version__
+    # hatch dynamic version resolves hound.__version__
     assert __version__ == "0.4.0"
 
 
@@ -25,7 +25,7 @@ def test_canonical_command_names_and_legacy_aliases(monkeypatch):
         "gate", "tests/fixtures/pytest_fail.log",
         "--baseline-ref", "main",
         "--repo-dir", ".",
-        "--policy", "docs/plans/hound-agent-qa-devops-improvement-plan.md",
+        "--policy", "docs/plans/hound-qa-devops-improvement-plan.md",
     ])
     assert args_gate.qa_command == "gate"
     assert args_gate.baseline == "main"

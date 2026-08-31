@@ -5,12 +5,12 @@ import json
 import pytest
 from git import Repo
 
-from hound_agent.analyze.prompts import build_user_prompt
-from hound_agent.config import load_config
-from hound_agent.models import Artifacts, StackFrame
-from hound_agent.pipeline import analyze
-from hound_agent.source import context as source_context
-from hound_agent.source.context import collect_source_evidence
+from hound.analyze.prompts import build_user_prompt
+from hound.config import load_config
+from hound.models import Artifacts, StackFrame
+from hound.pipeline import analyze
+from hound.source import context as source_context
+from hound.source.context import collect_source_evidence
 
 
 def _repo(tmp_path):

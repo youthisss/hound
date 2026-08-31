@@ -1,5 +1,5 @@
-from hound_agent.triage.component import assign
-from hound_agent.triage.severity import classify
+from hound.triage.component import assign
+from hound.triage.severity import classify
 from tests.conftest import make_artifacts
 
 
@@ -33,13 +33,13 @@ def test_component_glob_map():
 
 
 def test_component_heuristic():
-    from hound_agent.models import Artifacts, StackFrame
+    from hound.models import Artifacts, StackFrame
 
     a = Artifacts(log_text="x", frames=[StackFrame(file="backend/utils.c", line=1)])
     assert assign(a, {}) == "backend"
 
 
 def test_component_unowned():
-    from hound_agent.models import Artifacts
+    from hound.models import Artifacts
 
     assert assign(Artifacts(log_text="x"), {}) == "unowned"

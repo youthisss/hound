@@ -671,7 +671,7 @@ wheels = [
 ]
 
 [[package]]
-name = "hound-agent"
+name = "hound"
 source = { editable = "." }
 dependencies = [
     { name = "defusedxml" },

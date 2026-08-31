@@ -1,13 +1,13 @@
-from hound_agent.models import build_doc, validate
-from hound_agent.output.report import render_md, write_json, write_md
-from hound_agent.output.tickets import build_ticket, write_ticket
+from hound.models import build_doc, validate
+from hound.output.report import render_md, write_json, write_md
+from hound.output.tickets import build_ticket, write_ticket
 from tests.conftest import make_artifacts
 
 
 def test_doc_roundtrip(tmp_path):
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.models import Triage
-    from hound_agent.triage.severity import classify
+    from hound.analyze.fallback import build_root_cause
+    from hound.models import Triage
+    from hound.triage.severity import classify
 
     artifacts = make_artifacts("pytest_fail.log")
     rc = build_root_cause(artifacts)
@@ -29,8 +29,8 @@ def test_doc_roundtrip(tmp_path):
 
 
 def test_ticket_content():
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.models import Triage
+    from hound.analyze.fallback import build_root_cause
+    from hound.models import Triage
 
     artifacts = make_artifacts("pytest_fail.log")
     rc = build_root_cause(artifacts)
@@ -42,9 +42,9 @@ def test_ticket_content():
 
 
 def test_request_context_is_rendered_in_outputs(tmp_path):
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.formatters import format_document
-    from hound_agent.models import RequestContext, Triage
+    from hound.analyze.fallback import build_root_cause
+    from hound.formatters import format_document
+    from hound.models import RequestContext, Triage
 
     artifacts = make_artifacts("pytest_fail.log")
     artifacts.request = RequestContext(
@@ -73,8 +73,8 @@ def test_request_context_is_rendered_in_outputs(tmp_path):
 
 
 def test_write_ticket(tmp_path):
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.models import Triage
+    from hound.analyze.fallback import build_root_cause
+    from hound.models import Triage
 
     artifacts = make_artifacts("pytest_fail.log")
     rc = build_root_cause(artifacts)
@@ -85,7 +85,7 @@ def test_write_ticket(tmp_path):
 
 
 def test_source_snippet_is_rendered_in_report_and_ticket(tmp_path):
-    from hound_agent.models import RootCause, StackFrame, Triage, build_doc
+    from hound.models import RootCause, StackFrame, Triage, build_doc
 
     artifacts = make_artifacts("pytest_fail.log")
     artifacts.frames = [StackFrame(file="app.py", line=3, function="run", code="2 | value = compute()")]
@@ -100,9 +100,9 @@ def test_source_snippet_is_rendered_in_report_and_ticket(tmp_path):
 
 
 def test_terminal_and_markdown_outputs_strip_control_sequences():
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.formatters import format_document
-    from hound_agent.models import Triage
+    from hound.analyze.fallback import build_root_cause
+    from hound.formatters import format_document
+    from hound.models import Triage
 
     artifacts = make_artifacts("pytest_fail.log")
     root_cause = build_root_cause(artifacts)

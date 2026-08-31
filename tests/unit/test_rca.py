@@ -1,10 +1,10 @@
 import pytest
 
-from hound_agent.analyze import prompts
-from hound_agent.analyze.fallback import build_root_cause
-from hound_agent.analyze.llm import LlmError
-from hound_agent.analyze.rca import run_analysis
-from hound_agent.config import Config
+from hound.analyze import prompts
+from hound.analyze.fallback import build_root_cause
+from hound.analyze.llm import LlmError
+from hound.analyze.rca import run_analysis
+from hound.config import Config
 from tests.conftest import make_artifacts
 
 
@@ -29,7 +29,7 @@ def test_fallback_fix_suggestion_per_kind():
 
 
 def test_fallback_low_confidence_unknown():
-    from hound_agent.models import Artifacts
+    from hound.models import Artifacts
 
     rc = build_root_cause(Artifacts(log_text="nothing", kind="unknown", message=""))
     assert rc.confidence == "low"
@@ -45,7 +45,7 @@ def test_llm_merge(monkeypatch):
                 "missing_information": [], "recommended_checks": ["inspect rounding"],
                 "fix_suggestion": "use Decimal"}, {"prompt_tokens": 10, "completion_tokens": 5}
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", fake_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", fake_llm)
     rc = run_analysis(artifacts, config)
     assert rc.engine == "merged"
     assert rc.model == f"{config.provider}:{config.model}"
@@ -64,7 +64,7 @@ def test_llm_failure_falls_back(monkeypatch):
     def bad_llm(a, c):
         raise LlmError("network down")
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", bad_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", bad_llm)
     rc = run_analysis(artifacts, config)
     assert rc.engine == "fallback"
     assert rc.llm_status == "failed"
@@ -72,7 +72,7 @@ def test_llm_failure_falls_back(monkeypatch):
 
 
 def test_require_llm_raises_when_provider_fails(monkeypatch):
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", lambda *_: (_ for _ in ()).throw(TimeoutError()))
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", lambda *_: (_ for _ in ()).throw(TimeoutError()))
     artifacts = make_artifacts("pytest_fail.log")
     with pytest.raises(RuntimeError, match="required LLM analysis failed"):
         run_analysis(artifacts, Config(api_key="k", require_llm=True))
@@ -87,7 +87,7 @@ def test_llm_bad_confidence_normalized(monkeypatch):
                 "contradicting_evidence_refs": [], "missing_information": [],
                 "recommended_checks": [], "fix_suggestion": "f"}, {"prompt_tokens": 10, "completion_tokens": 5}
 
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", weird_llm)
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", weird_llm)
     rc = run_analysis(artifacts, config)
     assert rc.confidence == "medium"
     assert rc.engine == "fallback"
@@ -107,7 +107,7 @@ def test_llm_bad_confidence_normalized(monkeypatch):
 )
 def test_malformed_llm_contract_falls_back(monkeypatch, payload):
     artifacts = make_artifacts("pytest_fail.log")
-    monkeypatch.setattr("hound_agent.analyze.rca.analyze_with_llm", lambda *_: (payload, {}))
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", lambda *_: (payload, {}))
     assert run_analysis(artifacts, Config(api_key="k")).engine == "fallback"
 
 

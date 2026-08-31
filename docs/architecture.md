@@ -1,12 +1,12 @@
-# ARCHITECTURE — Hound Agent
+# ARCHITECTURE — Hound
 
 ## Module map
 
 ```
-hound-agent/
-├── pyproject.toml            # uv; [project.scripts] hound = hound_agent.cli:main
+hound/
+├── pyproject.toml            # uv; [project.scripts] hound = hound.cli:main
 ├── src/
-│   └── hound_agent/
+│   └── hound/
 │       ├── __init__.py       # __version__
 │       ├── models.py         # RCA document models and schema validation
 │       ├── config.py         # environment and YAML configuration
@@ -55,13 +55,13 @@ hound-agent/
 1. **ingest** builds `Artifacts`: extract request correlation IDs from the bounded raw log window, redact secrets (default on), detect stage/kind, extract summary/message, parse stacktrace and failed tests across common runners, and gather git context. For changed files matching repository-contained frames, up to three latest commit subjects become redacted root-cause evidence. Source snippets require explicit `--source-context` for trusted logs.
 2. **analyze** produces `RootCause`: LLM if enabled+ok (with retry/backoff + usage capture), else fallback; LLM output merged over rule facts; `engine` recorded. `llm.routing: exclude-kinds` skips the LLM for kinds in `llm.skip_kinds`; dedup-first reuse (`dedup.reuse`) restores a stored root-cause snapshot for well-established recurring incidents instead of spending another call (`meta.reused`).
 3. **triage** decorates: `Triage` (severity, component, priority, dedup_key, is_duplicate_of). State lives in a locked, atomic file store, or in a WAL-mode SQLite database when `dedup.backend: sqlite` (atomic `ON CONFLICT` upserts, no whole-file rewrite, safe for concurrent workers; retention + max-entries pruning). Each entry carries a root-cause snapshot used for LLM reuse.
-4. **output** renders `report.json`, `report.md`, `ticket.md` into `--output-dir` (default `./hound-agent-output/`). Optional filing: GitHub/Jira/GitLab ticket, Slack alert.
-5. **batch** (`hound batch --logs DIR [--jobs N] [--max-llm-calls N] [--max-cost-usd X]`) writes opaque unique run directories and `summary-<batch-id>.json` plus `usage-<batch-id>.json` (LLM calls, reused runs, budget-skipped runs, token totals, estimated cost); dedup state is shared at `<output-dir>/.hound-agent/state.json` (or `state.sqlite3`). Parallel workers keep run ids and summary ordering tied to input order, so output stays deterministic. Call slots are reserved atomically, so `--max-llm-calls` is strict even with parallel workers. The cost limit remains an estimated guardrail because actual token usage is known only after each response.
+4. **output** renders `report.json`, `report.md`, `ticket.md` into `--output-dir` (default `./hound-output/`). Optional filing: GitHub/Jira/GitLab ticket, Slack alert.
+5. **batch** (`hound batch --logs DIR [--jobs N] [--max-llm-calls N] [--max-cost-usd X]`) writes opaque unique run directories and `summary-<batch-id>.json` plus `usage-<batch-id>.json` (LLM calls, reused runs, budget-skipped runs, token totals, estimated cost); dedup state is shared at `<output-dir>/.hound/state.json` (or `state.sqlite3`). Parallel workers keep run ids and summary ordering tied to input order, so output stays deterministic. Call slots are reserved atomically, so `--max-llm-calls` is strict even with parallel workers. The cost limit remains an estimated guardrail because actual token usage is known only after each response.
 6. **tui** (`hound console`) calls `service.analyze_log()` in a Textual terminal app: pick a log → analyze → browse overview / report.md / ticket.md / raw log.
-7. **server** (`hound serve --port --workers N --max-queue M --rate-limit R --job-ttl T`) calls the same service from a stdlib HTTP endpoint; GET `/health` returns liveness and GET `/stats` returns queued/running/completed/failed counts. Jobs live in a SQLite store under `<output-dir>/.hound-agent/jobs.sqlite3`, so they survive restarts; jobs left running by a previous process are marked failed at startup.
+7. **server** (`hound serve --port --workers N --max-queue M --rate-limit R --job-ttl T`) calls the same service from a stdlib HTTP endpoint; GET `/health` returns liveness and GET `/stats` returns queued/running/completed/failed counts. Jobs live in a SQLite store under `<output-dir>/.hound/jobs.sqlite3`, so they survive restarts; jobs left running by a previous process are marked failed at startup.
 8. **log collector** (`hound log -- COMMAND` or piped stdin) tees raw output to the terminal, persists a redacted `.log` plus JSON metadata, and can explicitly call the shared service with `--analyze`.
-9. **trust** resolves the source class (`trusted_branch`/`fork_pr`/`local_artifact`) from `--source-class`, YAML `trust.source_class`, `TH_SOURCE_CLASS`, or CI environment detection before any capability runs. `fork_pr` fails closed: offline forced, redaction stays on, and source context, enrichment, LLM, and delivery are never invoked (`meta.trust` records the decision).
-10. **feedback** (`hound feedback record/export`) writes reviewed engineer ratings into `<output-dir>/.hound-agent/feedback.sqlite3` — intentionally separate from dedup state — with audit metadata and redacted values. It never mutates classifiers; `export --candidate-fixtures` emits explicit, manual regression-fixture candidate manifests.
+9. **trust** resolves the source class (`trusted_branch`/`fork_pr`/`local_artifact`) from `--source-class`, YAML `trust.source_class`, `HOUND_SOURCE_CLASS`, or CI environment detection before any capability runs. `fork_pr` fails closed: offline forced, redaction stays on, and source context, enrichment, LLM, and delivery are never invoked (`meta.trust` records the decision).
+10. **feedback** (`hound feedback record/export`) writes reviewed engineer ratings into `<output-dir>/.hound/feedback.sqlite3` — intentionally separate from dedup state — with audit metadata and redacted values. It never mutates classifiers; `export --candidate-fixtures` emits explicit, manual regression-fixture candidate manifests.
 11. **QA gate** (`hound gate ARTIFACTS --baseline-ref REF --candidate-ref REF --repo-dir REPO --policy FILE`) delegates to `qa/service.py`, which normalizes tests, coverage, and SARIF under aggregate file/byte/time limits before evaluating an explicit deterministic policy. Its JSON contract keeps `analysis_status` separate from `policy_outcome`; every warn/block includes an evidence-backed reason and a defect draft. Exit `0` means pass/warn, `1` means policy block, `2` means invalid input/policy, and `3` means an internal failure. `--report-only` preserves the computed outcome but disables exit-code enforcement.
 12. **DevOps timeline** combines explicit deployment context, CI metadata, and failure events. It orders comparable events by `timestamp_ns`, falls back to `sequence` or source order with explicit uncertainty, preserves partial traces, detects causal-link cycles without failing analysis, and separately records deployment outcome, recovery, customer impact, and release identity comparison. The complete additive contract and legacy-reader behavior are documented in `docs/reference/timeline-schema.md`.
 13. **Deployment connectors** run only after explicit operator opt-in, trusted policy approval, a supplied context file, and deploy-stage detection. Kubernetes and Helm commands are constructed as argument lists and checked against read-only verb allowlists; output is redacted and bounded before becoming evidence. Each attempt emits a credential-free `context.connector_audits` record, including partial failures. See `docs/guides/deployment-connectors.md`.
@@ -163,17 +163,17 @@ Evidence IDs are deterministic counters scoped to one report (`ev-001`, `ev-002`
 
 ## Config
 
-- Env: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` (default `gpt-4o-mini`); generic overrides `TH_*`.
+- Env: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` (default `gpt-4o-mini`); generic overrides `HOUND_*` (legacy `TH_*` aliases are accepted).
 - Env (GitHub, used with `--gh`): `GH_TOKEN`, `GH_REPO` (owner/name), `GH_API_BASE` (default `https://api.github.com`).
 - Env (trackers): `JIRA_URL`/`JIRA_PROJECT`/`JIRA_TOKEN`, `GITLAB_URL`/`GITLAB_PROJECT`/`GITLAB_TOKEN`, `SLACK_WEBHOOK_URL`.
 - Optional YAML supplied explicitly with `--config`: `llm` (incl. `max_retries`, `max_concurrency`), `trust` (`source_class`), `components`, `redact`, `dedup` (`backend`, `path`/`state_file`, `max_entries`, `retention_days`), `github`, `jira`, `gitlab`, `slack`.
-- Trust: `trust.source_class` (`trusted_branch`/`fork_pr`/`local_artifact`) or `TH_SOURCE_CLASS`; resolved from explicit/configured value first, then CI environment detection. `fork_pr` forces `offline`, keeps redaction on, and disables source context, enrichment, LLM, and delivery before any connector runs.
-- Feedback store: `<out>/.hound-agent/feedback.sqlite3` (WAL, separate from dedup state) written by `hound feedback record`; read by `hound feedback export`. Values are redacted before persistence; `--candidate-fixtures` exports explicit manual regression-fixture candidates.
+- Trust: `trust.source_class` (`trusted_branch`/`fork_pr`/`local_artifact`) or `HOUND_SOURCE_CLASS`; resolved from explicit/configured value first, then CI environment detection. `fork_pr` forces `offline`, keeps redaction on, and disables source context, enrichment, LLM, and delivery before any connector runs.
+- Feedback store: `<out>/.hound/feedback.sqlite3` (WAL, separate from dedup state) written by `hound feedback record`; read by `hound feedback export`. Values are redacted before persistence; `--candidate-fixtures` exports explicit manual regression-fixture candidates.
 - Repository-local config is not auto-discovered because analyzed repositories are untrusted input.
 - Redaction: on by default; `--allow-unredacted` or `redact: false` disables.
-- Dedup store: `file` (locked JSON at `<out>/.hound-agent/state.json`, atomic `os.replace`, bounded to 1000 entries) or `sqlite` (`<out>/.hound-agent/state.sqlite3`, WAL, atomic upserts, bounded by `max_entries` (default 50000) + `retention_days` (default 90)). HTTP state is disabled until conditional writes are supported.
-- LLM resilience: `max_retries` (default 3) with exponential backoff on 429/5xx; token usage captured into `meta.usage`; `max_concurrency` (default 4, `TH_MAX_CONCURRENCY`) throttles simultaneous in-process LLM calls during parallel `--jobs` runs.
-- Server limits: `--workers` (default 4), `--max-queue` (default 64), `--rate-limit` (default 60/min/client), `--job-ttl` (default 3600s); each also settable via `TH_SERVER_WORKERS`/`TH_SERVER_MAX_QUEUE`/`TH_SERVER_RATE_LIMIT`/`TH_SERVER_JOB_TTL`.
+- Dedup store: `file` (locked JSON at `<out>/.hound/state.json`, atomic `os.replace`, bounded to 1000 entries) or `sqlite` (`<out>/.hound/state.sqlite3`, WAL, atomic upserts, bounded by `max_entries` (default 50000) + `retention_days` (default 90)). HTTP state is disabled until conditional writes are supported.
+- LLM resilience: `max_retries` (default 3) with exponential backoff on 429/5xx; token usage captured into `meta.usage`; `max_concurrency` (default 4, `HOUND_MAX_CONCURRENCY`) throttles simultaneous in-process LLM calls during parallel `--jobs` runs.
+- Server limits: `--workers` (default 4), `--max-queue` (default 64), `--rate-limit` (default 60/min/client), `--job-ttl` (default 3600s); each also settable via `HOUND_SERVER_WORKERS`/`HOUND_SERVER_MAX_QUEUE`/`HOUND_SERVER_RATE_LIMIT`/`HOUND_SERVER_JOB_TTL`.
 
 ## Failure policy
 
@@ -193,8 +193,8 @@ Evidence IDs are deterministic counters scoped to one report (`ev-001`, `ev-002`
 ## Trust policy
 
 Every run is bound to a source class resolved from `--source-class`, YAML
-`trust.source_class`, `TH_SOURCE_CLASS`, or CI environment detection. Profiles are
-fail-closed (`src/hound_agent/trust.py`):
+`trust.source_class`, `HOUND_SOURCE_CLASS`, or CI environment detection. Profiles are
+fail-closed (`src/hound/trust.py`):
 
 | Source class | Detection | Source context | Enrichment | LLM | Delivery |
 |---|---|---|---|---|---|
@@ -211,7 +211,7 @@ the policy.
 
 `hound feedback record/export` stores reviewed engineer ratings (usefulness,
 kind/severity/owner/duplicate correctness, confirmed actual outcome) in
-`<out>/.hound-agent/feedback.sqlite3` — intentionally separate from dedup state —
+`<out>/.hound/feedback.sqlite3` — intentionally separate from dedup state —
 with `run_id`, `report_sha256`, `dedup_key`, reviewer, and timestamps for audit.
 Values are redacted before persistence. Feedback never changes future
 classification; `hound feedback export --candidate-fixtures` emits explicit
@@ -223,7 +223,7 @@ evaluation corpus.
 
 Bands derive deterministically: `high` when a stack frame hits a changed file,
 `medium` for a generic match, `low` otherwise. The evaluator
-(`hound_agent.eval`) calibrates the bands against the labeled corpus: for each
+(`hound.eval`) calibrates the bands against the labeled corpus: for each
 band it reports support, empirical stage-and-kind accuracy, mean deterministic
 score, and the gap between them. Bands with zero support are provisional, and
 classification correctness is a proxy until reviewed outcomes (M3 feedback)
@@ -233,7 +233,7 @@ calibration snapshot.
 ## QA history store
 
 `hound insights import/history/tests/stats/export` maintain a cross-run test history
-in `<output-dir>/.hound-agent/history.sqlite3`, separate from dedup and feedback
+in `<output-dir>/.hound/history.sqlite3`, separate from dedup and feedback
 state. Rows are keyed by `(suite, leaf test, run_id, attempt)` with atomic
 `ON CONFLICT DO UPDATE` upserts under WAL; concurrent writers cannot lose
 updates. The `qa/model.py` identity is runner-agnostic: pytest `path::test`,
@@ -306,7 +306,7 @@ can succeed while policy blocks a release.
 - Determinism assert: same input → same dedup_key.
 - CI: `uv run pytest` (WORKFLOW verify gate).
 - Evaluation corpus: versioned JSON cases in `tests/eval/cases/dev` and
-  `tests/eval/cases/held_out`. `python -m hound_agent.eval --offline --format
+  `tests/eval/cases/held_out`. `python -m hound.eval --offline --format
   json` validates labels, runs only deterministic ingest/triage code, and reports
   per-case results plus classification, extraction, dedup, redaction, throughput,
   and peak-memory baselines. Held-out labels are kept separate from development

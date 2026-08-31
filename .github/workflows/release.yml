@@ -19,11 +19,11 @@ jobs:
       - name: Verify release tag matches package version
         shell: bash
         run: |
-          package_version="$(uv run python -c 'import hound_agent; print(hound_agent.__version__)')"
+          package_version="$(uv run python -c 'import hound; print(hound.__version__)')"
           test "$GITHUB_REF_NAME" = "v${package_version}"
       - run: uv run ruff check .
-      - run: uv run mypy src/hound_agent
-      - run: uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
+      - run: uv run mypy src/hound
+      - run: uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q
       - name: Audit locked production dependencies
         run: |
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
@@ -44,10 +44,10 @@ jobs:
           uv venv "$smoke/sdist-venv"
           uv pip install --python "$smoke/sdist-venv/bin/python" "$sdist"
           cd "$smoke"
-          wheel-venv/bin/python -c 'import hound_agent'
+          wheel-venv/bin/python -c 'import hound'
           wheel-venv/bin/hound --version
           wheel-venv/bin/hound doctor --output-dir wheel-doctor --json
-          sdist-venv/bin/python -c 'import hound_agent'
+          sdist-venv/bin/python -c 'import hound'
           sdist-venv/bin/hound --version
           sdist-venv/bin/hound doctor --output-dir sdist-doctor --json
       - name: Checksums
@@ -152,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/hound-agent
+      url: https://pypi.org/p/hound
     permissions:
       id-token: write
     steps:

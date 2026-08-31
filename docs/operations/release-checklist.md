@@ -3,7 +3,7 @@
 ## Repository And Version
 
 - [ ] `git rev-parse --show-toplevel` identifies only the Hound checkout.
-- [ ] `git remote -v` points to `youthisss/hound-agent`.
+- [ ] `git remote -v` points to `youthisss/hound`.
 - [ ] The release commit is reviewed, reachable from protected `main`, and clean.
 - [ ] `CHANGELOG.md` covers behavior, schema, CLI, and Action contract changes.
 - [ ] `hound --version` equals the intended `vX.Y.Z` tag exactly.

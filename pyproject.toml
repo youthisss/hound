@@ -3,15 +3,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "hound-agent"
+name = "hound"
 dynamic = ["version"]
-description = "Hound Agent: all-in-one QA/QC agent that auto-investigates CI/build/test failures, finds root cause, triages, and drafts tickets."
+description = "Hound: all-in-one QA/QC agent that auto-investigates CI/build/test failures, finds root cause, triages, and drafts tickets."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
-    { name = "Hound Agent Maintainers", email = "maintainers@hound-agent.local" },
+    { name = "Hound Maintainers", email = "maintainers@hound.local" },
 ]
 keywords = ["ci-cd", "root-cause-analysis", "triage", "devops", "qa", "testing"]
 classifiers = [
@@ -40,11 +40,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/youthisss/hound-agent"
-Documentation = "https://github.com/youthisss/hound-agent/tree/main/docs"
-Repository = "https://github.com/youthisss/hound-agent.git"
-Issues = "https://github.com/youthisss/hound-agent/issues"
-Changelog = "https://github.com/youthisss/hound-agent/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/youthisss/hound"
+Documentation = "https://github.com/youthisss/hound/tree/main/docs"
+Repository = "https://github.com/youthisss/hound.git"
+Issues = "https://github.com/youthisss/hound/issues"
+Changelog = "https://github.com/youthisss/hound/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
@@ -58,14 +58,14 @@ dev = [
 ]
 
 [project.scripts]
-hound = "hound_agent.cli:main"
+hound = "hound.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/hound_agent"]
+packages = ["src/hound"]
 core-metadata-version = "2.4"
 
 [tool.hatch.version]
-path = "src/hound_agent/__init__.py"
+path = "src/hound/__init__.py"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
@@ -74,7 +74,7 @@ exclude = [
     "/demo-output",
     "/examples/demo/**/work",
     "/examples/demo/**/output",
-    "/hound-agent-output",
+    "/hound-output",
     "/portfolio-capture-output",
     "/portfolio-redaction-output",
     "/portfolio-screenshots",
@@ -103,4 +103,4 @@ ignore = ["E501"]
 python_version = "3.10"
 ignore_missing_imports = true
 check_untyped_defs = true
-exclude = "(?x)(src[\\\\/]hound_agent[\\\\/]analyze[\\\\/](llm|rca)\\.py|src[\\\\/]hound_agent[\\\\/](collector|tui)\\.py|src[\\\\/]hound_agent[\\\\/]ingest[\\\\/]context\\.py)"
+exclude = "(?x)(src[\\\\/]hound[\\\\/]analyze[\\\\/](llm|rca)\\.py|src[\\\\/]hound[\\\\/](collector|tui)\\.py|src[\\\\/]hound[\\\\/]ingest[\\\\/]context\\.py)"

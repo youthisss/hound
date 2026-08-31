@@ -97,7 +97,7 @@ konsep "failure" berbasis threshold breach, bukan pass/fail biasa). Tidak
 memblokir M5/M6.
 
 ### M8/M12 — server auth granularity
-Saat ini `TH_SERVER_TOKEN` bersifat single bearer token global. Untuk skala
+Saat ini `HOUND_SERVER_TOKEN` bersifat single bearer token global. Untuk skala
 multi-tim/multi-repo, dicatat sebagai kandidat hardening task di M12 (Delivery
 Reliability): token granular per-team/per-repo untuk audit trail dan rate limit
 per-tim. Tidak memblokir M8/M9.

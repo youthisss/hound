@@ -25,5 +25,5 @@ tuning against held-out pairs in the same change.
 Run the committed labeled recall gate with:
 
 ```sh
-uv run python -m hound_agent.eval --offline --suite test-impact
+uv run python -m hound.eval --offline --suite test-impact
 ```

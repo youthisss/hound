@@ -11,12 +11,12 @@ COPY action-entrypoint.sh /usr/local/bin/action-entrypoint
 
 RUN uv sync --frozen --no-dev && chmod 755 /usr/local/bin/action-entrypoint
 
-RUN useradd --create-home --uid 10001 hound-agent
+RUN useradd --create-home --uid 10001 hound
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-LABEL org.opencontainers.image.title="Hound Agent GitHub Action" \
+LABEL org.opencontainers.image.title="Hound GitHub Action" \
       org.opencontainers.image.licenses="MIT"
 
 # The entrypoint restores workspace ownership after writing action artifacts.

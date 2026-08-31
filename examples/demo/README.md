@@ -1,4 +1,4 @@
-# Hound Agent Demo Project
+# Hound Demo Project
 
 This project exercises Hound through its public CLI with deterministic synthetic
 CI/CD artifacts. It runs offline and never contacts an LLM, issue tracker, or

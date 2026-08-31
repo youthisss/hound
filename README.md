@@ -23,11 +23,11 @@
 
 ---
 
-**Hound Agent** is an offline-first diagnostic **developer tool** (CLI & TUI) designed to automatically investigate broken CI/CD pipelines, flaky test runs, build crashes, and deployment failures. It inspects raw execution logs and structured test artifacts, correlates stack traces with repository context, determines root causes, triages issue severity, and generates actionable incident reports and ticket drafts—**in a strictly read-only mode without mutating infrastructure**.
+**Hound** is an offline-first diagnostic **developer tool** (CLI & TUI) designed to automatically investigate broken CI/CD pipelines, flaky test runs, build crashes, and deployment failures. It inspects raw execution logs and structured test artifacts, correlates stack traces with repository context, determines root causes, triages issue severity, and generates actionable incident reports and ticket drafts—**in a strictly read-only mode without mutating infrastructure**.
 
 ---
 
-## ⚡ Why Hound Agent?
+## ⚡ Why Hound?
 
 - 🔒 **Offline-First & Deterministic:** 100% functional out of the box with no external services, no API keys, and no network access required.
 - 🤖 **Multi-Provider LLM Enhancement:** Seamlessly plug into OpenAI, Anthropic, Gemini, Groq, Ollama, DeepSeek, Azure, or local OpenAI-compatible endpoints when deeper synthesis is desired.
@@ -88,12 +88,12 @@
 
 ```sh
 # Using uv (recommended)
-uv tool install hound-agent
+uv tool install hound
 hound --version
 hound doctor
 
 # Using pipx
-pipx install hound-agent
+pipx install hound
 hound --version
 ```
 
@@ -101,8 +101,8 @@ hound --version
 
 ```sh
 # Clone and install dependencies
-git clone https://github.com/youthisss/hound-agent.git
-cd hound-agent
+git clone https://github.com/youthisss/hound.git
+cd hound
 uv sync --extra dev
 ```
 
@@ -130,7 +130,7 @@ Hound includes a rich, full-featured terminal interface built with Textual for i
 
 ```sh
 # Launch TUI pointing to a log directory
-hound console --logs ./ci-logs --output-dir hound-agent-output --offline
+hound console --logs ./ci-logs --output-dir hound-output --offline
 
 # Launch TUI with LLM analysis and 4 parallel workers
 hound console --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
@@ -191,7 +191,7 @@ hound analyze ./ci-logs --repo-dir . --source-context --offline
 hound analyze ./artifacts --format json --output result.json
 
 # Parallel multi-worker analysis
-hound analyze ./ci-logs --jobs 4 --output-dir hound-agent-output
+hound analyze ./ci-logs --jobs 4 --output-dir hound-output
 ```
 
 #### Key Capabilities:
@@ -226,7 +226,7 @@ fi
 
 ### 2. `hound log` — Capture & Tee Stream Execution
 
-Executes any build or test command, streams output to the terminal, and saves a redacted log alongside a JSON metadata sidecar in `.hound-agent/logs/`.
+Executes any build or test command, streams output to the terminal, and saves a redacted log alongside a JSON metadata sidecar in `.hound/logs/`.
 
 ```sh
 # Run command directly and capture
@@ -310,21 +310,21 @@ hound insights history tests/test_checkout.py test_payment_failure --window-days
 # Check local storage, dependencies, and environment readiness
 hound doctor
 
-# Generate a commented configuration template (.hound-agent.yml)
+# Generate a commented configuration template (.hound.yml)
 hound init
 
 # List supported LLM providers and presets
 hound providers
 
 # Inspect previously stored analysis runs
-hound runs --output-dir hound-agent-output
+hound runs --output-dir hound-output
 hound report <run-id> --format markdown --output report.md
 
 # Record human reviewer feedback to validate RCA accuracy
 hound feedback record --run-id <run-id> --usefulness useful --actual-kind assertion_error
 
 # Clean up analysis output directories
-hound clean --output-dir hound-agent-output --yes
+hound clean --output-dir hound-output --yes
 ```
 
 ---
@@ -345,11 +345,11 @@ Hound connects to any OpenAI-compatible API endpoint. Select a preset via `--pro
 | `9router` | `NINE_ROUTER_API_KEY`, `NINE_ROUTER_MODEL`, `NINE_ROUTER_BASE_URL` | `ag/gemini-3.7-flash-low` |
 | `custom` | `CUSTOM_API_KEY`, `CUSTOM_MODEL`, `CUSTOM_BASE_URL` | *(configured)* |
 
-> **Selection Priority:** CLI Flags > YAML `llm:` block > Generic `TH_API_*` env vars > Provider-specific env vars > Deterministic offline fallback.
+> **Selection Priority:** CLI Flags > YAML `llm:` block > Generic `HOUND_API_*` env vars > Provider-specific env vars > Deterministic offline fallback. Legacy `TH_*` aliases remain supported.
 
 ---
 
-## ⚙️ Configuration (`.hound-agent.yml`)
+## ⚙️ Configuration (`.hound.yml`)
 
 Create a local configuration file with `hound init` or pass one via `--config <path>`.
 
@@ -432,7 +432,7 @@ jobs:
         with:
           log: "artifacts/pytest.log"
           repo: "${{ github.workspace }}"
-          out: "${{ github.workspace }}/hound-agent-output"
+          out: "${{ github.workspace }}/hound-output"
           offline: "true"
 
       - name: Upload Investigation Report
@@ -440,7 +440,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hound-investigation-report
-          path: hound-agent-output/
+          path: hound-output/
 ```
 
 The Action input IDs `repo` and `out` remain stable for existing workflows; the
@@ -485,7 +485,7 @@ uv run pytest
 ## Repository Layout
 
 ```text
-src/hound_agent/        Core package and CLI implementation
+src/hound/        Core package and CLI implementation
 examples/demo/          Offline smoke test and scale benchmark harness
 docs/                   Guides, reference contracts, operations, and plans
 tests/unit/              Fast in-process tests
@@ -500,7 +500,7 @@ second application or a hidden runtime service.
 
 ## Project Status
 
-Hound Agent `0.4.0` is currently Beta. The offline CLI, TUI, GitHub Action
+Hound `0.4.0` is currently Beta. The offline CLI, TUI, GitHub Action
 contract, SQLite state stores, and deterministic fallback are covered by the
 local quality gates. Production sign-off still requires the documented
 two-repository pilot and external Docker, image-scan, TestPyPI, and PyPI
@@ -511,8 +511,8 @@ release controls; see [`docs/operations/pilot-readiness.md`](docs/operations/pil
 1. Create a branch and keep changes focused.
 2. Add or update tests in the matching `tests/unit`, `tests/integration`, or
    `tests/e2e` directory.
-3. Run `uv run ruff check .`, `uv run mypy src/hound_agent`, and
-   `uv run pytest --cov=hound_agent --cov-fail-under=80 -q`.
+3. Run `uv run ruff check .`, `uv run mypy src/hound`, and
+   `uv run pytest --cov=hound --cov-fail-under=80 -q`.
 4. Update the relevant documentation and `CHANGELOG.md` entry.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/workflow.md`](docs/workflow.md)
@@ -542,4 +542,4 @@ according to [`SECURITY.md`](SECURITY.md).
 
 ## 📄 License
 
-Hound Agent is licensed under the [MIT License](LICENSE).
+Hound is licensed under the [MIT License](LICENSE).

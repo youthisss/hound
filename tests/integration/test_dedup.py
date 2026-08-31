@@ -1,6 +1,6 @@
 import pytest
 
-from hound_agent.triage.dedup import (
+from hound.triage.dedup import (
     check_duplicate,
     fingerprint,
     load_state,
@@ -16,7 +16,7 @@ def test_normalize_strips_noise():
 
 
 def test_fingerprint_deterministic():
-    from hound_agent.analyze.fallback import build_root_cause
+    from hound.analyze.fallback import build_root_cause
 
     a = make_artifacts("pytest_fail.log")
     build_root_cause(a)
@@ -24,7 +24,7 @@ def test_fingerprint_deterministic():
 
 
 def test_request_context_does_not_change_fingerprint():
-    from hound_agent.models import RequestContext
+    from hound.models import RequestContext
 
     left = make_artifacts("pytest_fail.log")
     right = make_artifacts("pytest_fail.log")
@@ -36,7 +36,7 @@ def test_request_context_does_not_change_fingerprint():
 
 def test_cross_run_dedup(tmp_path):
     a = make_artifacts("pytest_fail.log")
-    from hound_agent.analyze.fallback import build_root_cause
+    from hound.analyze.fallback import build_root_cause
 
     build_root_cause(a)
     state = str(tmp_path / "state.json")
@@ -50,7 +50,7 @@ def test_cross_run_dedup(tmp_path):
 
 def test_no_state_path_skips():
     a = make_artifacts("pytest_fail.log")
-    from hound_agent.analyze.fallback import build_root_cause
+    from hound.analyze.fallback import build_root_cause
 
     build_root_cause(a)
     t = check_duplicate(a,None)
@@ -61,7 +61,7 @@ def test_no_state_path_skips():
 def test_record_triage_updates_entry(tmp_path):
     state = str(tmp_path / "state.json")
     a = make_artifacts("pytest_fail.log")
-    from hound_agent.analyze.fallback import build_root_cause
+    from hound.analyze.fallback import build_root_cause
 
     build_root_cause(a)
     triage = check_duplicate(a,state)
@@ -74,7 +74,7 @@ def test_record_triage_updates_entry(tmp_path):
 def test_flaky_suspect_after_three_runs(tmp_path):
     state = str(tmp_path / "state.json")
     a = make_artifacts("flaky.log")
-    from hound_agent.analyze.fallback import build_root_cause
+    from hound.analyze.fallback import build_root_cause
 
     build_root_cause(a)
     t1 = check_duplicate(a,state)
@@ -92,7 +92,7 @@ def test_flaky_suspect_after_three_runs(tmp_path):
 
 def test_flaky_suspect_requires_state():
     a = make_artifacts("flaky.log")
-    from hound_agent.analyze.fallback import build_root_cause
+    from hound.analyze.fallback import build_root_cause
 
     build_root_cause(a)
     for _ in range(5):
@@ -101,7 +101,7 @@ def test_flaky_suspect_requires_state():
 
 
 def test_corrupt_state_is_preserved_for_recovery(tmp_path):
-    from hound_agent.triage.dedup import load_state
+    from hound.triage.dedup import load_state
 
     state = tmp_path / "state.json"
     state.write_text("{invalid", encoding="utf-8")
@@ -111,7 +111,7 @@ def test_corrupt_state_is_preserved_for_recovery(tmp_path):
 
 
 def test_state_cap_retains_filed_entries(tmp_path, monkeypatch):
-    from hound_agent.triage import dedup
+    from hound.triage import dedup
 
     monkeypatch.setattr(dedup, "MAX_STATE_ENTRIES", 2)
     state = tmp_path / "state.json"
@@ -139,7 +139,7 @@ class TestBothBackends:
 
     @pytest.fixture(params=["file", "sqlite"])
     def backend_state(self, request, tmp_path):
-        from hound_agent.triage import dedup
+        from hound.triage import dedup
 
         backend = request.param
         dedup.configure_store(backend=backend)
@@ -151,14 +151,14 @@ class TestBothBackends:
 
     @staticmethod
     def _entries(backend, path):
-        from hound_agent.triage import dedup
+        from hound.triage import dedup
 
         if backend == "sqlite":
             return dedup.load_sqlite_entries(path)
         return dedup.load_state(path)
 
     def test_cross_run_dedup(self, backend_state):
-        from hound_agent.analyze.fallback import build_root_cause
+        from hound.analyze.fallback import build_root_cause
 
         backend, path = backend_state
         a = make_artifacts("pytest_fail.log")
@@ -173,7 +173,7 @@ class TestBothBackends:
         assert entries[0]["count"] == 2
 
     def test_record_triage_updates_entry(self, backend_state):
-        from hound_agent.analyze.fallback import build_root_cause
+        from hound.analyze.fallback import build_root_cause
 
         backend, path = backend_state
         a = make_artifacts("pytest_fail.log")
@@ -186,7 +186,7 @@ class TestBothBackends:
 
     def test_record_triage_restores_entry_evicted_during_analysis(self, backend_state, monkeypatch):
         """The reuse snapshot must survive a check/record eviction race."""
-        from hound_agent.triage import dedup
+        from hound.triage import dedup
 
         backend, path = backend_state
         artifacts = make_artifacts("pytest_fail.log")
@@ -236,8 +236,8 @@ class TestBothBackends:
         assert restored["root_cause"] == snapshot
 
     def test_mark_filed_blocks_duplicate_delivery(self, backend_state):
-        from hound_agent.analyze.fallback import build_root_cause
-        from hound_agent.triage.dedup import is_already_filed, mark_filed
+        from hound.analyze.fallback import build_root_cause
+        from hound.triage.dedup import is_already_filed, mark_filed
 
         backend, path = backend_state
         a = make_artifacts("pytest_fail.log")
@@ -249,8 +249,8 @@ class TestBothBackends:
         assert is_already_filed(path, key) is True
 
     def test_claim_delivery_rejected_after_mark(self, backend_state):
-        from hound_agent.analyze.fallback import build_root_cause
-        from hound_agent.triage.dedup import claim_delivery, mark_filed
+        from hound.analyze.fallback import build_root_cause
+        from hound.triage.dedup import claim_delivery, mark_filed
 
         backend, path = backend_state
         a = make_artifacts("pytest_fail.log")
@@ -264,7 +264,7 @@ class TestBothBackends:
     def test_concurrent_runs_do_not_lose_occurrences(self, backend_state):
         import concurrent.futures
 
-        from hound_agent.analyze.fallback import build_root_cause
+        from hound.analyze.fallback import build_root_cause
 
         backend, path = backend_state
         a = make_artifacts("pytest_fail.log")
@@ -277,12 +277,12 @@ class TestBothBackends:
 
 
 def test_sqlite_store_survives_reconfigure(tmp_path):
-    from hound_agent.triage import dedup
+    from hound.triage import dedup
 
     path = str(tmp_path / "state.sqlite3")
     dedup.configure_store(backend="sqlite")
     a = make_artifacts("pytest_fail.log")
-    from hound_agent.analyze.fallback import build_root_cause
+    from hound.analyze.fallback import build_root_cause
 
     build_root_cause(a)
     check_duplicate(a,path)
@@ -292,7 +292,7 @@ def test_sqlite_store_survives_reconfigure(tmp_path):
 
 
 def test_sqlite_max_entries_bounds_undelivered_incidents(tmp_path):
-    from hound_agent.triage import dedup
+    from hound.triage import dedup
 
     path = str(tmp_path / "bounded.sqlite3")
     dedup.configure_store(backend="sqlite", max_entries=2)
@@ -309,7 +309,7 @@ def test_sqlite_max_entries_bounds_undelivered_incidents(tmp_path):
 
 
 def test_sqlite_backend_rejects_unknown_path_extension_is_irrelevant(tmp_path):
-    from hound_agent.triage import dedup
+    from hound.triage import dedup
 
     # The sqlite backend accepts any path; it is the backend flag, not the
     # extension, that selects the store. Ensure re-selection is idempotent.
@@ -320,8 +320,8 @@ def test_sqlite_backend_rejects_unknown_path_extension_is_irrelevant(tmp_path):
 
 
 def test_default_state_path_uses_sqlite_filename(tmp_path):
-    from hound_agent.output.report import ensure_outdir
-    from hound_agent.pipeline import default_state_path
+    from hound.output.report import ensure_outdir
+    from hound.pipeline import default_state_path
 
     out = ensure_outdir(tmp_path / "out")
     assert default_state_path(out, None, False, backend="file").endswith("state.json")
@@ -331,7 +331,7 @@ def test_default_state_path_uses_sqlite_filename(tmp_path):
 def test_sqlite_concurrent_first_use_waits_for_schema_lock(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
     import threading
-    from hound_agent.triage import dedup
+    from hound.triage import dedup
 
     path = tmp_path / "concurrent.sqlite3"
     workers = 8

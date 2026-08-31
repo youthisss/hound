@@ -1,4 +1,4 @@
-from hound_agent.ingest.git import correlated_commit_subjects, gather
+from hound.ingest.git import correlated_commit_subjects, gather
 
 
 def test_no_repo():
@@ -55,7 +55,7 @@ def test_correlated_commit_subjects_reject_outside_repo_paths(fake_repo, monkeyp
         calls.append(args)
         return ""
 
-    monkeypatch.setattr("hound_agent.ingest.git._run", record)
+    monkeypatch.setattr("hound.ingest.git._run", record)
     assert correlated_commit_subjects(str(path), ["../outside.py"], ["../outside.py"]) == []
     assert calls == []
 
@@ -63,12 +63,12 @@ def test_correlated_commit_subjects_reject_outside_repo_paths(fake_repo, monkeyp
 def test_gather_rejects_option_like_revisions(fake_repo, monkeypatch):
     _, path = fake_repo
     calls = []
-    real_run = __import__("hound_agent.ingest.git", fromlist=["_run"])._run
+    real_run = __import__("hound.ingest.git", fromlist=["_run"])._run
 
     def record(repo, *args):
         calls.append(args)
         return real_run(repo, *args)
 
-    monkeypatch.setattr("hound_agent.ingest.git._run", record)
+    monkeypatch.setattr("hound.ingest.git._run", record)
     gather(str(path), base_sha="--output=owned", head_sha="--help")
     assert all("--output=owned" not in call and "--help" not in call for call in calls)

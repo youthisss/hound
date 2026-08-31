@@ -1,4 +1,4 @@
-name: "Hound Agent"
+name: "Hound"
 description: "Auto-investigate CI/CD failures: root cause -> triage -> ticket draft."
 branding:
   icon: "search"
@@ -15,7 +15,7 @@ inputs:
   out:
     description: "Output directory"
     required: false
-    default: "${{ github.workspace }}/hound-agent-output"
+    default: "${{ github.workspace }}/hound-output"
   offline:
     description: "Force rule-based analysis (no LLM)"
     required: false

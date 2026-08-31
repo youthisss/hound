@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import socket
 
-from hound_agent.cli import main
-from hound_agent.server import ServerConfig, _Server, _copy_limited
+from hound.cli import main
+from hound.server import ServerConfig, _Server, _copy_limited
 
 
 @pytest.fixture
@@ -95,7 +95,7 @@ def test_http_failed_job_lifecycle(http_server, monkeypatch):
     def fail(*args, **kwargs):
         raise RuntimeError("internal detail")
 
-    monkeypatch.setattr("hound_agent.server.service.analyze_log", fail)
+    monkeypatch.setattr("hound.server.service.analyze_log", fail)
     status, accepted = _request(http_server, "POST", "/analyze", {"log": "run.log"})
     assert status == 202
     _, job = _wait_for_job(http_server, accepted["job_id"])
@@ -139,7 +139,7 @@ def test_snapshot_copy_is_bounded_and_private(tmp_path):
     _copy_limited(io.BytesIO(b"accepted-appended"), target, len(b"accepted"))
     assert target.getvalue() == b"accepted"
 
-    from hound_agent.server import _snapshot_log
+    from hound.server import _snapshot_log
 
     logs = tmp_path / "logs"
     logs.mkdir()
@@ -166,7 +166,7 @@ def test_http_active_jobs_are_not_expired(http_server):
 
 
 def test_job_store_finished_ttl_uses_restart_safe_wall_clock(tmp_path):
-    from hound_agent.server import _JobStore
+    from hound.server import _JobStore
 
     store = _JobStore(tmp_path / "jobs.sqlite3")
     store.create("expired", status="completed")
@@ -253,6 +253,20 @@ def test_server_config_reads_env_limits(tmp_path, monkeypatch):
     assert config.job_ttl == 600
 
 
+def test_server_config_reads_canonical_env_limits(tmp_path, monkeypatch):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    monkeypatch.setenv("HOUND_SERVER_WORKERS", "3")
+    monkeypatch.setenv("HOUND_SERVER_MAX_QUEUE", "20")
+    monkeypatch.setenv("HOUND_SERVER_RATE_LIMIT", "99")
+    monkeypatch.setenv("HOUND_SERVER_JOB_TTL", "600")
+    config = ServerConfig("secret", logs, tmp_path / "out", analysis_options={"offline": True})
+    assert config.workers == 3
+    assert config.max_queue == 20
+    assert config.rate_limit == 99
+    assert config.job_ttl == 600
+
+
 def test_server_config_rejects_out_of_range_limits(tmp_path):
     logs = tmp_path / "logs"
     logs.mkdir()
@@ -263,7 +277,7 @@ def test_server_config_rejects_out_of_range_limits(tmp_path):
 
 
 def test_job_store_marks_interrupted_jobs_failed(tmp_path):
-    from hound_agent.server import _JobStore
+    from hound.server import _JobStore
 
     store = _JobStore(tmp_path / "jobs.sqlite3")
     store.create("zombie", status="running")
@@ -277,7 +291,7 @@ def test_job_store_marks_interrupted_jobs_failed(tmp_path):
 
 
 def test_server_job_store_survives_restart(tmp_path):
-    from hound_agent.server import _JobStore
+    from hound.server import _JobStore
 
     store = _JobStore(tmp_path / "jobs.sqlite3")
     store.create("persisted", status="completed")
@@ -288,7 +302,7 @@ def test_server_job_store_survives_restart(tmp_path):
 
 
 def test_job_store_preserves_corrupt_database(tmp_path):
-    from hound_agent.server import _JobStore
+    from hound.server import _JobStore
 
     path = tmp_path / "jobs.sqlite3"
     path.write_bytes(b"not a sqlite database")

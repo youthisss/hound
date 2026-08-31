@@ -1,14 +1,14 @@
 """M7: deterministic deployment timeline builder tests."""
 from __future__ import annotations
 
-from hound_agent.devops.timeline import (
+from hound.devops.timeline import (
     build_timeline,
     classify_customer_impact,
     compare_releases,
     release_identity,
     timeline_to_dict,
 )
-from hound_agent.models import (
+from hound.models import (
     Artifacts,
     DeploymentContext,
     FailureEvent,
@@ -212,9 +212,9 @@ def test_timeline_to_dict_matches_document_schema():
 
 
 def test_timeline_serialized_section_validates():
-    from hound_agent.analyze.fallback import build_root_cause
-    from hound_agent.models import Triage, build_doc
-    from hound_agent.output.tickets import build_ticket
+    from hound.analyze.fallback import build_root_cause
+    from hound.models import Triage, build_doc
+    from hound.output.tickets import build_ticket
 
     artifacts = _artifacts(events=[_event(role="primary", event_id="ev-001")], log_text="failed")
     root_cause = build_root_cause(artifacts)

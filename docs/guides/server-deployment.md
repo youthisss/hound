@@ -42,7 +42,7 @@ access logging, use [`nginx-hound.conf`](../examples/nginx-hound.conf).
 
 ## Backup and Retention
 
-The server writes durable jobs to `<output-dir>/.hound-agent/jobs.sqlite3` and incident deduplication to `<output-dir>/.hound-agent/state.sqlite3`.
+The server writes durable jobs to `<output-dir>/.hound/jobs.sqlite3` and incident deduplication to `<output-dir>/.hound/state.sqlite3`.
 
 1. To back up, flush or copy the SQLite database along with `-wal` and `-shm` sidecars.
 2. Expired jobs are cleaned up automatically via `--job-ttl` (default 3600s).

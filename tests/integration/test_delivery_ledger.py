@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from hound_agent.output.delivery import DeliveryLedger, delivery_key
+from hound.output.delivery import DeliveryLedger, delivery_key
 
 
 def test_idempotency_key_is_incident_and_destination_scoped():

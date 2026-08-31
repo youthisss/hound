@@ -1,6 +1,6 @@
-# Contributing to Hound Agent
+# Contributing to Hound
 
-Thank you for your interest in contributing to Hound Agent! We welcome contributions from the community.
+Thank you for your interest in contributing to Hound! We welcome contributions from the community.
 
 ## Code of Conduct
 
@@ -17,8 +17,8 @@ Please be respectful, constructive, and collaborative in all communications and 
 
 1. Fork and clone the repository:
    ```sh
-   git clone https://github.com/youthisss/hound-agent.git
-   cd hound-agent
+   git clone https://github.com/youthisss/hound.git
+   cd hound
    ```
 
 2. Create virtual environment and install dev dependencies:
@@ -60,8 +60,8 @@ uv run pytest -m "e2e and not slow" -q
    Before submitting a pull request, ensure all checks pass:
    ```sh
    uv run ruff check .
-   uv run mypy src/hound_agent
-   uv run pytest --cov=hound_agent --cov-report=term --cov-fail-under=80 -q
+   uv run mypy src/hound
+   uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q
    ```
 
 4. **Submit a Pull Request**:

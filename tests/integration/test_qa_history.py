@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from hound_agent.cli import main
-from hound_agent.ingest.tests import parse_failed_tests
-from hound_agent.models import FailedTest
-from hound_agent.qa.history import (
+from hound.cli import main
+from hound.ingest.tests import parse_failed_tests
+from hound.models import FailedTest
+from hound.qa.history import (
     count_by_status,
     default_history_store,
     duration_stats,
@@ -27,14 +27,14 @@ from hound_agent.qa.history import (
     retain,
     upsert_results,
 )
-from hound_agent.qa.model import (
+from hound.qa.model import (
     INSUFFICIENT_HISTORY,
     NormalizedTestResult,
     failure_signature,
     normalize_runner,
     stable_test_identity,
 )
-from hound_agent.qa.normalize import (
+from hound.qa.normalize import (
     detect_runner,
     from_failed_tests,
     import_artifact,

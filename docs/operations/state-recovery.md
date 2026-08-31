@@ -11,7 +11,7 @@ trusted. The example creates a consistent copy without copying `-wal` or `-shm`
 sidecars directly.
 
 ```powershell
-uv run python -c "import sqlite3; s=sqlite3.connect(r'hound-agent-output/.hound-agent/jobs.sqlite3'); d=sqlite3.connect(r'backup/jobs.sqlite3'); s.backup(d); d.close(); s.close()"
+uv run python -c "import sqlite3; s=sqlite3.connect(r'hound-output/.hound/jobs.sqlite3'); d=sqlite3.connect(r'backup/jobs.sqlite3'); s.backup(d); d.close(); s.close()"
 uv run python -c "import sqlite3; c=sqlite3.connect(r'backup/jobs.sqlite3'); print(c.execute('PRAGMA integrity_check').fetchone()[0]); c.close()"
 ```
 

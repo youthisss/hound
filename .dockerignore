@@ -1,7 +1,7 @@
 .venv
 __pycache__
 *.pyc
-hound-agent-output
+hound-output
 examples/demo/work
 examples/demo/output
 examples/demo/**/work
@@ -16,10 +16,10 @@ docs/plans
 .git
 .env
 .env.*
-.hound-agent
-.hound-agent.yml
-.hound-agent.yaml
-hound-agent-output
+.hound
+.hound.yml
+.hound.yaml
+hound-output
 demo-output
 portfolio-capture-output
 portfolio-redaction-output

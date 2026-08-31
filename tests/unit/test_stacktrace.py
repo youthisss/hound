@@ -1,5 +1,5 @@
-from hound_agent.ingest.stacktrace import attach_snippets, dedupe_repo_paths, parse_stacktrace
-from hound_agent.models import StackFrame
+from hound.ingest.stacktrace import attach_snippets, dedupe_repo_paths, parse_stacktrace
+from hound.models import StackFrame
 from tests.conftest import fixture
 
 

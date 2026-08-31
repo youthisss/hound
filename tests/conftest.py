@@ -32,10 +32,10 @@ def fixture(name: str) -> str:
 
 
 def make_artifacts(log_name: str, changed_files: list[str] | None = None, repo: bool = False):
-    from hound_agent.ingest.logs import parse_log
-    from hound_agent.ingest.stacktrace import parse_stacktrace
-    from hound_agent.ingest.tests import parse_failed_tests
-    from hound_agent.models import Artifacts, GitInfo
+    from hound.ingest.logs import parse_log
+    from hound.ingest.stacktrace import parse_stacktrace
+    from hound.ingest.tests import parse_failed_tests
+    from hound.models import Artifacts, GitInfo
 
     text = fixture(log_name)
     stage, kind, summary, message = parse_log(text)

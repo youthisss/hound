@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from hound_agent.ingest.context import _detect_deployment, load_context
+from hound.ingest.context import _detect_deployment, load_context
 
 
 def test_detect_service_workload_and_image_digest(tmp_path):

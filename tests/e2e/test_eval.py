@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from hound_agent.eval import DEFAULT_CORPUS, MAX_ARTIFACT_BYTES, evaluate, load_case, main
+from hound.eval import DEFAULT_CORPUS, MAX_ARTIFACT_BYTES, evaluate, load_case, main
 
 
 def test_evaluator_reports_offline_baseline_without_secrets():

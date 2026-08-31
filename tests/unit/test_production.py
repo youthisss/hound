@@ -12,7 +12,7 @@ from tests.conftest import make_artifacts
 # ---------------------------------------------------------------- redaction
 class TestRedact:
     def test_redacts_api_key_and_jwt(self):
-        from hound_agent.ingest.redact import redact_text
+        from hound.ingest.redact import redact_text
 
         jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJVadQssw5c"
         text = f"token sk-proj-ABCDEFGHIJKLMNOPQRSTUWXYZ and {jwt}"
@@ -22,7 +22,7 @@ class TestRedact:
         assert "eyJhbGci" not in out
 
     def test_redacts_connection_string_and_email(self):
-        from hound_agent.ingest.redact import redact_text
+        from hound.ingest.redact import redact_text
 
         text = "psql postgres://admin:hunter2@db:5432/app user@example.com"
         out, hits = redact_text(text)
@@ -32,7 +32,7 @@ class TestRedact:
         assert "user@example.com" not in out
 
     def test_redacts_private_key_block(self):
-        from hound_agent.ingest.redact import redact_text
+        from hound.ingest.redact import redact_text
 
         text = "-----BEGIN RSA PRIVATE KEY-----\nMIIEow\n-----END RSA PRIVATE KEY-----"
         out, hits = redact_text(text)
@@ -40,7 +40,7 @@ class TestRedact:
         assert "MIIEow" not in out
 
     def test_redacts_unterminated_private_key(self):
-        from hound_agent.ingest.redact import redact_text
+        from hound.ingest.redact import redact_text
 
         text = "before\n-----BEGIN PRIVATE KEY-----\nMIIEow\nremaining log text"
         out, hits = redact_text(text)
@@ -49,7 +49,7 @@ class TestRedact:
         assert "remaining log text" not in out
 
     def test_redacts_quoted_json_credentials_and_short_bearer(self):
-        from hound_agent.ingest.redact import redact_text
+        from hound.ingest.redact import redact_text
 
         text = '{"clientSecret":"top-secret","accessToken":"short-token"}\nAuthorization: Bearer abc'
         out, hits = redact_text(text)
@@ -59,7 +59,7 @@ class TestRedact:
         assert "Bearer abc" not in out
 
     def test_redacts_deployment_credentials(self):
-        from hound_agent.ingest.redact import redact_text
+        from hound.ingest.redact import redact_text
 
         text = (
             "AWS_SECRET_ACCESS_KEY=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+/= "
@@ -77,7 +77,7 @@ class TestRedact:
         assert "very-secret" not in out
 
     def test_plain_log_unchanged(self):
-        from hound_agent.ingest.redact import redact_text
+        from hound.ingest.redact import redact_text
 
         text = "pytest failed on test_cart at line 42"
         out, hits = redact_text(text)
@@ -85,7 +85,7 @@ class TestRedact:
         assert out == text
 
     def test_pipeline_sets_redacted_flag(self, tmp_path):
-        from hound_agent.pipeline import analyze
+        from hound.pipeline import analyze
 
         log = tmp_path / "x.log"
         log.write_text("error: ghp_123456789012345678901234567890123456 boom", encoding="utf-8")
@@ -96,7 +96,7 @@ class TestRedact:
         assert "ghp_123" not in json.dumps(report)
 
     def test_no_redact_flag_disables(self, tmp_path):
-        from hound_agent.pipeline import analyze
+        from hound.pipeline import analyze
 
         log = tmp_path / "x.log"
         log.write_text("sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", encoding="utf-8")
@@ -105,13 +105,13 @@ class TestRedact:
         assert doc["meta"]["redacted"] is False
 
     def test_ticket_file_uses_redacted_document(self, tmp_path, monkeypatch):
-        from hound_agent.models import RootCause
-        from hound_agent.pipeline import analyze
+        from hound.models import RootCause
+        from hound.pipeline import analyze
 
         log = tmp_path / "x.log"
         log.write_text("error: harmless", encoding="utf-8")
         monkeypatch.setattr(
-            "hound_agent.pipeline.run_analysis",
+            "hound.pipeline.run_analysis",
             lambda *_args: RootCause(hypothesis="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", fix_suggestion="fix"),
         )
         analyze(log, tmp_path / "out", offline=True)
@@ -122,8 +122,8 @@ class TestRedact:
 class TestSnippets:
     def test_attach_snippets_repo_file(self, fake_repo):
         repo, path = fake_repo
-        from hound_agent.ingest.stacktrace import attach_snippets
-        from hound_agent.models import StackFrame
+        from hound.ingest.stacktrace import attach_snippets
+        from hound.models import StackFrame
 
         frames = [StackFrame(file="app/cart.py", line=2)]
         frames = attach_snippets(frames, str(path))
@@ -133,8 +133,8 @@ class TestSnippets:
 
     def test_attach_snippets_missing_file(self, fake_repo):
         repo, path = fake_repo
-        from hound_agent.ingest.stacktrace import attach_snippets
-        from hound_agent.models import StackFrame
+        from hound.ingest.stacktrace import attach_snippets
+        from hound.models import StackFrame
 
         frames = [StackFrame(file="app/nope.py", line=2)]
         attach_snippets(frames, str(path))
@@ -142,8 +142,8 @@ class TestSnippets:
 
     def test_prompt_includes_snippet(self, fake_repo):
         repo, path = fake_repo
-        from hound_agent.analyze.prompts import build_user_prompt
-        from hound_agent.ingest.stacktrace import attach_snippets
+        from hound.analyze.prompts import build_user_prompt
+        from hound.ingest.stacktrace import attach_snippets
 
         artifacts = make_artifacts("pytest_fail.log")
         artifacts.frames = attach_snippets(artifacts.frames[:1], str(path))
@@ -151,8 +151,8 @@ class TestSnippets:
             assert artifacts.frames[0].code in build_user_prompt(artifacts)
 
     def test_prompt_includes_request_context(self):
-        from hound_agent.analyze.prompts import build_user_prompt
-        from hound_agent.models import RequestContext
+        from hound.analyze.prompts import build_user_prompt
+        from hound.models import RequestContext
 
         artifacts = make_artifacts("pytest_fail.log")
         artifacts.request = RequestContext(request_id="req_123", user_id="u_123")
@@ -165,14 +165,14 @@ class TestSnippets:
 # -------------------------------------------------------------- smart window
 class TestWindow:
     def test_small_file_read_whole(self, tmp_path):
-        from hound_agent.ingest.logs import read_log_window
+        from hound.ingest.logs import read_log_window
 
         p = tmp_path / "small.log"
         p.write_text("line1\nline2\n", encoding="utf-8")
         assert read_log_window(p) == "line1\nline2\n"
 
     def test_big_file_keeps_head_and_tail(self, tmp_path):
-        from hound_agent.ingest.logs import read_log_window
+        from hound.ingest.logs import read_log_window
 
         p = tmp_path / "big.log"
         p.write_text("".join(f"line{i}\n" for i in range(5000)), encoding="utf-8")
@@ -185,7 +185,7 @@ class TestWindow:
 # --------------------------------------------------------- LLM retries/usage
 class TestLlm:
     def _config(self, **kw):
-        from hound_agent.config import Config
+        from hound.config import Config
 
         cfg = Config(base_url="http://localhost:1", model="m", max_retries=kw.pop("max_retries", 2))
         for k, v in kw.items():
@@ -194,7 +194,7 @@ class TestLlm:
 
     def test_sdk_retries_are_disabled(self, monkeypatch):
         import openai
-        from hound_agent.analyze.llm import _make_client
+        from hound.analyze.llm import _make_client
 
         captured = {}
         monkeypatch.setattr(openai, "OpenAI", lambda **kwargs: captured.update(kwargs) or object())
@@ -202,7 +202,7 @@ class TestLlm:
         assert captured["max_retries"] == 0
 
     def test_retries_then_raises(self, monkeypatch):
-        from hound_agent.analyze.llm import LlmError, analyze_with_llm
+        from hound.analyze.llm import LlmError, analyze_with_llm
 
         calls = {"n": 0}
 
@@ -215,15 +215,15 @@ class TestLlm:
                 calls["n"] += 1
                 raise RuntimeError("rate limited")
 
-        monkeypatch.setattr("hound_agent.analyze.llm._make_client", lambda cfg: Client())
-        monkeypatch.setattr("hound_agent.analyze.llm.time.sleep", lambda s: None)
+        monkeypatch.setattr("hound.analyze.llm._make_client", lambda cfg: Client())
+        monkeypatch.setattr("hound.analyze.llm.time.sleep", lambda s: None)
         with pytest.raises(LlmError):
             analyze_with_llm(make_artifacts("pytest_fail.log"), self._config(max_retries=2))
         # Unsupported response_format is the only reason to issue a fallback request.
         assert calls["n"] == 3
 
     def test_captures_usage(self, monkeypatch):
-        from hound_agent.analyze.llm import analyze_with_llm
+        from hound.analyze.llm import analyze_with_llm
 
         class Usage:
             prompt_tokens = 10
@@ -248,14 +248,14 @@ class TestLlm:
             def create(self, **kw):
                 return Resp()
 
-        monkeypatch.setattr("hound_agent.analyze.llm._make_client", lambda cfg: Client())
+        monkeypatch.setattr("hound.analyze.llm._make_client", lambda cfg: Client())
         data, usage = analyze_with_llm(make_artifacts("pytest_fail.log"), self._config())
         assert data["hypothesis"] == "h"
         assert usage["prompt_tokens"] == 10
         assert usage["total_tokens"] == 15
 
     def test_usage_in_doc_meta(self, tmp_path):
-        from hound_agent.pipeline import analyze
+        from hound.pipeline import analyze
 
         log = tmp_path / "x.log"
         log.write_text("error boom", encoding="utf-8")
@@ -263,11 +263,11 @@ class TestLlm:
         assert doc["meta"]["usage"] == {}  # fallback has no LLM usage
 
     def test_unexpected_provider_error_falls_back(self, monkeypatch):
-        from hound_agent.analyze.rca import run_analysis
-        from hound_agent.config import Config
+        from hound.analyze.rca import run_analysis
+        from hound.config import Config
 
         monkeypatch.setattr(
-            "hound_agent.analyze.rca.analyze_with_llm",
+            "hound.analyze.rca.analyze_with_llm",
             lambda *_args: (_ for _ in ()).throw(TypeError("malformed provider response")),
         )
         assert run_analysis(make_artifacts("pytest_fail.log"), Config(api_key="key")).engine == "fallback"
@@ -277,16 +277,16 @@ class TestLlm:
 class TestHttpStore:
     def test_http_backend_is_fail_closed(self):
         import pytest
-        from hound_agent.triage import dedup
+        from hound.triage import dedup
 
         with pytest.raises(ValueError, match="conditional writes"):
             dedup.configure_store(backend="http", url="https://store.example/state.json")
 
     def test_file_backend_unchanged(self, tmp_path, monkeypatch):
-        from hound_agent.ingest.logs import parse_log
-        from hound_agent.models import Artifacts, GitInfo
-        from hound_agent.triage import dedup
-        from hound_agent.triage.dedup import check_duplicate
+        from hound.ingest.logs import parse_log
+        from hound.models import Artifacts, GitInfo
+        from hound.triage import dedup
+        from hound.triage.dedup import check_duplicate
 
         dedup.configure_store(backend="file")
         text = "FAILED tests/test_cart.py::test_add - AssertionError: 5 != 6"
@@ -303,15 +303,15 @@ class TestHttpStore:
 # ---------------------------------------------------------- tracker clients
 class TestTrackers:
     def _ticket(self):
-        from hound_agent.analyze.fallback import build_root_cause
-        from hound_agent.models import Triage
-        from hound_agent.output.tickets import build_ticket
+        from hound.analyze.fallback import build_root_cause
+        from hound.models import Triage
+        from hound.output.tickets import build_ticket
 
         artifacts = make_artifacts("pytest_fail.log")
         return build_ticket(artifacts, build_root_cause(artifacts), Triage(component="cart"))
 
     def test_jira_success(self, monkeypatch):
-        from hound_agent.output.tickets import create_jira_ticket
+        from hound.output.tickets import create_jira_ticket
 
         captured = {}
 
@@ -333,20 +333,20 @@ class TestTrackers:
             def __exit__(self, *exc):
                 return False
 
-        monkeypatch.setattr("hound_agent.output.tickets.urlopen", lambda r, timeout=30: Resp(*fake_urlopen(r, timeout)))
+        monkeypatch.setattr("hound.output.tickets.urlopen", lambda r, timeout=30: Resp(*fake_urlopen(r, timeout)))
         url = create_jira_ticket(self._ticket(), "https://jira.example", "QA", "tok")
         assert url == "https://jira.example/browse/QA-1"
         assert captured["auth"] == "Bearer tok"
         assert captured["payload"]["fields"]["project"]["key"] == "QA"
 
     def test_jira_rejects_http(self):
-        from hound_agent.output.tickets import JiraError, create_jira_ticket
+        from hound.output.tickets import JiraError, create_jira_ticket
 
         with pytest.raises(JiraError):
             create_jira_ticket(self._ticket(), "http://jira.example", "QA", "tok")
 
     def test_gitlab_success(self, monkeypatch):
-        from hound_agent.output.tickets import create_gitlab_ticket
+        from hound.output.tickets import create_gitlab_ticket
 
         captured = {}
 
@@ -368,7 +368,7 @@ class TestTrackers:
             captured["payload"] = json.loads(request.data.decode("utf-8"))
             return Resp({"web_url": "https://gitlab.example/acme/app/-/issues/3"})
 
-        monkeypatch.setattr("hound_agent.output.tickets.urlopen", fake_urlopen)
+        monkeypatch.setattr("hound.output.tickets.urlopen", fake_urlopen)
         url = create_gitlab_ticket(self._ticket(), "https://gitlab.example", "acme/app", "tok")
         assert url == "https://gitlab.example/acme/app/-/issues/3"
         token = next(v for k, v in captured["headers"].items() if k.lower() == "private-token")
@@ -376,7 +376,7 @@ class TestTrackers:
         assert captured["payload"]["title"].startswith("[cart]")
 
     def test_slack_success(self, monkeypatch):
-        from hound_agent.output.slack import send_slack
+        from hound.output.slack import send_slack
 
         captured = {}
 
@@ -394,46 +394,46 @@ class TestTrackers:
             captured["payload"] = json.loads(request.data.decode("utf-8"))
             return Resp()
 
-        monkeypatch.setattr("hound_agent.output.slack.urlopen", fake_urlopen)
+        monkeypatch.setattr("hound.output.slack.urlopen", fake_urlopen)
         send_slack(self._ticket(), "https://hooks.slack.com/services/abc")
-        assert captured["payload"]["text"].startswith("*Hound Agent:")
+        assert captured["payload"]["text"].startswith("*Hound:")
 
 
 # -------------------------------------------------------- config discovery
 class TestConfigDiscovery:
     def test_explicit_config_wins(self, tmp_path):
-        from hound_agent.cli import _discover_config
+        from hound.cli import _discover_config
 
         explicit = tmp_path / "a.yml"
         explicit.write_text("", encoding="utf-8")
         repo = tmp_path / "repo"
         repo.mkdir()
-        (repo / ".hound-agent.yml").write_text("", encoding="utf-8")
+        (repo / ".hound.yml").write_text("", encoding="utf-8")
         assert _discover_config(str(explicit), str(repo)) == str(explicit)
 
     def test_repo_local_config_is_not_auto_discovered(self, tmp_path):
-        from hound_agent.cli import _discover_config
+        from hound.cli import _discover_config
 
         repo = tmp_path / "repo"
         repo.mkdir()
-        (repo / ".hound-agent.yml").write_text("", encoding="utf-8")
+        (repo / ".hound.yml").write_text("", encoding="utf-8")
         assert _discover_config(None, str(repo)) is None
 
     def test_cwd_config_is_not_auto_discovered(self, tmp_path, monkeypatch):
-        from hound_agent.cli import _discover_config
+        from hound.cli import _discover_config
 
         monkeypatch.chdir(tmp_path)
-        (tmp_path / ".hound-agent.yaml").write_text("", encoding="utf-8")
+        (tmp_path / ".hound.yaml").write_text("", encoding="utf-8")
         assert _discover_config(None, None) is None
 
     def test_invalid_config_is_actionable(self, tmp_path):
-        from hound_agent.config import load_config
+        from hound.config import load_config
 
         with pytest.raises(ValueError, match="could not read config"):
             load_config(config_path=str(tmp_path / "missing.yml"))
 
     def test_wrong_config_section_type_is_rejected(self, tmp_path):
-        from hound_agent.config import load_config
+        from hound.config import load_config
 
         config = tmp_path / "bad.yml"
         config.write_text("llm: invalid\n", encoding="utf-8")
@@ -444,18 +444,18 @@ class TestConfigDiscovery:
 # ------------------------------------------------------------ webhook server
 class TestServer:
     def test_health_ok(self):
-        from hound_agent.server import _Handler
+        from hound.server import _Handler
 
         assert _Handler  # module importable
 
     def test_server_importable(self):
-        from hound_agent import server
+        from hound import server
 
         assert hasattr(server, "run_server")
 
     def test_server_requires_token_and_roots(self, tmp_path):
         import pytest
-        from hound_agent.server import ServerConfig
+        from hound.server import ServerConfig
 
         logs = tmp_path / "logs"
         logs.mkdir()
@@ -468,14 +468,14 @@ class TestServer:
 
     def test_server_rejects_non_loopback_http(self, tmp_path):
         import pytest
-        from hound_agent.server import run_server
+        from hound.server import run_server
 
         with pytest.raises(ValueError, match="loopback"):
             run_server(host="0.0.0.0", token="token", log_root=tmp_path, output_root=tmp_path / "out")
 
     def test_server_path_containment(self, tmp_path):
         import pytest
-        from hound_agent.server import _contained_path
+        from hound.server import _contained_path
 
         root = tmp_path / "logs"
         root.mkdir()

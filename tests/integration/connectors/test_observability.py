@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import json
 
-from hound_agent.connectors import observability
-from hound_agent.connectors.observability import collect_observability_bundle
-from hound_agent.models import Artifacts, DeploymentContext, FailureEvent
+from hound.connectors import observability
+from hound.connectors.observability import collect_observability_bundle
+from hound.models import Artifacts, DeploymentContext, FailureEvent
 
 
 class _Response:

@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from hound_agent.cli import main
-from hound_agent.models import validate
+from hound.cli import main
+from hound.models import validate
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -24,7 +24,7 @@ def test_cli_analyze_offline(tmp_path):
     assert (out / "report.json").exists()
     assert (out / "report.md").exists()
     assert (out / "ticket.md").exists()
-    assert (out / ".hound-agent" / "state.json").exists()
+    assert (out / ".hound" / "state.json").exists()
 
 
 def test_cli_analyze_with_repo(tmp_path, fake_repo):
@@ -75,7 +75,7 @@ def test_cli_version(capsys):
     with pytest.raises(SystemExit) as exc:
         main(["--version"])
     assert exc.value.code == 0
-    assert "Hound Agent" in capsys.readouterr().out
+    assert "Hound" in capsys.readouterr().out
 
 
 def test_action_offline_input_is_forwarded():

@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import pytest
 
-from hound_agent.qa.classifier import (
+from hound.qa.classifier import (
     check_duration_regression,
     classify_run_results,
     classify_test_result,
 )
-from hound_agent.qa.history import upsert_results
-from hound_agent.qa.model import NormalizedTestResult, now_iso
+from hound.qa.history import upsert_results
+from hound.qa.model import NormalizedTestResult, now_iso
 
 
 def _res(
@@ -143,7 +143,7 @@ class TestQAClassifications:
 
 class TestQACliAnalyze:
     def test_cli_qa_analyze_artifact(self, tmp_path, capsys):
-        from hound_agent.cli import main
+        from hound.cli import main
 
         # Create a sample junit artifact
         junit_content = """<?xml version="1.0" encoding="utf-8"?>

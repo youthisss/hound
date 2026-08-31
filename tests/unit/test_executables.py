@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from hound_agent.executables import trusted_executable
+from hound.executables import trusted_executable
 
 
 def test_trusted_executable_ignores_working_directory(tmp_path, monkeypatch):

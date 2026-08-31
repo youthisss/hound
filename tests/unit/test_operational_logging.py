@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from hound_agent.operational_logging import configure_server_logging
+from hound.operational_logging import configure_server_logging
 
 
 def test_json_server_log_has_operational_fields_without_secrets():
@@ -13,7 +13,7 @@ def test_json_server_log_has_operational_fields_without_secrets():
 
     record = json.loads(output.getvalue())
     assert record["level"] == "info"
-    assert record["component"] == "hound_agent.server"
+    assert record["component"] == "hound.server"
     assert record["event"] == "job_completed"
     assert record["request_id"] == "req-1"
     assert record["job_id"] == "job-1"
