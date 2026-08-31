@@ -43,6 +43,10 @@ jobs:
 - `offline` (optional, default `"true"`): set to `"false"` to allow configured LLM provider calls.
 - `repo` (optional): local Git checkout directory for source context.
 
+The Action input IDs `out` and `repo` remain stable for existing workflows. The
+container forwards them to the canonical CLI options `--output-dir` and
+`--repo-dir`.
+
 ## Outputs
 
 - `stage`: failure stage (`build`, `test`, `deploy`, `ci`, `unknown`).

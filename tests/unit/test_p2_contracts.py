@@ -12,10 +12,14 @@ def test_package_metadata_version_matches_init():
     assert __version__ == "0.4.0"
 
 
-def test_canonical_command_aliases():
+def test_canonical_command_names_and_legacy_aliases(monkeypatch):
     parser = build_parser()
+    help_text = parser.format_help()
+    assert all(name in help_text for name in ("console", "serve", "providers", "runs", "insights"))
+    assert all(name not in help_text for name in ("tui", "server", "list-providers", "list-runs"))
+
     args_insights = parser.parse_args(["insights", "tests", "--output-dir", "out"])
-    assert args_insights.command in {"insights", "qa"}
+    assert args_insights.command == "insights"
 
     args_gate = parser.parse_args([
         "gate", "tests/fixtures/pytest_fail.log",
@@ -28,16 +32,39 @@ def test_canonical_command_aliases():
     assert args_gate.repo == "."
 
     args_console = parser.parse_args(["console", "--output-dir", "out"])
-    assert args_console.command in {"console", "tui"}
+    assert args_console.command == "console"
 
     args_serve = parser.parse_args(["serve", "--output-dir", "server-out"])
-    assert args_serve.command in {"serve", "server"}
+    assert args_serve.command == "serve"
 
     args_providers = parser.parse_args(["providers", "--json"])
-    assert args_providers.command in {"providers", "list-providers"}
+    assert args_providers.command == "providers"
 
     args_runs = parser.parse_args(["runs", "--output-dir", "out", "--json"])
-    assert args_runs.command in {"runs", "list-runs"}
+    assert args_runs.command == "runs"
+
+    legacy_options = parser.parse_args([
+        "analyze", "logs", "--out", "out", "--repo", "repo", "--no-redact",
+    ])
+    assert legacy_options.out == "out"
+    assert legacy_options.repo == "repo"
+    assert legacy_options.no_redact is True
+
+    legacy_commands = parser.parse_args(["qa", "history", "suite", "test", "--store", "history.db", "--days", "7"])
+    assert legacy_commands.command == "insights"
+    assert legacy_commands.store == "history.db"
+    assert legacy_commands.days == 7
+    assert parser.parse_args(["tui"]).command == "console"
+    assert parser.parse_args(["server"]).command == "serve"
+    assert parser.parse_args(["list-providers"]).command == "providers"
+    assert parser.parse_args(["list-runs"]).command == "runs"
+    monkeypatch.setattr("sys.argv", ["hound", "qa", "tests"])
+    assert parser.parse_args().command == "insights"
+
+    # Legacy spellings must not rewrite positional values after the command.
+    assert parser.parse_args(["analyze", "qa"]).log_directory == "qa"
+    assert parser.parse_args(["insights", "history", "qa", "test"]).suite == "qa"
+    assert parser.parse_args(["log", "--", "echo", "--out"]).command_args == ["--", "echo", "--out"]
 
 
 def test_config_validation_detects_unknown_keys(tmp_path, capsys):

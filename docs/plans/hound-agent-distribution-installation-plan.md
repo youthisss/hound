@@ -194,7 +194,7 @@ still needs a clone and development dependencies.
 ```powershell
 uv tool install "hound-agent @ git+https://github.com/youthisss/hound-agent.git@<reviewed-ref>"
 hound --version
-hound doctor --out hound-doctor-output --json
+hound doctor --output-dir hound-doctor-output --json
 uv tool uninstall hound-agent
 ```
 
@@ -256,7 +256,7 @@ New-Item -ItemType Directory -Force $smoke | Out-Null
 Set-Content (Join-Path $smoke "failure.log") "AssertionError: expected 1 but got 2"
 Push-Location $smoke
 & <absolute-path-to-package-smoke\Scripts\hound.exe> --version
-& <absolute-path-to-package-smoke\Scripts\hound.exe> analyze . --offline --out output
+& <absolute-path-to-package-smoke\Scripts\hound.exe> analyze . --offline --output-dir output
 if ($LASTEXITCODE -ne 1) { throw "expected detected-failure exit code 1" }
 if (-not (Test-Path output\failure\report.json)) { throw "expected report.json" }
 Pop-Location
@@ -310,7 +310,7 @@ must use a GitHub Environment with explicit controls.
 ```powershell
 uv tool install "<exact-TestPyPI-wheel-URL>"
 hound --version
-hound analyze <temporary-failure-fixture-directory> --offline --out testpypi-smoke-output
+hound analyze <temporary-failure-fixture-directory> --offline --output-dir testpypi-smoke-output
 # Assert exit code 1 and validate the generated report.
 uv tool uninstall hound-agent
 ```

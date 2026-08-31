@@ -63,4 +63,4 @@ jobs:
           uv venv candidate-venv
           uv pip install --python candidate-venv/bin/python "$wheel_file"
           candidate-venv/bin/hound --version
-          candidate-venv/bin/hound doctor --out doctor-output --json
+          candidate-venv/bin/hound doctor --output-dir doctor-output --json

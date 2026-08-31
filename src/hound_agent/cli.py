@@ -8,6 +8,7 @@ import shutil
 import sqlite3
 import sys
 import threading
+from collections.abc import Sequence
 from dataclasses import replace
 from uuid import uuid4
 from pathlib import Path
@@ -26,6 +27,56 @@ from hound_agent.trust import SOURCE_CLASSES
 
 DEFAULT_OUT = "hound-agent-output"
 CONFIG_FILENAMES = (".hound-agent.yml", ".hound-agent.yaml")
+_LEGACY_OPTION_ALIASES = {
+    "--out": "--output-dir",
+    "--repo": "--repo-dir",
+    "--no-redact": "--allow-unredacted",
+    "--runner": "--test-runner",
+    "--baseline": "--baseline-ref",
+    "--head": "--candidate-ref",
+    "--store": "--history-db",
+    "--days": "--window-days",
+}
+_LEGACY_COMMAND_ALIASES = {
+    "tui": "console",
+    "server": "serve",
+    "list-providers": "providers",
+    "list-runs": "runs",
+    "qa": "insights",
+}
+
+
+def _canonicalize_argv(args: Sequence[str] | None) -> list[str] | None:
+    if args is None:
+        args = sys.argv[1:]
+    canonical: list[str] = []
+    for index, arg in enumerate(args):
+        if index == 0:
+            arg = _LEGACY_COMMAND_ALIASES.get(arg, arg)
+        if arg == "--":
+            canonical.extend(args[index:])
+            break
+        option = _LEGACY_OPTION_ALIASES.get(arg)
+        if option is not None:
+            canonical.append(option)
+            continue
+        for legacy, public in _LEGACY_OPTION_ALIASES.items():
+            if arg.startswith(f"{legacy}="):
+                arg = f"{public}{arg[len(legacy):]}"
+                break
+        canonical.append(arg)
+    return canonical
+
+
+class _HoundArgumentParser(argparse.ArgumentParser):
+    """Normalize hidden pre-0.4 option spellings before argparse validates them."""
+
+    def parse_known_args(  # type: ignore[override]
+        self,
+        args: Sequence[str] | None = None,
+        namespace: argparse.Namespace | None = None,
+    ) -> tuple[argparse.Namespace, list[str]]:
+        return super().parse_known_args(_canonicalize_argv(args), namespace)
 
 
 def _positive_int(value: str) -> int:
@@ -71,14 +122,14 @@ def _add_common(parser: argparse.ArgumentParser, *, batch: bool = False) -> None
                             help="path to a log file, or a directory scanned for *.log")
     else:
         parser.add_argument("--log", required=True, help="path to the failure log file")
-    parser.add_argument("--repo-dir", "--repo", dest="repo", default=None, help="path to the local git checkout")
-    parser.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
+    parser.add_argument("--repo-dir", dest="repo", default=None, help="path to the local git checkout")
+    parser.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
     parser.add_argument("--offline", action="store_true", help="force rule-based analysis, no LLM")
     parser.add_argument("--jobs", type=_positive_int, default=1,
                         help="parallel analysis workers (default: 1 = sequential)")
     parser.add_argument("--config", default=None, help="optional YAML config (components, dedup)")
     parser.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
-    parser.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true",
+    parser.add_argument("--allow-unredacted", dest="no_redact", action="store_true",
                         help="disable secret/PII redaction (unsafe)")
     parser.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     parser.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
@@ -103,12 +154,14 @@ def _add_common(parser: argparse.ArgumentParser, *, batch: bool = False) -> None
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _HoundArgumentParser(
         prog="hound",
         description="Auto-investigate CI/CD failures: root cause -> triage -> ticket draft.",
     )
     parser.add_argument("--version", action="version", version=f"Hound Agent {__version__}")
-    sub = parser.add_subparsers(dest="command")
+    # Keep normalization at the top level; positional values in nested parsers
+    # must not be mistaken for legacy command names.
+    sub = parser.add_subparsers(dest="command", parser_class=argparse.ArgumentParser)
     analyze_cmd = sub.add_parser("analyze", help="analyze artifacts and emit formatted results")
     analyze_cmd.add_argument("log_directory", nargs="?", help="directory containing supported .log files")
     analyze_cmd.add_argument("--log", dest="legacy_log", default=None, help=argparse.SUPPRESS)
@@ -117,15 +170,15 @@ def build_parser() -> argparse.ArgumentParser:
     _add_analyze_options(analyze_cmd)
     batch = sub.add_parser("batch", help="analyze artifacts with budgets and usage telemetry")
     _add_common(batch, batch=True)
-    tui = sub.add_parser("tui", aliases=["console"], help="interactive terminal UI")
+    tui = sub.add_parser("console", help="interactive terminal UI")
     tui.add_argument("--logs", default=None, help="log directory to browse (default: cwd)")
-    tui.add_argument("--repo-dir", "--repo", dest="repo", default=None, help="path to the local git checkout")
-    tui.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
+    tui.add_argument("--repo-dir", dest="repo", default=None, help="path to the local git checkout")
+    tui.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="output directory (default: hound-agent-output)")
     tui_mode = tui.add_mutually_exclusive_group()
     tui_mode.add_argument("--offline", action="store_true", default=None, help="force rule-based analysis, no LLM")
     tui_mode.add_argument("--online", dest="offline", action="store_false", help="force LLM analysis")
     tui.add_argument("--config", default=None, help="optional YAML config")
-    tui.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
+    tui.add_argument("--allow-unredacted", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
     tui.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
     tui.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     tui.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
@@ -136,17 +189,17 @@ def build_parser() -> argparse.ArgumentParser:
     tui.add_argument("--max-llm-calls", type=_positive_int, default=None, help="strict LLM call cap for Analyze all")
     tui.add_argument("--max-cost-usd", type=_positive_float, default=None, help="estimated cost guardrail for Analyze all")
     _add_llm_args(tui)
-    server_cmd = sub.add_parser("server", aliases=["serve"], help="run the HTTP webhook receiver (POST /analyze, GET /health)")
+    server_cmd = sub.add_parser("serve", help="run the HTTP webhook receiver (POST /analyze, GET /health)")
     server_cmd.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
     server_cmd.add_argument("--port", type=int, default=8123, help="bind port (default: 8123)")
     server_cmd.add_argument("--token", default=None, help="Bearer token; defaults to HOUND_SERVER_TOKEN (legacy TH_SERVER_TOKEN supported)")
     server_cmd.add_argument("--log-root", default=".", help="trusted root for relative log paths")
-    server_cmd.add_argument("--output-dir", "--out", dest="out", default="hound-agent-server-output", help="server-owned output root")
+    server_cmd.add_argument("--output-dir", dest="out", default="hound-agent-server-output", help="server-owned output root")
     server_cmd.add_argument("--repo-root", default=None, help="optional trusted repository root")
     server_cmd.add_argument("--offline", action="store_true", help="force local rule-based analysis")
     server_cmd.add_argument("--config", default=None, help="optional YAML config")
     server_cmd.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
-    server_cmd.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
+    server_cmd.add_argument("--allow-unredacted", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
     server_cmd.add_argument("--source-context", action="store_true", help="attach source near frames from trusted logs")
     server_cmd.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
     server_cmd.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
@@ -164,18 +217,18 @@ def build_parser() -> argparse.ArgumentParser:
     server_cmd.add_argument("--log-format", choices=("text", "json"), default="text",
                             help="server log format (default: text)")
     _add_llm_args(server_cmd)
-    providers_cmd = sub.add_parser("list-providers", aliases=["providers"], help="list built-in LLM provider presets")
+    providers_cmd = sub.add_parser("providers", help="list built-in LLM provider presets")
     providers_cmd.add_argument("--json", action="store_true", help="output as JSON")
     report_cmd = sub.add_parser("report", help="show a stored analysis run")
     report_cmd.add_argument("run_id", help="run ID under the output directory")
-    report_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    report_cmd.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     report_cmd.add_argument("--format", choices=("text", "json", "markdown"), default="text")
     report_cmd.add_argument("--output", default=None, help="write formatted report to this file")
-    runs_cmd = sub.add_parser("list-runs", aliases=["runs"], help="list stored analysis runs")
-    runs_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    runs_cmd = sub.add_parser("runs", help="list stored analysis runs")
+    runs_cmd.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     runs_cmd.add_argument("--json", action="store_true", help="output as JSON")
     clean_cmd = sub.add_parser("clean", help="remove stored analysis output")
-    clean_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    clean_cmd.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     clean_cmd.add_argument("--yes", action="store_true", help="confirm deletion")
     init_cmd = sub.add_parser("init", help="create a commented project config template")
     init_cmd.add_argument("--config", default=".hound-agent.yml", help="config path to create")
@@ -195,9 +248,9 @@ def build_parser() -> argparse.ArgumentParser:
     feedback_cmd = sub.add_parser("feedback", help="record or export reviewed analysis feedback")
     feedback_sub = feedback_cmd.add_subparsers(dest="feedback_command", required=True)
     feedback_record = feedback_sub.add_parser("record", help="record structured feedback for a stored run")
-    feedback_record.add_argument("--run-id", required=True, help="stored run ID under --out")
-    feedback_record.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
-    feedback_record.add_argument("--history-db", "--store", dest="store", default=None, help="feedback SQLite path (separate from dedup state)")
+    feedback_record.add_argument("--run-id", required=True, help="stored run ID under --output-dir")
+    feedback_record.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    feedback_record.add_argument("--history-db", dest="store", default=None, help="feedback SQLite path (separate from dedup state)")
     feedback_record.add_argument(
         "--usefulness", choices=("useful", "partial", "not_useful", "unknown"), default="unknown"
     )
@@ -218,8 +271,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     feedback_record.add_argument("--reviewer", default="", help="reviewer identifier; secrets are redacted")
     feedback_export = feedback_sub.add_parser("export", help="export sanitized feedback or candidate manifests")
-    feedback_export.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
-    feedback_export.add_argument("--history-db", "--store", dest="store", default=None, help="feedback SQLite path")
+    feedback_export.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    feedback_export.add_argument("--history-db", dest="store", default=None, help="feedback SQLite path")
     feedback_export.add_argument("--output", default=None, help="write export to a file")
     feedback_export.add_argument("--format", choices=("json", "jsonl"), default="json")
     feedback_export.add_argument("--reviewed-only", action="store_true")
@@ -227,87 +280,87 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-fixtures", action="store_true",
         help="export reviewed records as manual regression-fixture candidates",
     )
-    qa_cmd = sub.add_parser("qa", aliases=["insights"], help="QA capabilities: test history store, import/export, queries, and classification")
+    qa_cmd = sub.add_parser("insights", help="QA capabilities: test history store, import/export, queries, and classification")
     qa_sub = qa_cmd.add_subparsers(dest="qa_command", required=True)
     qa_analyze = qa_sub.add_parser("analyze", help="classify test results from an artifact or directory against history")
     qa_analyze.add_argument("path", help="artifact file or directory of test artifacts")
-    qa_analyze.add_argument("--test-runner", "--runner", dest="runner", default=None, help="explicit runner label")
-    qa_analyze.add_argument("--baseline-ref", "--baseline", dest="baseline", default=None, help="baseline commit SHA")
-    qa_analyze.add_argument("--window-days", "--days", dest="days", type=_positive_int, default=None, help="history window")
-    qa_analyze.add_argument("--history-db", "--store", dest="store", default=None, help="history SQLite path")
-    qa_analyze.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    qa_analyze.add_argument("--test-runner", dest="runner", default=None, help="explicit runner label")
+    qa_analyze.add_argument("--baseline-ref", dest="baseline", default=None, help="baseline commit SHA")
+    qa_analyze.add_argument("--window-days", dest="days", type=_positive_int, default=None, help="history window")
+    qa_analyze.add_argument("--history-db", dest="store", default=None, help="history SQLite path")
+    qa_analyze.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     qa_analyze.add_argument("--json", action="store_true", help="output structured JSON")
     qa_import = qa_sub.add_parser("import", help="import test evidence (JUnit/JSON/log) into the history store")
     qa_import.add_argument("path", help="artifact file or directory of artifacts")
-    qa_import.add_argument("--test-runner", "--runner", dest="runner", default=None, help="explicit runner label")
+    qa_import.add_argument("--test-runner", dest="runner", default=None, help="explicit runner label")
     qa_import.add_argument("--run-id", default="", help="run identifier for the imported evidence")
     qa_import.add_argument("--commit", default="", help="commit SHA for the imported evidence")
     qa_import.add_argument("--branch", default="", help="branch name for the imported evidence")
     qa_import.add_argument("--environment", default="", help="environment dimensions, e.g. os=linux;python=3.11")
-    qa_import.add_argument("--history-db", "--store", dest="store", default=None, help="history SQLite path")
-    qa_import.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    qa_import.add_argument("--history-db", dest="store", default=None, help="history SQLite path")
+    qa_import.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     qa_import.add_argument("--retention-days", type=_positive_int, default=None,
                            help="retain only this many days after import")
     qa_history = qa_sub.add_parser("history", help="show recent history rows for a test")
     qa_history.add_argument("suite", help="suite identifier, e.g. tests/test_checkout.py")
     qa_history.add_argument("test", help="test leaf identity, e.g. test_checkout")
-    qa_history.add_argument("--history-db", "--store", dest="store", default=None)
-    qa_history.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
-    qa_history.add_argument("--window-days", "--days", dest="days", type=_positive_int, default=None, help="only rows within this many days")
+    qa_history.add_argument("--history-db", dest="store", default=None)
+    qa_history.add_argument("--output-dir", dest="out", default=DEFAULT_OUT)
+    qa_history.add_argument("--window-days", dest="days", type=_positive_int, default=None, help="only rows within this many days")
     qa_history.add_argument("--limit", type=_positive_int, default=200)
     qa_history.add_argument("--json", action="store_true", help="output JSON")
     qa_tests = qa_sub.add_parser("tests", help="list tracked tests in the history store")
-    qa_tests.add_argument("--history-db", "--store", dest="store", default=None)
-    qa_tests.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
+    qa_tests.add_argument("--history-db", dest="store", default=None)
+    qa_tests.add_argument("--output-dir", dest="out", default=DEFAULT_OUT)
     qa_tests.add_argument("--suite-prefix", default="", help="filter suites by prefix")
     qa_tests.add_argument("--limit", type=_positive_int, default=100)
     qa_tests.add_argument("--json", action="store_true", help="output JSON")
     qa_stats = qa_sub.add_parser("stats", help="aggregate stats (rate, durations, environments) for a test")
     qa_stats.add_argument("suite")
     qa_stats.add_argument("test")
-    qa_stats.add_argument("--history-db", "--store", dest="store", default=None)
-    qa_stats.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
-    qa_stats.add_argument("--window-days", "--days", dest="days", type=_positive_int, default=None, help="window in days")
+    qa_stats.add_argument("--history-db", dest="store", default=None)
+    qa_stats.add_argument("--output-dir", dest="out", default=DEFAULT_OUT)
+    qa_stats.add_argument("--window-days", dest="days", type=_positive_int, default=None, help="window in days")
     qa_stats.add_argument("--json", action="store_true", help="output JSON")
     qa_export = qa_sub.add_parser("export", help="export sanitized history to a JSON file")
-    qa_export.add_argument("--history-db", "--store", dest="store", default=None)
-    qa_export.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
+    qa_export.add_argument("--history-db", dest="store", default=None)
+    qa_export.add_argument("--output-dir", dest="out", default=DEFAULT_OUT)
     qa_export.add_argument("--output", default=None, help="destination JSON file")
     qa_gate = qa_sub.add_parser("gate", help="evaluate test, coverage, and SARIF evidence against a policy")
     qa_gate.add_argument("path", help="artifact file or directory")
-    qa_gate.add_argument("--baseline-ref", "--baseline", dest="baseline", required=True, help="explicit Git baseline ref")
-    qa_gate.add_argument("--candidate-ref", "--head", dest="head", default="HEAD", help="candidate Git ref")
-    qa_gate.add_argument("--repo-dir", "--repo", dest="repo", required=True, help="repository for baseline diff")
+    qa_gate.add_argument("--baseline-ref", dest="baseline", required=True, help="explicit Git baseline ref")
+    qa_gate.add_argument("--candidate-ref", dest="head", default="HEAD", help="candidate Git ref")
+    qa_gate.add_argument("--repo-dir", dest="repo", required=True, help="repository for baseline diff")
     qa_gate.add_argument("--policy", required=True, help="versioned YAML/JSON quality-gate policy")
     qa_gate.add_argument("--coverage", action="append", default=[], help="coverage artifact; repeatable")
     qa_gate.add_argument("--baseline-coverage", action="append", default=[],
                          help="baseline coverage artifact used for coverage delta; repeatable")
     qa_gate.add_argument("--sarif", action="append", default=[], help="SARIF artifact; repeatable")
     qa_gate.add_argument("--environment", default="", help="policy environment override")
-    qa_gate.add_argument("--test-runner", "--runner", dest="runner", default=None, help="explicit test runner")
-    qa_gate.add_argument("--history-db", "--store", dest="store", default=None, help="history SQLite snapshot")
-    qa_gate.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    qa_gate.add_argument("--test-runner", dest="runner", default=None, help="explicit test runner")
+    qa_gate.add_argument("--history-db", dest="store", default=None, help="history SQLite snapshot")
+    qa_gate.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     qa_gate.add_argument("--output", default=None, help="write the machine-readable gate result")
     qa_gate.add_argument("--report-only", action="store_true", help="compute outcome without enforcing a block exit")
     gate_cmd = sub.add_parser("gate", help="evaluate test, coverage, and SARIF evidence against a policy")
     gate_cmd.set_defaults(qa_command="gate")
     gate_cmd.add_argument("path", help="artifact file or directory")
-    gate_cmd.add_argument("--baseline-ref", "--baseline", dest="baseline", required=True, help="explicit Git baseline ref")
-    gate_cmd.add_argument("--candidate-ref", "--head", dest="head", default="HEAD", help="explicit candidate Git ref")
-    gate_cmd.add_argument("--repo-dir", "--repo", dest="repo", required=True, help="repository used for the baseline diff")
+    gate_cmd.add_argument("--baseline-ref", dest="baseline", required=True, help="explicit Git baseline ref")
+    gate_cmd.add_argument("--candidate-ref", dest="head", default="HEAD", help="explicit candidate Git ref")
+    gate_cmd.add_argument("--repo-dir", dest="repo", required=True, help="repository used for the baseline diff")
     gate_cmd.add_argument("--policy", required=True, help="versioned YAML/JSON quality-gate policy")
     gate_cmd.add_argument("--coverage", action="append", default=[], help="coverage artifact; repeatable")
     gate_cmd.add_argument("--baseline-coverage", action="append", default=[], help="baseline coverage artifact; repeatable")
     gate_cmd.add_argument("--sarif", action="append", default=[], help="SARIF artifact; repeatable")
     gate_cmd.add_argument("--environment", default="", help="policy environment override")
-    gate_cmd.add_argument("--test-runner", "--runner", dest="runner", default=None)
-    gate_cmd.add_argument("--history-db", "--store", dest="store", default=None)
-    gate_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT)
+    gate_cmd.add_argument("--test-runner", dest="runner", default=None)
+    gate_cmd.add_argument("--history-db", dest="store", default=None)
+    gate_cmd.add_argument("--output-dir", dest="out", default=DEFAULT_OUT)
     gate_cmd.add_argument("--output", default=None)
     gate_cmd.add_argument("--report-only", action="store_true")
     doctor_cmd = sub.add_parser("doctor", help="check local Hound readiness without exposing secrets")
     doctor_cmd.add_argument("--config", default=None, help="optional YAML config path")
-    doctor_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="output directory to check")
+    doctor_cmd.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="output directory to check")
     doctor_cmd.add_argument("--json", action="store_true", help="output JSON")
     log_cmd = sub.add_parser(
         "log",
@@ -318,11 +371,11 @@ def build_parser() -> argparse.ArgumentParser:
     log_cmd.add_argument("--output", default=None, help="destination .log file or existing directory")
     log_cmd.add_argument("--raw-console", action="store_true", help="print unredacted output (unsafe)")
     log_cmd.add_argument("--analyze", action="store_true", help="analyze captured log after collection")
-    log_cmd.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    log_cmd.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     log_cmd.add_argument("--offline", action="store_true", help="use local analysis when --analyze is set")
     log_cmd.add_argument("--config", default=None, help="optional YAML config used with --analyze")
     log_cmd.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence with --analyze")
-    log_cmd.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
+    log_cmd.add_argument("--allow-unredacted", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
     log_cmd.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     log_cmd.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
     log_cmd.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
@@ -334,15 +387,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_analyze_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--repo-dir", "--repo", dest="repo", default=None, help="path to local git checkout")
-    parser.add_argument("--output-dir", "--out", dest="out", default=DEFAULT_OUT, help="artifact directory (default: hound-agent-output)")
+    parser.add_argument("--repo-dir", dest="repo", default=None, help="path to local git checkout")
+    parser.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="artifact directory (default: hound-agent-output)")
     parser.add_argument("--offline", action="store_true", help="local rule-based analysis; no network")
     parser.add_argument("--offline-value", choices=("true", "false"), default=None, help=argparse.SUPPRESS)
     parser.add_argument("--jobs", type=_positive_int, default=1,
                         help="parallel analysis workers (default: 1 = sequential)")
     parser.add_argument("--config", default=None, help="optional YAML config")
     parser.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
-    parser.add_argument("--allow-unredacted", "--no-redact", dest="no_redact", action="store_true",
+    parser.add_argument("--allow-unredacted", dest="no_redact", action="store_true",
                         help="disable secret/PII redaction (unsafe; emits a warning)")
     parser.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
     parser.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")

@@ -70,8 +70,8 @@ lokal untuk report.
 TUI juga dapat dibuka eksplisit:
 
 ```sh
-uv run hound tui --logs ./ci-logs --out hound-agent-output --offline
-uv run hound tui --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
+uv run hound console --logs ./ci-logs --output-dir hound-agent-output --offline
+uv run hound console --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
 ```
 
 Jika `--logs` tidak diberikan, TUI memakai `.hound-agent/logs` bila directory
@@ -216,7 +216,7 @@ Command canonical menerima directory yang berisi file `.log`:
 ```sh
 hound analyze ./ci-logs
 hound analyze ./ci-logs --offline
-hound analyze ./ci-logs --repo ./repo --out hound-agent-output
+hound analyze ./ci-logs --repo-dir ./repo --output-dir hound-agent-output
 ```
 
 Gunakan `hound doctor` untuk memeriksa Python, konfigurasi, provider, output
@@ -313,25 +313,25 @@ atau perubahan infrastruktur.
 
 ```sh
 # Analisis dan klasifikasi artefak uji terhadap histori tersimpan
-hound qa analyze ./artifacts/junit.xml --json
+hound insights analyze ./artifacts/junit.xml --json
 
 # Bandingkan dengan baseline commit spesifik untuk mendeteksi likely regression
-hound qa analyze ./artifacts/junit.xml --baseline 5a3f2e1
+hound insights analyze ./artifacts/junit.xml --baseline-ref 5a3f2e1
 
 # Import laporan uji ke history store
-hound qa import ./artifacts/junit.xml --run-id run-101 --commit 5a3f2e1 --branch main
+hound insights import ./artifacts/junit.xml --run-id run-101 --commit 5a3f2e1 --branch main
 ```
 
 ## 5. Melihat Stored Run
 
 ```sh
 hound report <run-id>
-hound report build-error --out hound-agent-output
+hound report build-error --output-dir hound-agent-output
 hound report build-error --format json
 hound report build-error --format markdown --output report.md
 ```
 
-Command membaca `<out>/<run-id>/report.json`. Run ID harus berupa satu nama
+Command membaca `<output-dir>/<run-id>/report.json`. Run ID harus berupa satu nama
 directory dan tidak boleh keluar dari output root.
 
 ### Operasi Output
@@ -341,11 +341,11 @@ directory dan tidak boleh keluar dari output root.
 hound init
 
 # daftar run yang tersimpan
-hound list-runs --out hound-agent-output
-hound list-runs --out hound-agent-output --json
+hound runs --output-dir hound-agent-output
+hound runs --output-dir hound-agent-output --json
 
 # hapus seluruh output analysis, hanya dengan konfirmasi eksplisit
-hound clean --out hound-agent-output --yes
+hound clean --output-dir hound-agent-output --yes
 ```
 
 ## 6. Konfigurasi Model
@@ -374,8 +374,8 @@ atau environment variables:
 
 ```sh
 hound analyze ./ci-logs --provider groq --model llama-3.3-70b-versatile
-hound list-providers
-hound list-providers --json
+hound providers
+hound providers --json
 ```
 
 Jika LLM gagal, pipeline dapat jatuh ke deterministic fallback dan tetap
@@ -386,9 +386,9 @@ menghasilkan report.
 | Opsi | Fungsi |
 |---|---|
 | `<log-directory>` | Directory berisi file `.log`; wajib |
-| `--repo` | Git checkout untuk branch, commit, dan changed files |
+| `--repo-dir` | Git checkout untuk branch, commit, dan changed files |
 | `--source-context` | Opt-in: lampirkan source di sekitar frame hanya untuk log tepercaya |
-| `--out` | Artifact root; default `hound-agent-output` |
+| `--output-dir` | Artifact root; default `hound-agent-output` |
 | `--format` | `text`, `json`, atau `markdown` |
 | `--output` | File untuk formatted CLI output |
 | `--offline` | Rule-based local analysis tanpa network |
@@ -396,7 +396,7 @@ menghasilkan report.
 | `--config` | YAML config opsional |
 | `--jobs` | Jumlah worker paralel (default 1 = sekuensial) |
 | `--no-dedup` | Matikan persistensi dedup |
-| `--no-redact` | Matikan redaction secret/PII |
+| `--allow-unredacted` | Matikan redaction secret/PII (unsafe) |
 | `--provider` | Provider preset |
 | `--model` | Model override |
 | `--base-url` | Base URL provider override |
@@ -494,9 +494,9 @@ Simpan secret dalam environment variable, bukan YAML.
 Command batch lama tetap tersedia:
 
 ```sh
-hound batch --logs ./ci-logs --out hound-agent-output --offline
-hound batch --logs ./single.log --out hound-agent-output --offline
-hound batch --logs ./ci-logs --out out --jobs 4 --max-llm-calls 40 --max-cost-usd 5.0
+hound batch --logs ./ci-logs --output-dir hound-agent-output --offline
+hound batch --logs ./single.log --output-dir hound-agent-output --offline
+hound batch --logs ./ci-logs --output-dir out --jobs 4 --max-llm-calls 40 --max-cost-usd 5.0
 ```
 
 Batch memakai shared dedup state dan menulis `summary-<batch-id>.json` serta
@@ -512,7 +512,7 @@ karena format output dan exit code-nya lebih jelas.
 ## 12. Server Webhook
 
 ```sh
-TH_SERVER_TOKEN='replace-with-a-strong-token' hound server \
+TH_SERVER_TOKEN='replace-with-a-strong-token' hound serve \
   --host 127.0.0.1 --port 8123 --log-root ./trusted-logs
 ```
 
@@ -532,7 +532,7 @@ melalui proses eksplisit.
 
 ```sh
 # Rekam feedback untuk stored run (wajib --run-id)
-hound feedback record --out hound-agent-output --run-id run-a1b2c3d4e5f6 \
+hound feedback record --output-dir hound-agent-output --run-id run-a1b2c3d4e5f6 \
   --usefulness useful \
   --kind-correct correct --severity-correct incorrect \
   --owner-correct correct --duplicate-correct correct \
@@ -541,14 +541,14 @@ hound feedback record --out hound-agent-output --run-id run-a1b2c3d4e5f6 \
   --review-status reviewed --reviewer "engineer@example.com"
 
 # Ekspor semua feedback yang sudah di-sanitize
-hound feedback export --out hound-agent-output
+hound feedback export --output-dir hound-agent-output
 
 # Ekspor hanya yang di-review, format JSONL ke file
-hound feedback export --out hound-agent-output --reviewed-only \
+hound feedback export --output-dir hound-agent-output --reviewed-only \
   --format jsonl --output reviewed.jsonl
 
 # Ekspor kandidat fixture regresi (manifest manual, bukan auto-mutasi rule)
-hound feedback export --out hound-agent-output --candidate-fixtures
+hound feedback export --output-dir hound-agent-output --candidate-fixtures
 ```
 
 Store feedback berada di `<out>/.hound-agent/feedback.sqlite3` (terpisah dari
@@ -588,7 +588,7 @@ pemanggilan connector mana pun. Contoh:
 hound analyze ./ci-logs --source-class fork_pr --offline
 
 # Eksplisit tepercaya
-hound analyze ./ci-logs --source-class trusted_branch --repo . --source-context
+hound analyze ./ci-logs --source-class trusted_branch --repo-dir . --source-context
 ```
 
 Hasil keputusan tercatat di `meta.trust` pada report: `source_class`,
@@ -598,27 +598,27 @@ Hasil keputusan tercatat di `meta.trust` pada report: `source_class`,
 
 Hound menyimpan hasil test lintas run ke **history store** SQLite agar pola
 flaky/regresi bisa dihitung dari data, bukan asumsi. Store terpisah dari dedup
-state: `<out>/.hound-agent/history.sqlite3`.
+state: `<output-dir>/.hound-agent/history.sqlite3`.
 
 ```sh
 # Import bukti test (JUnit/XML, JSON report, atau log runner) ke history
-hound qa import ./artifacts --run-id ci-123 --commit <sha> --branch main \
-  --environment "os=linux;python=3.11" --out hound-agent-output
+hound insights import ./artifacts --run-id ci-123 --commit <sha> --branch main \
+  --environment "os=linux;python=3.11" --output-dir hound-agent-output
 
 # Lihat statistik agregat satu test
-hound qa stats tests/test_checkout.py test_cart_total --out hound-agent-output --json
+hound insights stats tests/test_checkout.py test_cart_total --output-dir hound-agent-output --json
 
 # Riwayat mentah per run/attempt
-hound qa history tests/test_checkout.py test_cart_total --out hound-agent-output
+hound insights history tests/test_checkout.py test_cart_total --output-dir hound-agent-output
 
 # Daftar test yang terlacak
-hound qa tests --suite-prefix tests/ --out hound-agent-output
+hound insights tests --suite-prefix tests/ --output-dir hound-agent-output
 
 # Ekspor history sanitized untuk CI cache / shared volume
-hound qa export --out hound-agent-output --output history.json
+hound insights export --output-dir hound-agent-output --output history.json
 
 # Impor balik manifest ekspor ke store lain
-hound qa import history.json --run-id seed --out /tmp/fresh-output
+hound insights import history.json --run-id seed --output-dir /tmp/fresh-output
 ```
 
 Catatan model:
@@ -635,7 +635,7 @@ Catatan model:
   `insufficient_history: true` — jangan menebak dari satu sample.
 - Retention prunes seluruh baris lama; agregat dihitung ulang dari baris yang
   tersisa sehingga tidak pernah korup:
-  `hound qa import <path> --retention-days 90 --out <out>`.
+  `hound insights import <path> --retention-days 90 --output-dir <out>`.
 
 ## 16. Arsitektur Singkat
 

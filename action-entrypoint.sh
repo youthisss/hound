@@ -6,10 +6,15 @@ log=""
 repo=""
 previous=""
 for argument in "$@"; do
+    case "$argument" in
+        --output-dir=*|--out=*) out="${argument#*=}" ;;
+        --log=*) log="${argument#*=}" ;;
+        --repo-dir=*|--repo=*) repo="${argument#*=}" ;;
+    esac
     case "$previous" in
-        --out) out="$argument" ;;
+        --output-dir|--out) out="$argument" ;;
         --log) log="$argument" ;;
-        --repo) repo="$argument" ;;
+        --repo-dir|--repo) repo="$argument" ;;
     esac
     previous="$argument"
 done

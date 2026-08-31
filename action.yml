@@ -40,9 +40,9 @@ runs:
     - analyze
     - --log
     - ${{ inputs.log }}
-    - --repo
+    - --repo-dir
     - ${{ inputs.repo }}
-    - --out
+    - --output-dir
     - ${{ inputs.out }}
     - --offline-value
     - ${{ inputs.offline }}

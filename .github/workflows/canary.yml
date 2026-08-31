@@ -28,7 +28,7 @@ jobs:
         run: |
           mkdir canary-input
           cp tests/fixtures/pytest_fail.log canary-input/
-          uv run hound analyze canary-input --out canary-output \
+          uv run hound analyze canary-input --output-dir canary-output \
             --provider 9router --no-dedup --require-llm
       - name: Verify live contract
         shell: bash

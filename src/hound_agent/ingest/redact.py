@@ -3,7 +3,7 @@
 Logs routinely contain API keys, tokens, connection strings, and addresses.
 Without redaction these leak into LLM prompts (third-party data exposure),
 report.json, and filed tickets. The default is to redact; disable with
-``--no-redact`` or ``redact: false`` in YAML.
+``--allow-unredacted`` or ``redact: false`` in YAML.
 """
 from __future__ import annotations
 

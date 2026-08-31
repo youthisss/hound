@@ -1,6 +1,6 @@
 # Server Deployment and Reverse Proxy Operations
 
-Hound's HTTP receiver (`hound serve` or `hound server`) accepts failure artifacts from trusted pipelines.
+Hound's HTTP receiver (`hound serve`) accepts failure artifacts from trusted pipelines.
 
 ## Security Boundary
 

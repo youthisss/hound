@@ -45,19 +45,19 @@ log + repo context → parse → root cause analysis → triage → report + tic
 | FR-6 | Deterministic rule-based fallback analysis (no network, no API key) |
 | FR-7 | Triage: severity (`critical`/`high`/`medium`/`low`), component (YAML glob map), priority 1–5 |
 | FR-8 | Dedup: normalized fingerprint → SHA-256; persists across runs in output directory; `is_duplicate_of` set on second occurrence; `recurring_incident` set at configurable threshold |
-| FR-9 | Output: `report.json` + `report.md` + `ticket.md` into `--out` directory; unique opaque run directories (`run-<hex>`) prevent filename leakage |
+| FR-9 | Output: `report.json` + `report.md` + `ticket.md` into `--output-dir` directory; unique opaque run directories (`run-<hex>`) prevent filename leakage |
 | FR-10 | CLI: `hound analyze <LOG_DIRECTORY>` — scans `.log`, JUnit `.xml`, SARIF, and test-report `.json`; `--jobs N` for parallel analysis |
 | FR-11 | Optional live issue filing: `--gh` (GitHub), `--jira` (Jira), `--gitlab` (GitLab); filing failures warn to stderr and exit `3`, never suppressing the analysis result |
 | FR-12 | Batch: `hound batch --logs DIR [--jobs N] [--max-llm-calls N] [--max-cost-usd X]` — shared dedup state, `summary-<batch-id>.json`, `usage-<batch-id>.json`; deterministic run ordering |
 | FR-13 | Recurring-incident detection: dedup state tracks occurrence count; repeated identical fingerprint at ≥ threshold (default 3) flagged `recurring_incident`; flaky detection requires explicit retry-then-pass evidence for the same pytest nodeid, Jest test, Go `-count` test, or JUnit `flakyFailure`/`rerunFailure` element |
-| FR-14 | TUI: `hound tui [--logs DIR]` — browse logs, run analysis per-file or all-visible (`A`), view overview/report/ticket/raw-log panes |
-| FR-15 | Secret/PII redaction: API keys, JWTs, passwords, connection strings, emails, IPs scrubbed from log text before LLM and before disk write; `meta.redacted` recorded; `--no-redact` / `redact: false` escape hatch |
-| FR-16 | Opt-in source context: `--repo --source-context` attaches ±2 lines around recognized frames from repo-contained source and deployment config files; suffix allowlist prevents reading secrets files |
+| FR-14 | TUI: `hound console [--logs DIR]` — browse logs, run analysis per-file or all-visible (`A`), view overview/report/ticket/raw-log panes |
+| FR-15 | Secret/PII redaction: API keys, JWTs, passwords, connection strings, emails, IPs scrubbed from log text before LLM and before disk write; `meta.redacted` recorded; `--allow-unredacted` / `redact: false` escape hatch |
+| FR-16 | Opt-in source context: `--repo-dir --source-context` attaches ±2 lines around recognized frames from repo-contained source and deployment config files; suffix allowlist prevents reading secrets files |
 | FR-17 | Smart log windowing: oversized logs sliced as head+tail around failure markers, not a blind tail read |
 | FR-18 | LLM resilience: exponential backoff retries on 429/5xx (`--max-retries` / `llm.max_retries`); prompt/completion token usage recorded in `meta.usage` |
 | FR-19 | Dedup store: locked atomic file store (JSON, 1000-entry cap) or WAL-mode SQLite (`dedup.backend: sqlite`) with atomic `ON CONFLICT` upserts, `max_entries`, and `retention_days` pruning; evicted entries are upserted on `record_triage` so reuse snapshots are never silently lost |
 | FR-20 | Issue-tracker integrations: Jira REST (`--jira`), GitLab Issues (`--gitlab`), Slack webhook (`--slack-webhook`); all warn-not-fail |
-| FR-21 | Webhook server: `hound server --port` — stdlib HTTP; `/analyze` (POST, bearer auth), `/health` (GET), `/jobs/<id>` (GET), `/stats` (GET); configurable workers, queue, rate-limit, job-ttl; SQLite job store survives restarts |
+| FR-21 | Webhook server: `hound serve --port` — stdlib HTTP; `/analyze` (POST, bearer auth), `/health` (GET), `/jobs/<id>` (GET), `/stats` (GET); configurable workers, queue, rate-limit, job-ttl; SQLite job store survives restarts |
 | FR-22 | Explicit config only: YAML loaded via `--config`; repository-local config never auto-loaded |
 | FR-23 | Distribution: `Dockerfile`, GitHub Action (`action.yml`), PyPI metadata in `pyproject.toml` |
 | FR-24 | CD failure detection: Kubernetes rollout/readiness, OOM, crash loops, liveness/readiness probes, scheduling/quota, registry auth, config-missing, network, image-pull, Helm rollback, Terraform apply, migration, and permission failures; analysis is read-only |
@@ -69,7 +69,7 @@ log + repo context → parse → root cause analysis → triage → report + tic
 | FR-30 | Structured feedback: rate root-cause usefulness, kind/severity/owner/duplicate correctness, and confirmed actual outcome; store separately from dedup state with audit metadata and redaction; CLI record/export (`hound feedback`); reviewed feedback exports explicit regression-fixture candidate manifests without mutating classifiers |
 | FR-31 | Trust policy: source classes `trusted_branch`/`fork_pr`/`local_artifact` gate source context, enrichment, LLM, and delivery (`--source-class`, YAML `trust.source_class`, `TH_SOURCE_CLASS`, CI detection); untrusted fork analysis defaults to offline with no source enrichment and no delivery |
 | FR-32 | Confidence calibration: deterministic `high`/`medium`/`low` bands calibrated against the evaluation set; evaluator reports support, empirical accuracy, mean deterministic score, and gap per band with documented meaning |
-| FR-33 | QA test history: normalized `(suite, leaf test)` identity across pytest/JUnit/Jest/Vitest/Go/RSpec/Cargo/dotnet evidence; SQLite store (`hound qa`) with WAL atomic upserts keyed by `(suite, test, run_id, attempt)`, retention, migrations, queries (counts, failure-rate windows, first/last seen, duration median/p95, environment breakdown), explicit `insufficient_history` instead of guessing, and sanitized import/export without storing raw logs |
+| FR-33 | QA test history: normalized `(suite, leaf test)` identity across pytest/JUnit/Jest/Vitest/Go/RSpec/Cargo/dotnet evidence; SQLite store (`hound insights`) with WAL atomic upserts keyed by `(suite, test, run_id, attempt)`, retention, migrations, queries (counts, failure-rate windows, first/last seen, duration median/p95, environment breakdown), explicit `insufficient_history` instead of guessing, and sanitized import/export without storing raw logs |
 
 ## 5. Non-functional Requirements
 
@@ -170,14 +170,14 @@ explicitly marked `unsupported`/`insufficient_evidence`.
 - Dedup catches a repeated failure across runs (`is_duplicate_of` set on second run).
 - `hound analyze` exits `0` for healthy/unknown logs and `1` for recognized failures,
   with or without an API key.
-- No secret or PII pattern found in `--out` artifacts after analysis.
+- No secret or PII pattern found in `--output-dir` artifacts after analysis.
 - Evaluation labels are valid and every synthetic expected secret is redacted;
   baseline accuracy is measured before classifier changes.
 
 ## 8. Constraints and Assumptions
 
 - Input is a directory of supported artifact files, or a single file via `--log`.
-- Optional `--repo` is a local git checkout; analyzed repos are untrusted input.
+- Optional `--repo-dir` is a local git checkout; analyzed repos are untrusted input.
 - LLM contract: chat completions with `response_format={"type": "json_object"}` returning the RCA schema JSON.
 - Component mapping defaults to path-based heuristic + `unowned` when not supplied.
 - HTTP dedup backend is disabled until conditional writes prevent lost updates.

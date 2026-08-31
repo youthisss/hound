@@ -82,3 +82,5 @@ def test_action_offline_input_is_forwarded():
     action = (Path(__file__).resolve().parents[2] / "action.yml").read_text(encoding="utf-8")
     assert "--offline-value" in action
     assert "${{ inputs.offline }}" in action
+    assert "    - --repo-dir" in action
+    assert "    - --output-dir" in action

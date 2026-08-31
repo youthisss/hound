@@ -130,10 +130,10 @@ Hound includes a rich, full-featured terminal interface built with Textual for i
 
 ```sh
 # Launch TUI pointing to a log directory
-hound tui --logs ./ci-logs --out hound-agent-output --offline
+hound console --logs ./ci-logs --output-dir hound-agent-output --offline
 
 # Launch TUI with LLM analysis and 4 parallel workers
-hound tui --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
+hound console --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
 ```
 
 ### Essential TUI Shortcuts
@@ -153,6 +153,29 @@ hound tui --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
 
 ## 🛠️ CLI Command Reference
 
+### Canonical Command and Flag Names
+
+The names below are the public spellings shown by `hound --help`. Older
+spellings remain accepted for compatibility but are hidden from help output.
+
+| Canonical | Compatibility alias |
+|:---|:---|
+| `console` | `tui` |
+| `serve` | `server` |
+| `providers` | `list-providers` |
+| `runs` | `list-runs` |
+| `insights` | `qa` |
+| `--output-dir` | `--out` |
+| `--repo-dir` | `--repo` |
+| `--allow-unredacted` | `--no-redact` |
+| `--test-runner` | `--runner` |
+| `--baseline-ref` | `--baseline` |
+| `--candidate-ref` | `--head` |
+| `--history-db` | `--store` |
+| `--window-days` | `--days` |
+
+Use the canonical spellings in new scripts and CI configuration.
+
 ### 1. `hound analyze` — Batch Artifact Analysis
 
 Scans all `.log`, `.xml` (JUnit), `.sarif`, and `.json` test reports directly inside a folder, generating `report.json`, `report.md`, and `ticket.md` per run.
@@ -162,18 +185,18 @@ Scans all `.log`, `.xml` (JUnit), `.sarif`, and `.json` test reports directly in
 hound analyze ./ci-logs --offline
 
 # Include source context around stack frames from repository
-hound analyze ./ci-logs --repo . --source-context --offline
+hound analyze ./ci-logs --repo-dir . --source-context --offline
 
 # Output structured JSON report directly to a file
 hound analyze ./artifacts --format json --output result.json
 
 # Parallel multi-worker analysis
-hound analyze ./ci-logs --jobs 4 --out hound-agent-output
+hound analyze ./ci-logs --jobs 4 --output-dir hound-agent-output
 ```
 
 #### Key Capabilities:
 - **Structured Artifact Ingestion:** Parses JUnit XML, SARIF, and test JSON natively without lossy regex heuristics.
-- **Stack Trace Context:** With `--repo` and `--source-context`, attaches ±2 lines of real code context for Python, Go, Rust, Java, TypeScript, C/C++, and deployment configurations (`.yaml`, `.tf`, `.tpl`).
+- **Stack Trace Context:** With `--repo-dir` and `--source-context`, attaches ±2 lines of real code context for Python, Go, Rust, Java, TypeScript, C/C++, and deployment configurations (`.yaml`, `.tf`, `.tpl`).
 - **CD & Cloud Infrastructure Detection:** Detects Kubernetes CrashLoopBackOff, OOMKilled, probe failures, quota exhaustion, image pull errors, Helm release/rollback failures, Terraform apply errors, and migration crashes.
 - **Accurate Flaky Test Detection:** Labeled as `flaky` *only* when explicit retry-then-pass evidence is present (pytest `RERUN -> PASSED`, Jest `✕ -> ✓`, Go `-count=N`, or JUnit `flakyFailure`).
 
@@ -226,7 +249,7 @@ Executes high-throughput directory analysis with a unified SQLite deduplication 
 
 ```sh
 hound batch --logs ./ci-logs \
-  --out ./out \
+  --output-dir ./out \
   --jobs 8 \
   --max-llm-calls 50 \
   --max-cost-usd 5.00
@@ -248,7 +271,7 @@ hound serve \
   --host 127.0.0.1 \
   --port 8123 \
   --log-root ./ci-logs \
-  --out ./server-runs \
+  --output-dir ./server-runs \
   --workers 4 \
   --rate-limit 60
 ```
@@ -264,19 +287,19 @@ apply shared rate limiting at a reverse proxy; see `docs/guides/server-deploymen
 
 ---
 
-### 5. `hound qa` — Long-Term Test History & Flakiness Tracking
+### 5. `hound insights` — Long-Term Test History & Flakiness Tracking
 
 Maintains a queryable SQLite database of historical test executions across runs, branches, and environments to track intermittent failures and duration regressions over time.
 
 ```sh
 # Import JUnit or test log evidence into history store
-hound qa import ./junit.xml --runner pytest --branch main --commit abc1234
+hound insights import ./junit.xml --test-runner pytest --branch main --commit abc1234
 
 # Query historical failure rates and p95 durations for a test
-hound qa stats tests/test_checkout.py test_payment_failure
+hound insights stats tests/test_checkout.py test_payment_failure
 
 # View recent execution history
-hound qa history tests/test_checkout.py test_payment_failure --days 30
+hound insights history tests/test_checkout.py test_payment_failure --window-days 30
 ```
 
 ---
@@ -291,17 +314,17 @@ hound doctor
 hound init
 
 # List supported LLM providers and presets
-hound list-providers
+hound providers
 
 # Inspect previously stored analysis runs
-hound list-runs --out hound-agent-output
+hound runs --output-dir hound-agent-output
 hound report <run-id> --format markdown --output report.md
 
 # Record human reviewer feedback to validate RCA accuracy
 hound feedback record --run-id <run-id> --usefulness useful --actual-kind assertion_error
 
 # Clean up analysis output directories
-hound clean --out hound-agent-output --yes
+hound clean --output-dir hound-agent-output --yes
 ```
 
 ---
@@ -419,6 +442,10 @@ jobs:
           name: hound-investigation-report
           path: hound-agent-output/
 ```
+
+The Action input IDs `repo` and `out` remain stable for existing workflows; the
+container forwards them to the canonical CLI options `--repo-dir` and
+`--output-dir`.
 
 ### Docker Execution
 

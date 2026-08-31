@@ -250,8 +250,9 @@ ignored. The separate naming plan recommends `insights`, `console`, `serve`,
    `--window-days`.
 5. Keep precise and familiar options such as `--offline`, `--format`, `--output`,
    `--config`, `--provider`, `--model`, `--policy`, `--coverage`, and `--sarif`.
-6. Make dangerous behavior explicit: prefer `--allow-unredacted` over a public
-   `--no-redact` spelling and emit a warning when it is used.
+6. Make dangerous behavior explicit: expose `--allow-unredacted`; retain
+   `--no-redact` only as a hidden compatibility alias and emit a warning when it
+   is used.
 7. Introduce one version source of truth. Prefer Hatch dynamic version metadata
    sourced from `src/hound_agent/__init__.py`, or document and enforce the chosen
    alternative. Add a test that package metadata and `hound --version` agree.

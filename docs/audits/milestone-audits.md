@@ -161,9 +161,9 @@ Verification evidence:
 
 - `uv run pytest tests/unit/test_tests.py tests/integration/test_qa_history.py -q`: passed.
 - Full suite: 493 passed, 5 skipped.
-- `uv run hound qa --help`: exit 0; `import`, `history`, `tests`, `stats`,
+- `uv run hound insights --help`: exit 0; `import`, `history`, `tests`, `stats`,
   `export` subcommands available.
-- `uv run hound qa import tests/fixtures/junit_flaky.xml --out <tmp>`: exit 0;
+- `uv run hound insights import tests/fixtures/junit_flaky.xml --output-dir <tmp>`: exit 0;
   flaky test recorded as failed(1) + passed(2); `stats` reports `failure_rate`
   0.5 with attempt metadata.
 - Concurrent-write test: 4 threads upsert 200 rows into one WAL store with no
@@ -182,7 +182,7 @@ Verification evidence:
   and conservative thresholds ensure precision over speculative recall.
 - Architecture lane: `CLEAR`. Integrates with the M4 historical SQLite store without modifying existing
   analysis pipelines. Evaluation suite `qa-history` achieves 100% precision and recall on held-out cases.
-- Final synthesis: `APPROVE` for M5. CLI `hound qa analyze` provides inspectable QA decision output.
+- Final synthesis: `APPROVE` for M5. CLI `hound insights analyze` provides inspectable QA decision output.
 
 Findings fixed:
 1. `MEDIUM` - SQLite write locking contention under concurrent multi-threaded writes on Windows was resolved
@@ -192,7 +192,7 @@ Findings fixed:
 Verification evidence:
 - `uv run pytest tests/integration/test_qa_history.py tests/integration/test_qa_classifier.py -v`: 33 passed.
 - `uv run python -m hound_agent.eval --offline --suite qa-history --format json`: 100% precision/recall across 7 cases.
-- `uv run hound qa analyze --help`: command available and documented.
+- `uv run hound insights analyze --help`: command available and documented.
 - `uv run ruff check .`: clean.
 - `uv run mypy src/hound_agent`: clean across 43 source files.
 

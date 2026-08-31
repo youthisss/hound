@@ -46,10 +46,10 @@ jobs:
           cd "$smoke"
           wheel-venv/bin/python -c 'import hound_agent'
           wheel-venv/bin/hound --version
-          wheel-venv/bin/hound doctor --out wheel-doctor --json
+          wheel-venv/bin/hound doctor --output-dir wheel-doctor --json
           sdist-venv/bin/python -c 'import hound_agent'
           sdist-venv/bin/hound --version
-          sdist-venv/bin/hound doctor --out sdist-doctor --json
+          sdist-venv/bin/hound doctor --output-dir sdist-doctor --json
       - name: Checksums
         run: sha256sum dist/*.whl dist/*.tar.gz > SHA256SUMS
       - name: Upload distributions
@@ -103,7 +103,7 @@ jobs:
           set +e
           docker run --rm -e GITHUB_WORKSPACE=/workspace -e GITHUB_OUTPUT=/workspace/github-output \
             -v "$PWD/action-smoke:/workspace" hound-action:release \
-            analyze --log failure.log --repo . --out out --offline-value true
+            analyze --log failure.log --repo-dir . --output-dir out --offline-value true
           status=$?
           set -e
           test "$status" -eq 1
@@ -144,7 +144,7 @@ jobs:
           uv pip install --python "$smoke\venv\Scripts\python.exe" $wheel
           Push-Location $smoke
           & "$smoke\venv\Scripts\hound.exe" --version
-          & "$smoke\venv\Scripts\hound.exe" doctor --out doctor-output --json
+          & "$smoke\venv\Scripts\hound.exe" doctor --output-dir doctor-output --json
           Pop-Location
 
   publish-pypi:

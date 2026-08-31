@@ -59,25 +59,25 @@ and peak-memory numbers remain command output because they depend on the runner.
 Production-readiness milestones (M11+) add:
 
 ```sh
-uv run hound analyze tests/fixtures --offline --out .audit-redact-check
+uv run hound analyze tests/fixtures --offline --output-dir .audit-redact-check
 rg "sk-[A-Za-z0-9]|ghp_[A-Za-z0-9]" .audit-redact-check   # must find nothing
 ```
 
-Redaction default is on; any secret pattern in `--out` artifacts fails the gate.
+Redaction default is on; any secret pattern in `--output-dir` artifacts fails the gate.
 
 Scaling milestones (M19+) add a smoke check that the new concurrency/store
 paths are wired end to end:
 
 ```sh
-uv run hound batch --logs tests/fixtures --out .audit-scale-check --offline --jobs 2
-uv run hound analyze tests/fixtures --out .audit-scale-check2 --offline --jobs 2
+uv run hound batch --logs tests/fixtures --output-dir .audit-scale-check --offline --jobs 2
+uv run hound analyze tests/fixtures --output-dir .audit-scale-check2 --offline --jobs 2
 rg "is_duplicate_of" .audit-scale-check/summary-*.json   # must exist
 ```
 
 Cost-control milestones add a smoke check for reuse + budget telemetry:
 
 ```sh
-uv run hound batch --logs tests/fixtures --out .audit-cost-check --offline \
+uv run hound batch --logs tests/fixtures --output-dir .audit-cost-check --offline \
   --max-llm-calls 1 --jobs 2
 rg '"usage"' .audit-cost-check/summary-*.json            # per-row usage present
 rg 'llm_calls' .audit-cost-check/usage-*.json            # telemetry present

@@ -6,7 +6,7 @@ index and never establishes runtime causality.
 
 ## Activation and LLM boundary
 
-Collection requires a trusted source class, `--repo`, and `--source-context`.
+Collection requires a trusted source class, `--repo-dir`, and `--source-context`.
 Repository-local configuration is not loaded. Evidence is excluded from LLM
 payloads by default, independently from local source analysis:
 

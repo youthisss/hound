@@ -68,7 +68,7 @@ jobs:
             -e GITHUB_WORKSPACE=/workspace \
             -e GITHUB_OUTPUT=/workspace/github-output \
             -v "$PWD/action-smoke:/workspace" \
-            hound-action:test analyze --log failure.log --repo . --out out --offline-value true
+            hound-action:test analyze --log failure.log --repo-dir . --output-dir out --offline-value true
           status=$?
           set -e
           test "$status" -eq 1
@@ -116,7 +116,7 @@ jobs:
           uv pip install --python "$smoke\venv\Scripts\python.exe" $wheel
           Push-Location $smoke
           & "$smoke\venv\Scripts\hound.exe" --version
-          & "$smoke\venv\Scripts\hound.exe" doctor --out doctor-output --json
+          & "$smoke\venv\Scripts\hound.exe" doctor --output-dir doctor-output --json
           Pop-Location
 
   ci-result:

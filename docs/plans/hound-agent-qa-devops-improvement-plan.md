@@ -330,7 +330,7 @@ output, config, tests, docs.
 
 ```sh
 uv run pytest tests/integration -q
-uv run hound qa gate --help
+uv run hound gate --help
 uv run pytest -q
 uv run ruff check .
 uv run mypy src/hound_agent
@@ -566,10 +566,10 @@ Preserve existing commands. Introduce capability commands only after their core
 contracts stabilize:
 
 ```sh
-hound qa analyze ./artifacts --baseline <ref> --repo .
-hound qa gate ./artifacts --baseline <ref> --repo . --policy quality.yml
+hound insights analyze ./artifacts --baseline-ref <ref> --repo-dir .
+hound gate ./artifacts --baseline-ref <ref> --repo-dir . --policy quality.yml
 hound deploy investigate --context deployment.json
-hound source inspect --run <run-id> --repo .
+hound source inspect --run <run-id> --repo-dir .
 hound feedback <run-id> --root-cause correct
 ```
 

@@ -20,7 +20,7 @@ def test_action_rejects_log_outside_workspace(tmp_path):
             "analyze",
             "--log",
             str(outside_log),
-            "--repo",
+            "--repo-dir",
             str(workspace),
         ],
         capture_output=True,
