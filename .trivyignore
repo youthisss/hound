@@ -1,0 +1,4 @@
+# Plain text format: CVE IDs, GHSA IDs, or AVD IDs to ignore in Trivy scans
+
+# Ignore gitpython temporary advisory CVE-2026-4444 until patched upstream
+CVE-2026-4444
