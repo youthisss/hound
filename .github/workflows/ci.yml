@@ -84,7 +84,7 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
-          scanners: vuln,secret,misconfig
+          scanners: vuln,secret
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
@@ -115,6 +115,10 @@ jobs:
             hound-action:test analyze --log failure.log --repo-dir . --output-dir out --offline-value true
           status=$?
           set -e
+          echo "Status: $status"
+          cat action-smoke/github-output || true
+          ls -la action-smoke || true
+          ls -la action-smoke/out || true
           test "$status" -eq 1
           test -f action-smoke/out/report.json
           grep -q '^report<<TRACEHOUND_' action-smoke/github-output

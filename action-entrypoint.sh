@@ -77,7 +77,8 @@ if [ -n "${GITHUB_WORKSPACE:-}" ]; then
 fi
 
 # Analyze untrusted repository artifacts without root privileges.
-if [ -n "${GITHUB_OUTPUT:-}" ] && [ -e "$GITHUB_OUTPUT" ]; then
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    touch "$GITHUB_OUTPUT"
     chown hound:hound "$GITHUB_OUTPUT"
 fi
-exec su -m -s /bin/sh hound -c 'exec /app/.venv/bin/hound "$@"' -- action-entrypoint "$@"
+exec su -m -s /bin/sh hound -c 'export GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-}"; export GITHUB_OUTPUT="${GITHUB_OUTPUT:-}"; exec /app/.venv/bin/hound "$@"' -- action-entrypoint "$@"
