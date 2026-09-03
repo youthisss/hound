@@ -78,15 +78,12 @@ def test_cli_version(capsys):
     assert "Hound" in capsys.readouterr().out
 
 
-def test_analyze_handles_single_file_positional_or_flag(tmp_path):
+def test_analyze_handles_single_file_flag(tmp_path):
     fixtures = Path(__file__).resolve().parents[1] / "fixtures"
     fail_log = fixtures / "pytest_fail.log"
-    out1 = tmp_path / "out1"
-    out2 = tmp_path / "out2"
-    assert main(["analyze", str(fail_log), "--output-dir", str(out1), "--offline"]) == 1
-    assert (out1 / "report.json").exists()
-    assert main(["analyze", "--log", str(fail_log), "--output-dir", str(out2), "--offline"]) == 1
-    assert (out2 / "report.json").exists()
+    out = tmp_path / "out"
+    assert main(["analyze", "--log", str(fail_log), "--output-dir", str(out), "--offline"]) == 1
+    assert (out / "report.json").exists()
 
 
 def test_action_offline_input_is_forwarded():

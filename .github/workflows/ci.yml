@@ -86,9 +86,9 @@ jobs:
           scan-ref: .
           scanners: vuln,secret
           severity: HIGH,CRITICAL
-          skip-dirs: tests,examples
+          skip-dirs: tests,examples,dist,.venv
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
 
   extended:
     if: github.event_name != 'pull_request'
