@@ -32,7 +32,7 @@ jobs:
         with:
           ref: v${{ inputs.version }}
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - run: uv sync --frozen --extra dev
       - name: Verify release identity and reachability
         id: identity
@@ -171,7 +171,7 @@ jobs:
         with:
           name: distributions
           path: dist
-      - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - shell: pwsh
         run: |
           $smoke = Join-Path $env:RUNNER_TEMP "hound-release-wheel"
@@ -211,7 +211,7 @@ jobs:
         with:
           name: distributions
           path: dist
-      - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Verify and smoke-test the published candidate
         shell: bash
         env:
