@@ -8,7 +8,8 @@ COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src ./src
 
-RUN uv sync --frozen --no-dev \
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* \
+    && uv sync --frozen --no-dev \
     && useradd --create-home --uid 10001 hound \
     && chown -R hound:hound /app
 

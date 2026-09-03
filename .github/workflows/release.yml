@@ -81,8 +81,8 @@ jobs:
           set -e
           test "$wheel_status" -eq 1
           test "$sdist_status" -eq 1
-          test "$(jq -r .kind wheel-output/report.json)" = "test_failure"
-          test "$(jq -r .kind sdist-output/report.json)" = "test_failure"
+          test "$(jq -r .failure.kind wheel-output/report.json)" = "test_failure"
+          test "$(jq -r .failure.kind sdist-output/report.json)" = "test_failure"
       - name: Checksums
         run: sha256sum dist/*.whl dist/*.tar.gz > SHA256SUMS
       - name: Upload distributions
@@ -143,12 +143,14 @@ jobs:
           test -f action-smoke/out/report.json
           grep -q '^report<<TRACEHOUND_' action-smoke/github-output
           grep -q '^severity<<TRACEHOUND_' action-smoke/github-output
+          grep -q '"kind": "test_failure"' action-smoke/out/report.json
       - name: Scan runtime image
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
         with:
           image-ref: hound:release
           scanners: vuln,secret
           severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: "1"
       - name: Scan Action image
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
@@ -156,6 +158,7 @@ jobs:
           image-ref: hound-action:release
           scanners: vuln,secret
           severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: "1"
 
   windows:

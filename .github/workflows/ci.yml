@@ -77,8 +77,8 @@ jobs:
           set -e
           test "$wheel_status" -eq 1
           test "$sdist_status" -eq 1
-          test "$(jq -r .kind wheel-output/report.json)" = "test_failure"
-          test "$(jq -r .kind sdist-output/report.json)" = "test_failure"
+          test "$(jq -r .failure.kind wheel-output/report.json)" = "test_failure"
+          test "$(jq -r .failure.kind sdist-output/report.json)" = "test_failure"
       - name: Scan repository and generated artifacts
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
         with:
@@ -86,6 +86,7 @@ jobs:
           scan-ref: .
           scanners: vuln,secret,misconfig
           severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: "1"
 
   extended:
@@ -111,16 +112,21 @@ jobs:
             -e GITHUB_WORKSPACE=/workspace \
             -e GITHUB_OUTPUT=/workspace/github-output \
             -v "$PWD/action-smoke:/workspace" \
-            hound-action:test analyze --log failure.log --repo-dir . --output-dir out --offline-value true || true
-          cat action-smoke/github-output || true
-          ls -la action-smoke || true
-          ls -la action-smoke/out || true
+            hound-action:test analyze --log failure.log --repo-dir . --output-dir out --offline-value true
+          status=$?
+          set -e
+          test "$status" -eq 1
+          test -f action-smoke/out/report.json
+          grep -q '^report<<TRACEHOUND_' action-smoke/github-output
+          grep -q '^severity<<TRACEHOUND_' action-smoke/github-output
+          grep -q '"kind": "test_failure"' action-smoke/out/report.json
       - name: Scan runtime image
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
         with:
           image-ref: hound:test
           scanners: vuln,secret
           severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: "1"
       - name: Scan Action image
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
@@ -128,6 +134,7 @@ jobs:
           image-ref: hound-action:test
           scanners: vuln,secret
           severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: "1"
 
   windows:

@@ -9,7 +9,8 @@ COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src ./src
 COPY action-entrypoint.sh /usr/local/bin/action-entrypoint
 
-RUN uv sync --frozen --no-dev && chmod 755 /usr/local/bin/action-entrypoint
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* \
+    && uv sync --frozen --no-dev && chmod 755 /usr/local/bin/action-entrypoint
 
 RUN useradd --create-home --uid 10001 hound
 
