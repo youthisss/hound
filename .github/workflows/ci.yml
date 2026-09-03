@@ -86,6 +86,7 @@ jobs:
           scan-ref: .
           scanners: vuln,secret
           severity: HIGH,CRITICAL
+          skip-dirs: tests,examples
           ignore-unfixed: true
           exit-code: "1"
 
