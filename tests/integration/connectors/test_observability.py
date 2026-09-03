@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from hound.connectors import observability
 from hound.connectors.observability import collect_observability_bundle
 from hound.models import Artifacts, DeploymentContext, FailureEvent
+
+
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 
 
 class _Response:
@@ -74,6 +78,42 @@ def test_collects_bounded_metric_samples_and_trace_spans(monkeypatch):
     assert all(audit.status == "collected" for audit in bundle.audits)
     assert "secret-prom-token" not in str(bundle)
     assert "secret-tempo-token" not in str(bundle)
+
+
+def test_parses_otlp_resource_spans_with_resource_metadata_and_status():
+    payload = json.loads((FIXTURES / "tempo_otlp_trace.json").read_text(encoding="utf-8"))
+
+    spans = observability._parse_trace(payload, "a" * 32)
+
+    assert len(spans) == 2
+    assert spans[0]["service"] == "checkout-api"
+    assert spans[0]["version"] == "2026.08.31"
+    assert spans[0]["status"] == "ERROR"
+    assert spans[0]["duration_ns"] == 250_000_000
+    assert spans[1]["parent_span_id"] == "b" * 16
+    assert spans[1]["status"] == "OK"
+
+
+def test_otlp_trace_parsing_is_bounded_and_tolerates_partial_data():
+    payload = {
+        "resourceSpans": [{
+            "resource": {"attributes": [None, {"key": "service.name", "value": None}]},
+            "scopeSpans": [
+                None,
+                {"spans": "malformed"},
+                {"spans": [
+                    {"spanId": str(index), "startTimeUnixNano": "bad", "status": {"message": "missing code"}}
+                    for index in range(observability.MAX_TRACE_SPANS + 50)
+                ]},
+            ],
+        }]}
+
+    spans = observability._parse_trace(payload, "a" * 32)
+
+    assert len(spans) == observability.MAX_TRACE_SPANS
+    assert spans[0]["start_ns"] == 0
+    assert spans[0]["duration_ns"] == 0
+    assert spans[0]["status"] == "unknown"
 
 
 def test_missing_deployment_timestamp_skips_metric_query(monkeypatch):

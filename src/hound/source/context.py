@@ -124,23 +124,29 @@ def _related_tests(repo: Path, source_path: str, symbol: str) -> list[str]:
         return []
     matches: list[str] = []
     scanned_bytes = 0
-    candidates = sorted(
-        path for path in repo.rglob("*")
-        if path.is_file()
-        and path.suffix.lower() in TEST_SUFFIXES
-        and "test" in path.relative_to(repo).as_posix().lower()
-        and not path.is_symlink()
-    )
-    for path in candidates[:MAX_TEST_FILES]:
+    candidates: list[tuple[str, Path]] = []
+    for path in repo.rglob("*"):
         relative = path.relative_to(repo).as_posix()
+        safe_path = _safe_file(repo, relative)
+        if (
+            safe_path is not None
+            and safe_path.suffix.lower() in TEST_SUFFIXES
+            and "test" in relative.lower()
+        ):
+            candidates.append((relative, safe_path))
+    candidates.sort()
+    for relative, path in candidates[:MAX_TEST_FILES]:
         try:
             size = path.stat().st_size
             if size > MAX_FILE_BYTES or scanned_bytes + size > MAX_TEST_SCAN_BYTES:
                 continue
-            content = path.read_text(encoding="utf-8", errors="replace")
+            raw = path.read_bytes()
         except OSError:
             continue
-        scanned_bytes += size
+        if b"\x00" in raw:
+            continue
+        content = raw.decode("utf-8", errors="replace")
+        scanned_bytes += len(raw)
         if any(needle in content for needle in needles):
             matches.append(relative)
             if len(matches) >= 10:

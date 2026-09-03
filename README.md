@@ -86,16 +86,27 @@
 
 #### End-User Installation (No clone required)
 
+Hound supports Python 3.10-3.12 on Windows and Linux. Until the first
+`hound-tracer` release is published, install the reviewed commit directly from
+GitHub so package managers cannot resolve the unrelated `hound` project on
+PyPI:
+
 ```sh
 # Using uv (recommended)
-uv tool install hound
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@fef7efcb2944336ba621e6f097722ae1bfdcae27"
 hound --version
 hound doctor
 
 # Using pipx
-pipx install hound
+pipx install "hound-tracer @ git+https://github.com/youthisss/hound.git@fef7efcb2944336ba621e6f097722ae1bfdcae27"
 hound --version
+hound doctor
 ```
+
+After the first verified PyPI release, use `uv tool install hound-tracer` or
+`pipx install hound-tracer`. Upgrade with `uv tool upgrade hound-tracer` or
+`pipx upgrade hound-tracer`; uninstall with `uv tool uninstall hound-tracer` or
+`pipx uninstall hound-tracer`.
 
 #### Contributor Setup
 
@@ -104,6 +115,7 @@ hound --version
 git clone https://github.com/youthisss/hound.git
 cd hound
 uv sync --extra dev
+uv run hound --version
 ```
 
 ### 30-Second Usage
@@ -422,13 +434,15 @@ jobs:
       - name: Run Test Suite
         id: test_run
         continue-on-error: true
+        shell: bash
         run: |
+          set -o pipefail
           mkdir -p artifacts
           pytest --junitxml=artifacts/junit.xml | tee artifacts/pytest.log
 
       - name: Triage Failures with Hound
         if: steps.test_run.outcome == 'failure'
-        uses: ./
+        uses: youthisss/hound@fef7efcb2944336ba621e6f097722ae1bfdcae27
         with:
           log: "artifacts/pytest.log"
           repo: "${{ github.workspace }}"

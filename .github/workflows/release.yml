@@ -1,8 +1,21 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing vX.Y.Z tag to promote
+        required: true
+        type: string
+      prerelease:
+        description: Mark the GitHub Release as a prerelease
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -10,17 +23,27 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: v${{ inputs.version }}
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - run: uv sync --frozen --extra dev
-      - name: Verify release tag matches package version
+      - name: Verify release identity and reachability
+        id: identity
         shell: bash
         run: |
           package_version="$(uv run python -c 'import hound; print(hound.__version__)')"
-          test "$GITHUB_REF_NAME" = "v${package_version}"
+          test "${{ inputs.version }}" = "$package_version"
+          git fetch origin main
+          test "$(git describe --tags --exact-match HEAD)" = "v${package_version}"
+          git merge-base --is-ancestor HEAD origin/main
+          echo "version=$package_version" >> "$GITHUB_OUTPUT"
       - run: uv run ruff check .
       - run: uv run mypy src/hound
       - run: uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q
@@ -50,6 +73,16 @@ jobs:
           sdist-venv/bin/python -c 'import hound'
           sdist-venv/bin/hound --version
           sdist-venv/bin/hound doctor --output-dir sdist-doctor --json
+          set +e
+          wheel-venv/bin/hound analyze --log "$GITHUB_WORKSPACE/tests/fixtures/pytest_fail.log" --output-dir wheel-output --offline
+          wheel_status=$?
+          sdist-venv/bin/hound analyze --log "$GITHUB_WORKSPACE/tests/fixtures/pytest_fail.log" --output-dir sdist-output --offline
+          sdist_status=$?
+          set -e
+          test "$wheel_status" -eq 1
+          test "$sdist_status" -eq 1
+          test "$(jq -r .kind wheel-output/report.json)" = "test_failure"
+          test "$(jq -r .kind sdist-output/report.json)" = "test_failure"
       - name: Checksums
         run: sha256sum dist/*.whl dist/*.tar.gz > SHA256SUMS
       - name: Upload distributions
@@ -108,8 +141,8 @@ jobs:
           set -e
           test "$status" -eq 1
           test -f action-smoke/out/report.json
-          grep -q '^report=' action-smoke/github-output
-          grep -q '^severity=' action-smoke/github-output
+          grep -q '^report<<TRACEHOUND_' action-smoke/github-output
+          grep -q '^severity<<TRACEHOUND_' action-smoke/github-output
       - name: Scan runtime image
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
         with:
@@ -145,14 +178,55 @@ jobs:
           Push-Location $smoke
           & "$smoke\venv\Scripts\hound.exe" --version
           & "$smoke\venv\Scripts\hound.exe" doctor --output-dir doctor-output --json
-          Pop-Location
+           Pop-Location
 
-  publish-pypi:
+  publish-testpypi:
     needs: [build, provenance, container-gate, windows]
     runs-on: ubuntu-latest
     environment:
+      name: testpypi
+      url: https://test.pypi.org/p/hound-tracer
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: distributions
+          path: dist
+      - name: Publish candidate to TestPyPI
+        uses: pypa/gh-action-pypi-publish@76f52e6636d8691d1b9ae758667450a41738159e # v1.12.4
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+          skip-existing: true
+
+  verify-testpypi:
+    needs: [build, publish-testpypi]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: distributions
+          path: dist
+      - name: Verify candidate artifact hashes
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          metadata="$(curl --fail --retry 12 --retry-delay 5 "https://test.pypi.org/pypi/hound-tracer/${VERSION}/json")"
+          for artifact in dist/*; do
+            filename="$(basename "$artifact")"
+            published="$(jq -r --arg filename "$filename" '.urls[] | select(.filename == $filename) | .digests.sha256' <<<"$metadata")"
+            test -n "$published"
+            test "$published" = "$(sha256sum "$artifact" | cut -d ' ' -f 1)"
+          done
+
+  publish-pypi:
+    needs: [build, provenance, container-gate, windows, verify-testpypi]
+    runs-on: ubuntu-latest
+    environment:
       name: pypi
-      url: https://pypi.org/p/hound
+      url: https://pypi.org/p/hound-tracer
     permissions:
       id-token: write
     steps:
@@ -164,9 +238,31 @@ jobs:
         uses: pypa/gh-action-pypi-publish@76f52e6636d8691d1b9ae758667450a41738159e # v1.12.4
         with:
           packages-dir: dist/
+          skip-existing: true
+
+  verify-pypi:
+    needs: [build, publish-pypi]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: distributions
+          path: dist
+      - name: Verify published artifact hashes
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          metadata="$(curl --fail --retry 12 --retry-delay 5 "https://pypi.org/pypi/hound-tracer/${VERSION}/json")"
+          for artifact in dist/*; do
+            filename="$(basename "$artifact")"
+            published="$(jq -r --arg filename "$filename" '.urls[] | select(.filename == $filename) | .digests.sha256' <<<"$metadata")"
+            test -n "$published"
+            test "$published" = "$(sha256sum "$artifact" | cut -d ' ' -f 1)"
+          done
 
   release:
-    needs: [build, provenance, publish-pypi]
+    needs: [build, provenance, verify-pypi]
     runs-on: ubuntu-latest
     environment:
       name: github-release
@@ -183,5 +279,7 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
+          tag_name: v${{ inputs.version }}
+          prerelease: ${{ inputs.prerelease }}
           generate_release_notes: true
           files: dist/*

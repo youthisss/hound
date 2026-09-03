@@ -89,7 +89,24 @@ def test_ordering_keeps_log_order_without_clock_or_sequence():
     assert all(entry.ordering_basis == "log_order" for entry in tl.entries)
 
 
-def test_cycle_detection_reports_and_keeps_flat_list():
+def test_mixed_clock_domains_preserve_source_order():
+    events = [
+        _event(event_id="sequence-first", sequence=1),
+        _event(event_id="timestamp-second", timestamp_ns=100),
+        _event(event_id="unclocked-third"),
+    ]
+
+    tl = build_timeline(_artifacts(events=events))
+
+    assert tl.ordering_basis == "mixed"
+    assert [entry.event_id for entry in tl.entries] == [
+        "sequence-first",
+        "timestamp-second",
+        "unclocked-third",
+    ]
+
+
+def test_cycle_detection_reports_logs_and_keeps_flat_list(caplog):
     events = [
         _event(event_id="ev-001", span_id="a" * 16, parent_span_id="b" * 16),
         _event(event_id="ev-002", span_id="b" * 16, parent_span_id="a" * 16),
@@ -97,6 +114,8 @@ def test_cycle_detection_reports_and_keeps_flat_list():
     tl = build_timeline(_artifacts(events=events))
     assert tl.has_cycles is True
     assert "cycle" in tl.cycle_warning
+    assert "causal link cycle detected; using flat timeline" in caplog.text
+    assert "a" * 16 not in caplog.text
     # Safe fallback: flat deterministic list, not a failure.
     assert {entry.event_id for entry in tl.entries} == {"ev-001", "ev-002"}
 

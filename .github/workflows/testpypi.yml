@@ -13,6 +13,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.candidate.outputs.version }}
+      wheel_sha256: ${{ steps.candidate.outputs.wheel_sha256 }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
@@ -22,6 +25,12 @@ jobs:
       - run: uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q
       - run: uv build
       - run: uv run twine check dist/*.whl dist/*.tar.gz
+      - name: Record candidate identity
+        id: candidate
+        shell: bash
+        run: |
+          echo "version=$(uv run python -c 'import hound; print(hound.__version__)')" >> "$GITHUB_OUTPUT"
+          echo "wheel_sha256=$(sha256sum dist/*.whl | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: testpypi-distributions
@@ -33,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/hound
+      url: https://test.pypi.org/p/hound-tracer
     permissions:
       id-token: write
     steps:
@@ -47,20 +56,31 @@ jobs:
           packages-dir: dist/
 
   verify:
-    needs: [publish]
+    needs: [build, publish]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - name: Install the exact published wheel
         shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          RETAINED_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
         run: |
-          metadata="$(curl --fail --retry 6 --retry-delay 5 https://test.pypi.org/pypi/hound/json)"
+          metadata="$(curl --fail --retry 12 --retry-delay 5 "https://test.pypi.org/pypi/hound-tracer/${VERSION}/json")"
           wheel_url="$(jq -r '[.urls[] | select(.packagetype == "bdist_wheel")][0].url' <<<"$metadata")"
           wheel_file="$(jq -r '[.urls[] | select(.packagetype == "bdist_wheel")][0].filename' <<<"$metadata")"
           expected="$(jq -r '[.urls[] | select(.packagetype == "bdist_wheel")][0].digests.sha256' <<<"$metadata")"
+          test "$expected" = "$RETAINED_SHA256"
           curl --fail --location --output "$wheel_file" "$wheel_url"
           echo "$expected  $wheel_file" | sha256sum --check -
           uv venv candidate-venv
           uv pip install --python candidate-venv/bin/python "$wheel_file"
-          candidate-venv/bin/hound --version
+          test "$(candidate-venv/bin/hound --version)" = "Hound ${VERSION}"
           candidate-venv/bin/hound doctor --output-dir doctor-output --json
+          set +e
+          candidate-venv/bin/hound analyze --log tests/fixtures/pytest_fail.log --output-dir candidate-output --offline
+          status=$?
+          set -e
+          test "$status" -eq 1
+          test "$(jq -r .kind candidate-output/report.json)" = "test_failure"

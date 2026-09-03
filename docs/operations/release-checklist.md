@@ -19,9 +19,9 @@
 
 ## Candidate And Publication
 
-- [ ] The exact candidate is published through the protected TestPyPI OIDC environment.
+- [ ] The exact candidate is published through the protected TestPyPI OIDC environment by the release workflow.
 - [ ] Its direct wheel URL, SHA-256, clean install, `hound doctor`, and offline smoke pass.
-- [ ] The release workflow builds distributions once and retains those bytes.
+- [ ] The release workflow builds distributions once and promotes the same retained bytes from TestPyPI to PyPI.
 - [ ] PyPI publication completes and the published hashes match retained artifacts.
 - [ ] Provenance and `SHA256SUMS` cover every distribution.
 - [ ] GitHub Release is created from the same retained artifacts; no retry rebuild occurs.
@@ -34,3 +34,13 @@
 - [ ] Accepted precision, unknown-rate, cost, throughput, and support limitations are explicit.
 - [ ] Partial failure recovery is understood: reuse retained artifacts after a GitHub failure; keep a draft unpublished after a PyPI failure; yank only when necessary and fix forward with a new version.
 - [ ] Support and rollback status are announced. Published tags are never moved.
+
+## Maintainer Recovery
+
+- Sign annotated release tags with the maintainer's verified signing key and never replace a published tag.
+- Use PEP 440 prerelease versions (`aN`, `bN`, or `rcN`) and set the workflow's `prerelease` input for non-final releases.
+- Bootstrap the `hound-tracer` TestPyPI/PyPI projects with the maintainer account, then restrict publishing to this repository's `testpypi` and `pypi` GitHub environments through Trusted Publishing.
+- If TestPyPI contains the same version with different hashes, increment the version; do not overwrite candidate files.
+- If PyPI succeeds but GitHub Release fails, rerun the same version. `skip-existing` is safe only because the workflow verifies every retained hash before recreating the release.
+- If PyPI fails, leave any GitHub release unpublished and fix forward without rebuilding or moving the tag.
+- If a published artifact is harmful, yank it in PyPI, record the reason in the changelog, and issue a new patch version. Never reuse the version number.

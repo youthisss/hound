@@ -317,6 +317,7 @@ def test_tui_lists_structured_artifacts_alongside_logs(tmp_path):
             (tmp_path / "junit.xml").write_text(JUNIT_XML, encoding="utf-8")
             app.action_refresh()
             await pilot.pause()
+            await pilot.pause()
             items = app.query_one("#log-list", ListView)
             names = {str(child.query_one(Static).renderable).splitlines()[0].split()[0] for child in items.children}
             assert names == {"junit.xml"}

@@ -156,35 +156,87 @@ def _parse_prometheus(payload: dict, start: datetime, end: datetime) -> list[dic
 
 
 def _parse_trace(payload: dict, trace_id: str) -> list[dict]:
-    raw_spans: list[dict] = []
-    if isinstance(payload.get("spans"), list):
-        raw_spans.extend(span for span in payload["spans"] if isinstance(span, dict))
-    raw_batches = payload.get("batches")
-    batches = raw_batches if isinstance(raw_batches, list) else []
-    for batch in batches:
-        scopes = batch.get("scopeSpans", []) if isinstance(batch, dict) else []
-        for scope in scopes if isinstance(scopes, list) else []:
-            spans = scope.get("spans", []) if isinstance(scope, dict) else []
-            raw_spans.extend(span for span in spans if isinstance(span, dict))
+    raw_spans: list[tuple[dict, dict[str, str]]] = []
+
+    def add_spans(value: object, resource: dict[str, str] | None = None) -> None:
+        if not isinstance(value, list):
+            return
+        remaining = MAX_TRACE_SPANS - len(raw_spans)
+        for span in value[:remaining]:
+            if isinstance(span, dict):
+                raw_spans.append((span, resource or {}))
+
+    add_spans(payload.get("spans"))
+    for container_name in ("resourceSpans", "batches"):
+        containers = payload.get(container_name)
+        if not isinstance(containers, list):
+            continue
+        for container in containers[:MAX_TRACE_SPANS]:
+            if len(raw_spans) >= MAX_TRACE_SPANS:
+                break
+            if not isinstance(container, dict):
+                continue
+            resource = _resource_attributes(container.get("resource"))
+            scopes = container.get("scopeSpans")
+            if not isinstance(scopes, list):
+                continue
+            for scope in scopes[:MAX_TRACE_SPANS]:
+                if len(raw_spans) >= MAX_TRACE_SPANS:
+                    break
+                if isinstance(scope, dict):
+                    add_spans(scope.get("spans"), resource)
+
     parsed: list[dict] = []
-    for span in raw_spans[:MAX_TRACE_SPANS]:
+    for span, resource in raw_spans:
         start_ns = _integer(span.get("startTimeUnixNano") or span.get("start_ns"))
         end_ns = _integer(span.get("endTimeUnixNano") or span.get("end_ns"))
         parsed.append({
             "trace_id": str(span.get("traceId") or span.get("trace_id") or trace_id),
             "span_id": str(span.get("spanId") or span.get("span_id") or ""),
             "parent_span_id": str(span.get("parentSpanId") or span.get("parent_span_id") or ""),
-            "service": str(span.get("service") or span.get("serviceName") or ""),
+            "service": str(span.get("service") or span.get("serviceName") or resource.get("service.name") or ""),
             "name": str(span.get("name") or ""),
             "start_ns": start_ns,
             "end_ns": end_ns,
             "duration_ns": max(0, end_ns - start_ns) if start_ns and end_ns else 0,
-            "status": str(span.get("status") or "unknown"),
-            "version": str(span.get("version") or ""),
+            "status": _span_status(span.get("status")),
+            "version": str(span.get("version") or resource.get("service.version") or ""),
             "source": "tempo",
             "uncertainty": "runtime trace evidence; missing spans may produce a partial path",
         })
     return parsed
+
+
+def _resource_attributes(value: object) -> dict[str, str]:
+    if not isinstance(value, dict) or not isinstance(value.get("attributes"), list):
+        return {}
+    parsed: dict[str, str] = {}
+    for attribute in value["attributes"][:MAX_TRACE_SPANS]:
+        if not isinstance(attribute, dict) or attribute.get("key") not in {"service.name", "service.version"}:
+            continue
+        raw_value = attribute.get("value")
+        if not isinstance(raw_value, dict):
+            continue
+        for value_key in ("stringValue", "intValue", "doubleValue", "boolValue"):
+            attribute_value = raw_value.get(value_key)
+            if isinstance(attribute_value, (str, int, float, bool)):
+                parsed[str(attribute["key"])] = str(attribute_value)
+                break
+    return parsed
+
+
+def _span_status(value: object) -> str:
+    if not isinstance(value, dict):
+        return str(value or "unknown")
+    code = value.get("code")
+    if isinstance(code, str):
+        normalized = code.removeprefix("STATUS_CODE_").upper()
+        if normalized in {"0", "1", "2"}:
+            return {"0": "UNSET", "1": "OK", "2": "ERROR"}[normalized]
+        return normalized or "unknown"
+    if isinstance(code, (int, float)) and not isinstance(code, bool):
+        return {0: "UNSET", 1: "OK", 2: "ERROR"}.get(int(code), str(code))
+    return "unknown"
 
 
 def _integer(value: object) -> int:

@@ -71,6 +71,43 @@ def test_related_tests_filters_before_candidate_limit(tmp_path):
     assert source_context._related_tests(repo, "src/target.py", "checkout") == ["tests/test_target.py"]
 
 
+def test_related_tests_apply_source_file_safety_policy(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    tests = repo / "tests"
+    hidden_tests = repo / ".hidden" / "tests"
+    tests.mkdir(parents=True)
+    hidden_tests.mkdir(parents=True)
+    (tests / "test_visible.py").write_text("checkout\n", encoding="utf-8")
+    (tests / ".test_hidden.py").write_text("checkout\n", encoding="utf-8")
+    (hidden_tests / "test_checkout.py").write_text("checkout\n", encoding="utf-8")
+    (tests / "test_blocked.py").write_text("checkout\n", encoding="utf-8")
+    (tests / "test_binary.py").write_bytes(b"checkout\x00hidden")
+    (tests / "test_large.py").write_text("checkout" * 20, encoding="utf-8")
+    (tests / "test_secret.pem").write_text("checkout\n", encoding="utf-8")
+    monkeypatch.setattr(source_context, "MAX_FILE_BYTES", 64)
+    monkeypatch.setattr(source_context, "ALLOWED_SUFFIXES", source_context.ALLOWED_SUFFIXES | {".pem"})
+    monkeypatch.setattr(source_context, "TEST_SUFFIXES", source_context.TEST_SUFFIXES | {".pem"})
+    monkeypatch.setattr(source_context, "_BLOCKED_NAMES", source_context._BLOCKED_NAMES | {"test_blocked.py"})
+
+    assert source_context._related_tests(repo, "src/checkout.py", "checkout") == [
+        "tests/test_visible.py",
+    ]
+
+
+def test_related_tests_reject_symlink(tmp_path):
+    repo = tmp_path / "repo"
+    tests = repo / "tests"
+    tests.mkdir(parents=True)
+    outside = tmp_path / "test_outside.py"
+    outside.write_text("checkout\n", encoding="utf-8")
+    try:
+        (tests / "test_link.py").symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+
+    assert source_context._related_tests(repo, "src/checkout.py", "checkout") == []
+
+
 def test_rejects_traversal_binary_hidden_oversized_and_symlink(tmp_path, monkeypatch):
     repo = _repo(tmp_path)
     (repo / "binary.py").write_bytes(b"abc\x00def")

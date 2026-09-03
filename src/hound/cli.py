@@ -10,6 +10,7 @@ import sys
 import threading
 from collections.abc import Sequence
 from dataclasses import replace
+from urllib.parse import urlsplit
 from uuid import uuid4
 from pathlib import Path
 
@@ -109,7 +110,7 @@ def _add_llm_args(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--base-url", default=None, help="API base URL override (default: $HOUND_BASE_URL)")
     group.add_argument("--api-key", default=None,
                        help="API key override (default: $HOUND_API_KEY or provider env). "
-                        "NOTE: appears in process list; prefer env vars or YAML.")
+                         "NOTE: appears in process list; prefer env vars or the credential store.")
     group.add_argument("--max-retries", type=_non_negative_int, default=None,
                        help="maximum retry count for transient LLM errors")
     group.add_argument("--require-llm", action="store_true",
@@ -1453,11 +1454,16 @@ def run_list_providers(args: argparse.Namespace) -> int:
 
 
 def _safe_config(config) -> dict:
+    base_url = config.base_url
+    if base_url:
+        parsed = urlsplit(base_url)
+        if parsed.username is not None or parsed.password is not None:
+            base_url = "[URL credentials redacted]"
     return {
         "schema_version": SCHEMA_VERSION,
         "provider": config.provider,
         "model": config.model,
-        "base_url": config.base_url,
+        "base_url": base_url,
         "offline": config.offline,
         "llm_enabled": config.llm_enabled,
         "api_key": "configured" if config.api_key else "missing",

@@ -16,10 +16,13 @@ with a safe fallback to the flat deterministic list.
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import asdict, dataclass
 
 from hound.models import Artifacts, DeploymentContext, Timeline, TimelineEntry
+
+LOGGER = logging.getLogger(__name__)
 
 _IMPACT_OUTAGE = re.compile(
     r"\b(?:outage|service disruption|major incident|customer[- ]?facing|"
@@ -142,6 +145,11 @@ def build_timeline(artifacts: Artifacts) -> Timeline:
     ]
 
     has_cycles, cycle_warning = _detect_cycles(entries)
+    if has_cycles:
+        LOGGER.warning(
+            "causal link cycle detected; using flat timeline",
+            extra={"event": "timeline_cycle_detected"},
+        )
     grouping = _classify_grouping(entries)
 
     primary = next((entry for entry in entries if entry.role == "primary"), None)
@@ -191,6 +199,9 @@ def _sort_key(item: _RawEntry) -> tuple[int, int, int, int]:
 
 
 def _sort_entries(items: list[_RawEntry]) -> list[_RawEntry]:
+    event_bases = {_entry_basis(item) for item in items if item.source == "failure_event"}
+    if len(event_bases) > 1:
+        return sorted(items, key=lambda item: item.original_index)
     return sorted(items, key=_sort_key)
 
 

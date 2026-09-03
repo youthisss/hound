@@ -4,7 +4,8 @@
 
 ## Recommended workflow
 
-Pin a validated immutable release tag (for example `@v0.4.0`) rather than `@main`:
+Pin a validated immutable full commit SHA rather than `@main`. After the first
+release, a protected immutable release tag such as `@v0.4.0` is also supported:
 
 ```yaml
 name: Failure Investigation
@@ -17,12 +18,23 @@ jobs:
   investigate:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download failure logs from the completed CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: ci-logs
+          path: ci-logs
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+
       - name: Run Hound
         id: hound
-        uses: youthisss/hound@v0.4.0
+        uses: youthisss/hound@fef7efcb2944336ba621e6f097722ae1bfdcae27
         with:
           log: ./ci-logs/failure.log
           out: ./hound-output
@@ -34,6 +46,12 @@ jobs:
           echo "Kind: ${{ steps.hound.outputs.kind }}"
           echo "Severity: ${{ steps.hound.outputs.severity }}"
           echo "Dedup key: ${{ steps.hound.outputs.dedup_key }}"
+
+      - name: Upload investigation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: hound-investigation
+          path: hound-output/
 ```
 
 ## Inputs
@@ -42,6 +60,28 @@ jobs:
 - `out` (optional, default `hound-output`): output directory.
 - `offline` (optional, default `"true"`): set to `"false"` to allow configured LLM provider calls.
 - `repo` (optional): local Git checkout directory for source context.
+
+The Action runs on Linux Docker-capable GitHub-hosted or self-hosted runners.
+Paths must stay inside `github.workspace`; the log must already exist, and the
+output directory must be empty. The container analyzes mounted repository data
+as a non-root user after normalizing workspace ownership.
+
+## Optional LLM provider
+
+Keep `offline: "true"` unless a provider is explicitly required. For an online
+run, pass credentials through GitHub Secrets, never Action inputs or committed
+configuration:
+
+```yaml
+- uses: youthisss/hound@fef7efcb2944336ba621e6f097722ae1bfdcae27
+  env:
+    HOUND_API_PROVIDER: openai
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  with:
+    log: ./ci-logs/failure.log
+    out: ./hound-output
+    offline: "false"
+```
 
 The Action input IDs `out` and `repo` remain stable for existing workflows. The
 container forwards them to the canonical CLI options `--output-dir` and

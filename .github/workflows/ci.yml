@@ -39,6 +39,48 @@ jobs:
       - run: uv sync --frozen --extra dev --python ${{ matrix.python }}
       - run: uv run --python ${{ matrix.python }} pytest -m unit -q
 
+  package-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
+      - run: uv sync --frozen --extra dev
+      - name: Audit locked production dependencies
+        run: |
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
+          uv run pip-audit --requirement audited-requirements.txt
+      - run: uv build
+      - run: uv run twine check dist/*.whl dist/*.tar.gz
+      - name: Smoke-test wheel and source distribution
+        shell: bash
+        run: |
+          smoke="$RUNNER_TEMP/hound-package-smoke"
+          wheel="$(realpath dist/*.whl)"
+          sdist="$(realpath dist/*.tar.gz)"
+          uv venv "$smoke/wheel-venv"
+          uv pip install --python "$smoke/wheel-venv/bin/python" "$wheel"
+          uv venv "$smoke/sdist-venv"
+          uv pip install --python "$smoke/sdist-venv/bin/python" "$sdist"
+          cd "$smoke"
+          for environment in wheel sdist; do
+            "$environment-venv/bin/hound" --version
+            "$environment-venv/bin/hound" doctor --output-dir "$environment-doctor" --json
+            set +e
+            "$environment-venv/bin/hound" analyze --log "$GITHUB_WORKSPACE/tests/fixtures/pytest_fail.log" --output-dir "$environment-output" --offline
+            status=$?
+            set -e
+            test "$status" -eq 1
+            test "$(jq -r .kind "$environment-output/report.json")" = "test_failure"
+          done
+      - name: Scan repository and generated artifacts
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
   extended:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -48,13 +90,7 @@ jobs:
       - run: uv sync --frozen --extra dev
       - run: uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q
       - run: uv run python -m hound.eval --offline --format json
-      - name: Audit locked production dependencies
-        run: |
-          uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
-          uv run pip-audit --requirement audited-requirements.txt
       - run: uv run python examples/demo/run_demo.py --profile smoke
-      - run: uv build
-      - run: uv run twine check dist/*.whl dist/*.tar.gz
       - run: docker build -t hound:test .
       - run: docker build -f Dockerfile.action -t hound-action:test .
       - name: Smoke-test GitHub Action contract
@@ -73,17 +109,9 @@ jobs:
           set -e
           test "$status" -eq 1
           test -f action-smoke/out/report.json
-          grep -q '^report=' action-smoke/github-output
-          grep -q '^severity=' action-smoke/github-output
+          grep -q '^report<<TRACEHOUND_' action-smoke/github-output
+          grep -q '^severity<<TRACEHOUND_' action-smoke/github-output
           grep -q '"kind": "test_failure"' action-smoke/out/report.json
-      - name: Scan repository and generated artifacts
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln,secret,misconfig
-          severity: HIGH,CRITICAL
-          exit-code: "1"
       - name: Scan runtime image
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
         with:
@@ -121,20 +149,22 @@ jobs:
 
   ci-result:
     if: always()
-    needs: [quality, compatibility, extended, windows]
+    needs: [quality, compatibility, package-security, extended, windows]
     runs-on: ubuntu-latest
     steps:
       - name: Summarize required checks
         env:
           QUALITY: ${{ needs.quality.result }}
           COMPATIBILITY: ${{ needs.compatibility.result }}
+          PACKAGE_SECURITY: ${{ needs.package-security.result }}
           EXTENDED: ${{ needs.extended.result }}
           WINDOWS: ${{ needs.windows.result }}
         run: |
           printf '| Check | Result |\n|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
-          printf '| quality | %s |\n| compatibility | %s |\n| extended | %s |\n| windows | %s |\n' \
-            "$QUALITY" "$COMPATIBILITY" "$EXTENDED" "$WINDOWS" >> "$GITHUB_STEP_SUMMARY"
+          printf '| quality | %s |\n| compatibility | %s |\n| package-security | %s |\n| extended | %s |\n| windows | %s |\n' \
+            "$QUALITY" "$COMPATIBILITY" "$PACKAGE_SECURITY" "$EXTENDED" "$WINDOWS" >> "$GITHUB_STEP_SUMMARY"
           test "$QUALITY" = success
           test "$COMPATIBILITY" = success
+          test "$PACKAGE_SECURITY" = success
           test "$EXTENDED" = success -o "$EXTENDED" = skipped
           test "$WINDOWS" = success -o "$WINDOWS" = skipped

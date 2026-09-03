@@ -85,6 +85,33 @@ def _mapping_section(config: dict, name: str) -> dict:
         raise ValueError(f"config {name} section must be a mapping")
     return value
 
+
+def _configured_string(mapping: dict, key: str, label: str) -> str | None:
+    value = mapping.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a string")
+    return value
+
+
+def _validate_http_url(value: object, label: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a string")
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        parsed.port  # Force validation of malformed ports.
+    except ValueError as exc:
+        raise ValueError(f"{label} must be an HTTP(S) URL") from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not hostname:
+        raise ValueError(f"{label} must be an HTTP(S) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError(f"{label} must not include URL credentials")
+    if parsed.scheme != "https" and hostname.lower() not in {"localhost", "127.0.0.1", "::1"}:
+        raise ValueError(f"{label} must use HTTPS unless it targets loopback")
+    return value
+
 #: Known provider presets (all OpenAI-compatible). Key = name users pass in
 #: HOUND_API_PROVIDER (or `llm.provider` in YAML). `env` = env var names that
 #: override the preset when set; `default` = fallback when nothing is set.
@@ -264,6 +291,8 @@ def load_config(
     _validate_unknown_keys(yaml_cfg, strict=strict)
 
     llm_cfg = _mapping_section(yaml_cfg, "llm")
+    for key in ("provider", "model", "base_url", "api_key"):
+        _configured_string(llm_cfg, key, f"llm.{key}")
     trust_cfg = _mapping_section(yaml_cfg, "trust")
     configured_source = trust_cfg.get("source_class")
     if configured_source is not None and not isinstance(configured_source, str):
@@ -334,13 +363,23 @@ def load_config(
         raise ValueError("anthropic requires ANTHROPIC_BASE_URL pointing to an OpenAI-compatible proxy")
     if provider in {"azure", "custom"} and not effective_offline and not base_url:
         raise ValueError(f"{provider} requires an OpenAI-compatible HTTPS base_url")
-    if base_url and not effective_offline:
-        parsed_url = urlsplit(str(base_url))
-        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
-            raise ValueError(f"base_url must be an HTTP(S) URL, got {base_url!r}")
-        local_hosts = {"localhost", "127.0.0.1", "::1"}
-        if parsed_url.scheme != "https" and parsed_url.hostname not in local_hosts:
-            raise ValueError("base_url must use HTTPS unless it targets loopback")
+    if not effective_offline:
+        if base_url:
+            _validate_http_url(base_url, "base_url")
+    elif base_url:
+        # In offline mode, userinfo must always be rejected even if offline,
+        # but ambient remote base URLs from environment are tolerated unless strict.
+        parsed_ambient = urlsplit(base_url)
+        if parsed_ambient.username is not None or parsed_ambient.password is not None:
+            raise ValueError("base_url must not include URL credentials")
+        if strict:
+            _validate_http_url(base_url, "base_url")
+        else:
+            try:
+                _validate_http_url(base_url, "base_url")
+            except ValueError as exc:
+                if "URL credentials" in str(exc):
+                    raise
 
     temp_val = llm_cfg.get("temperature", 0.2)
     timeout_val = llm_cfg.get("timeout", 120.0)
@@ -414,6 +453,8 @@ def load_config(
 
 
     redact_cfg = yaml_cfg.get("redact")
+    if redact_cfg is not None and not isinstance(redact_cfg, bool):
+        raise ValueError("redact must be a boolean")
     redact_val = not (env_value("HOUND_ALLOW_UNREDACTED", "TH_NO_REDACT") == "1") and redact_cfg is not False
     if redact is not None:
         redact_val = redact
@@ -457,9 +498,9 @@ def load_config(
     backend = dedup_cfg.get("backend")
     if backend:
         cfg.state_backend = str(backend)
-    url = dedup_cfg.get("url")
+    url = _configured_string(dedup_cfg, "url", "dedup.url")
     if url:
-        cfg.state_url = str(url)
+        cfg.state_url = _validate_http_url(url, "dedup.url")
     token = dedup_cfg.get("token")
     if token:
         sys.stderr.write("Warning: dedup token found in YAML config; prefer an environment variable.\n")
@@ -514,12 +555,14 @@ def load_config(
     gh = _mapping_section(yaml_cfg, "github")
     if gh.get("repo"):
         cfg.gh_repo = str(gh["repo"])
-    if gh.get("api_base"):
-        cfg.gh_api_base = str(gh["api_base"])
+    gh_api_base = _configured_string(gh, "api_base", "github.api_base")
+    if gh_api_base:
+        cfg.gh_api_base = _validate_http_url(gh_api_base, "github.api_base")
 
     jira = _mapping_section(yaml_cfg, "jira")
-    if jira.get("url"):
-        cfg.jira_url = str(jira["url"])
+    jira_url = _configured_string(jira, "url", "jira.url")
+    if jira_url:
+        cfg.jira_url = _validate_http_url(jira_url, "jira.url")
     if jira.get("project"):
         cfg.jira_project = str(jira["project"])
     if jira.get("token"):
@@ -538,8 +581,9 @@ def load_config(
         cfg.jira_email = os.environ.get("JIRA_EMAIL", "")
 
     gitlab = _mapping_section(yaml_cfg, "gitlab")
-    if gitlab.get("url"):
-        cfg.gitlab_url = str(gitlab["url"])
+    gitlab_url = _configured_string(gitlab, "url", "gitlab.url")
+    if gitlab_url:
+        cfg.gitlab_url = _validate_http_url(gitlab_url, "gitlab.url")
     if gitlab.get("project"):
         cfg.gitlab_project = str(gitlab["project"])
     if gitlab.get("token"):
@@ -553,22 +597,21 @@ def load_config(
         cfg.gitlab_project = os.environ.get("GITLAB_PROJECT", "")
 
     slack = _mapping_section(yaml_cfg, "slack")
-    if slack.get("webhook_url"):
-        cfg.slack_webhook = str(slack["webhook_url"])
+    slack_webhook = _configured_string(slack, "webhook_url", "slack.webhook_url")
+    if slack_webhook:
+        cfg.slack_webhook = _validate_http_url(slack_webhook, "slack.webhook_url")
     if os.environ.get("SLACK_WEBHOOK_URL") and not cfg.slack_webhook:
         cfg.slack_webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
 
     observability = _mapping_section(yaml_cfg, "observability")
+    _configured_string(observability, "prometheus_url", "observability.prometheus_url")
+    _configured_string(observability, "tempo_url", "observability.tempo_url")
     cfg.prometheus_url = str(observability.get("prometheus_url") or os.environ.get("PROMETHEUS_URL") or "").rstrip("/")
     cfg.tempo_url = str(observability.get("tempo_url") or os.environ.get("TEMPO_URL") or "").rstrip("/")
     for name, value in (("prometheus_url", cfg.prometheus_url), ("tempo_url", cfg.tempo_url)):
         if not value:
             continue
-        parsed = urlsplit(value)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError(f"observability.{name} must be an HTTP(S) URL")
-        if parsed.scheme != "https" and (parsed.hostname or "").lower() not in {"localhost", "127.0.0.1", "::1"}:
-            raise ValueError(f"observability.{name} must use HTTPS unless it targets loopback")
+        _validate_http_url(value, f"observability.{name}")
     if observability.get("prometheus_token") or observability.get("tempo_token"):
         sys.stderr.write("Warning: observability token found in YAML config; prefer environment variables.\n")
     cfg.prometheus_token = str(observability.get("prometheus_token") or os.environ.get("PROMETHEUS_TOKEN") or "")
@@ -583,12 +626,7 @@ def load_config(
     runbooks = _mapping_section(yaml_cfg, "runbooks")
     cfg.runbooks = {}
     for service, url_value in runbooks.items():
-        url = str(url_value)
-        parsed = urlsplit(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError(f"runbooks.{service} must be an HTTP(S) URL")
-        if parsed.scheme != "https" and (parsed.hostname or "").lower() not in {"localhost", "127.0.0.1", "::1"}:
-            raise ValueError(f"runbooks.{service} must use HTTPS unless it targets loopback")
+        url = _validate_http_url(url_value, f"runbooks.{service}")
         cfg.runbooks[str(service)] = url
     source = _mapping_section(yaml_cfg, "source")
     send_to_llm = source.get("send_to_llm", False)

@@ -6,10 +6,14 @@ Workflow utama tersedia melalui TUI interaktif dan CLI untuk automation/CI.
 
 ## 1. Instalasi
 
+Hound mendukung Python 3.10-3.12 pada Windows dan Linux. Sampai rilis pertama
+`hound-tracer` tersedia di PyPI, gunakan commit yang telah direview berikut agar
+package manager tidak memasang proyek lain yang menggunakan nama `hound`:
+
 ### Jalur 1: Menggunakan uv tool (Rekomendasi End-User, tanpa clone)
 
 ```sh
-uv tool install hound
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@fef7efcb2944336ba621e6f097722ae1bfdcae27"
 hound --version
 hound doctor
 ```
@@ -17,16 +21,21 @@ hound doctor
 Untuk upgrade atau uninstall:
 
 ```sh
-uv tool upgrade hound
-uv tool uninstall hound
+uv tool upgrade hound-tracer
+uv tool uninstall hound-tracer
 ```
 
 ### Jalur 2: Menggunakan pipx
 
 ```sh
-pipx install hound
+pipx install "hound-tracer @ git+https://github.com/youthisss/hound.git@fef7efcb2944336ba621e6f097722ae1bfdcae27"
 hound --version
+hound doctor
 ```
+
+Setelah rilis PyPI pertama diverifikasi, source Git dapat diganti dengan
+`hound-tracer`. Gunakan `pipx upgrade hound-tracer` dan
+`pipx uninstall hound-tracer` untuk lifecycle instalasi pipx.
 
 ### Jalur 3: Docker
 
