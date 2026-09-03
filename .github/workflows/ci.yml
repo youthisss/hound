@@ -80,7 +80,7 @@ jobs:
           test "$(jq -r .failure.kind wheel-output/report.json)" = "test_failure"
           test "$(jq -r .failure.kind sdist-output/report.json)" = "test_failure"
       - name: Scan repository and generated artifacts
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -108,6 +108,7 @@ jobs:
           mkdir action-smoke
           cp tests/fixtures/pytest_fail.log action-smoke/failure.log
           touch action-smoke/github-output
+          chmod -R 777 action-smoke
           set +e
           docker run --rm \
             -w /workspace \
@@ -127,7 +128,7 @@ jobs:
           grep -q '^severity<<TRACEHOUND_' action-smoke/github-output
           grep -q '"kind": "test_failure"' action-smoke/out/report.json
       - name: Scan runtime image
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: hound:test
           scanners: vuln,secret
@@ -135,7 +136,7 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
       - name: Scan Action image
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: hound-action:test
           scanners: vuln,secret

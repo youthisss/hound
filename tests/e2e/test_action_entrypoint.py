@@ -10,7 +10,6 @@ def test_action_entrypoint_preserves_first_cli_argument():
 
     script = entrypoint.read_text(encoding="utf-8")
 
-    # sh -c reserves the first argument after the command as $0.
     assert "-- action-entrypoint \"$@\"" in script
     assert "cd \"$workspace\"" in script
 
