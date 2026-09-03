@@ -87,4 +87,4 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
 fi
 export GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-}"
 export GITHUB_OUTPUT="${GITHUB_OUTPUT:-}"
-exec su -m -s /bin/sh hound -c 'cd "$GITHUB_WORKSPACE" && exec /app/.venv/bin/hound "$@"' -- action-entrypoint "$@"
+exec su -m -s /bin/sh hound -c 'cd "$GITHUB_WORKSPACE" && exec /app/.venv/bin/hound "$@"' action-entrypoint "$@"
