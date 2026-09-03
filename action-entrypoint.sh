@@ -51,6 +51,8 @@ if [ -n "${GITHUB_WORKSPACE:-}" ]; then
         exit 2
     fi
 
+    cd "$workspace"
+
     if [ -n "$repo" ]; then
         repo_path=$(resolve_workspace_path "$repo")
         require_workspace_path "$repo_path" "repo"

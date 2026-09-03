@@ -424,7 +424,7 @@ def run_analyze(args: argparse.Namespace) -> int:
         print("error: analyze requires <log-directory>", file=sys.stderr)
         return 2
     path = Path(input_path).expanduser()
-    legacy_file = bool(getattr(args, "legacy_log", None)) and path.is_file()
+    legacy_file = path.is_file()
     if args.offline_value is not None:
         args.offline = args.offline_value == "true"
     if args.offline and any(

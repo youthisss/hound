@@ -110,6 +110,7 @@ jobs:
           touch action-smoke/github-output
           set +e
           docker run --rm \
+            -w /workspace \
             -e GITHUB_WORKSPACE=/workspace \
             -e GITHUB_OUTPUT=/workspace/github-output \
             -v "$PWD/action-smoke:/workspace" \

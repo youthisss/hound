@@ -12,6 +12,7 @@ def test_action_entrypoint_preserves_first_cli_argument():
 
     # sh -c reserves the first argument after the command as $0.
     assert "-- action-entrypoint \"$@\"" in script
+    assert "cd \"$workspace\"" in script
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Docker action entrypoint is exercised in Linux CI")
