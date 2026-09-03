@@ -85,4 +85,7 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
 fi
 export GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-}"
 export GITHUB_OUTPUT="${GITHUB_OUTPUT:-}"
+export HOME=/home/hound
+export XDG_CONFIG_HOME=/home/hound/.config
+export XDG_CACHE_HOME=/home/hound/.cache
 exec su -m -s /bin/sh -c 'cd "$GITHUB_WORKSPACE" && exec /app/.venv/bin/hound "$@"' -- hound action-entrypoint "$@"

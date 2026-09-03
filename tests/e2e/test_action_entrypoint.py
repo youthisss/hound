@@ -12,6 +12,7 @@ def test_action_entrypoint_preserves_first_cli_argument():
 
     assert "-c 'cd \"$GITHUB_WORKSPACE\" && exec /app/.venv/bin/hound \"$@\"' -- hound action-entrypoint \"$@\"" in script
     assert "cd \"$workspace\"" in script
+    assert "export HOME=/home/hound" in script
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Docker action entrypoint is exercised in Linux CI")
