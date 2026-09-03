@@ -93,12 +93,12 @@ PyPI:
 
 ```sh
 # Using uv (recommended)
-uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@fef7efcb2944336ba621e6f097722ae1bfdcae27"
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 hound --version
 hound doctor
 
 # Using pipx
-pipx install "hound-tracer @ git+https://github.com/youthisss/hound.git@fef7efcb2944336ba621e6f097722ae1bfdcae27"
+pipx install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 hound --version
 hound doctor
 ```
@@ -442,7 +442,7 @@ jobs:
 
       - name: Triage Failures with Hound
         if: steps.test_run.outcome == 'failure'
-        uses: youthisss/hound@fef7efcb2944336ba621e6f097722ae1bfdcae27
+        uses: youthisss/hound@e0a640effda889427598b0cdb5bdd41d9749045c
         with:
           log: "artifacts/pytest.log"
           repo: "${{ github.workspace }}"

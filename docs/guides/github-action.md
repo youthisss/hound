@@ -34,7 +34,7 @@ jobs:
 
       - name: Run Hound
         id: hound
-        uses: youthisss/hound@fef7efcb2944336ba621e6f097722ae1bfdcae27
+        uses: youthisss/hound@e0a640effda889427598b0cdb5bdd41d9749045c
         with:
           log: ./ci-logs/failure.log
           out: ./hound-output
@@ -73,7 +73,7 @@ run, pass credentials through GitHub Secrets, never Action inputs or committed
 configuration:
 
 ```yaml
-- uses: youthisss/hound@fef7efcb2944336ba621e6f097722ae1bfdcae27
+- uses: youthisss/hound@e0a640effda889427598b0cdb5bdd41d9749045c
   env:
     HOUND_API_PROVIDER: openai
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

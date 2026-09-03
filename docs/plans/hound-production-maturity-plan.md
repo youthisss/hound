@@ -41,32 +41,29 @@ Hound is production-ready for a release only when all of these are true:
 
 ## 3. Evidence-Based Current State
 
-The following gaps are based on the current repository surface:
+Status updated 2026-09-03 after implementation evidence changed the original
+repository findings:
 
-- `README.md:91` still contains the placeholder `your-org` repository URL.
-- The README presents `uv sync --extra dev` as installation even though it is a
-  contributor/development workflow.
-- There is no `CHANGELOG.md` or equivalent release history.
-- `docs/workflow.md:7` exposes the local WSL path `/mnt/d/project/hound/`.
-- `pyproject.toml:7` and `src/hound/__init__.py:1` both carry version data.
-- Runtime dependencies such as `openai` and `gitpython` have no direct version
-  bounds in `pyproject.toml`, although `uv.lock` is locked.
-- `pyproject.toml:55` excludes critical modules including server, pipeline,
-  collector, TUI, and parts of LLM analysis from mypy.
-- The codebase has no logging framework; server diagnostics use stderr writes in
-   `src/hound/server.py:322`, `:450`, and `:456`.
-- `.github/workflows/ci.yml:3-5` currently uses only `workflow_dispatch`.
-- The release workflow does not yet publish through a complete build-once,
-  environment-protected package release process.
-- `action.yml:7-48` exposes only a small offline input surface.
-- `src/hound/server.py:268` keeps rate-limit counters in memory.
-- Server TLS is intentionally outside the process, but reverse-proxy guidance is
-  not yet documented as a production deployment contract.
-- The repository has broad unit/integration coverage, but no formal pytest markers
-  for selecting unit, integration, and end-to-end suites.
-
-These findings are not all release blockers. The priority and dependency order
-below prevents low-value hardening from delaying the core release path.
+- Public installation, contributor, Action, server, upgrade, and recovery docs
+  are separated; `CHANGELOG.md`, `CONTRIBUTING.md`, and `SECURITY.md` exist.
+- The distribution is `hound-tracer`, while the import and executable remain
+  `hound`. Hatch reads one dynamic version source, runtime dependencies are
+  bounded, and Python support is `>=3.10,<3.13`.
+- Text/JSON operational logging, request/job correlation, loopback deployment
+  guidance, proxy examples, state migration/recovery, test taxonomy, and automatic
+  CI are implemented and tested.
+- CI run `33757388692` passed quality, Python 3.10-3.12 compatibility, package
+  security, Windows, full coverage/evaluation, Docker, Action-contract, and both
+  Trivy image gates.
+- The release workflow builds artifacts once, validates wheel and source installs,
+  enforces tag/version identity and `main` reachability, generates checksums and
+  provenance, promotes through TestPyPI before PyPI, verifies hashes, and creates
+  the GitHub Release from retained artifacts.
+- Remaining repository work is incremental mypy coverage for intentionally
+  excluded collector/TUI/LLM modules and any evidence-triggered P8 scale work.
+- Remaining release blockers are external controls: GitHub branch/tag rulesets,
+  protected environment reviewers, TestPyPI/PyPI Trusted Publisher identities,
+  and the reviewed production pilot. No public package release is claimed yet.
 
 ## 4. Scope and Non-Goals
 

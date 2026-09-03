@@ -211,7 +211,8 @@ jobs:
         with:
           name: distributions
           path: dist
-      - name: Verify candidate artifact hashes
+      - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
+      - name: Verify and smoke-test the published candidate
         shell: bash
         env:
           VERSION: ${{ needs.build.outputs.version }}
@@ -223,6 +224,27 @@ jobs:
             test -n "$published"
             test "$published" = "$(sha256sum "$artifact" | cut -d ' ' -f 1)"
           done
+          wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          wheel_name="$(basename "$wheel")"
+          wheel_url="$(jq -r --arg filename "$wheel_name" '.urls[] | select(.filename == $filename) | .url' <<<"$metadata")"
+          wheel_hash="$(jq -r --arg filename "$wheel_name" '.urls[] | select(.filename == $filename) | .digests.sha256' <<<"$metadata")"
+          test -n "$wheel_url"
+          smoke="$RUNNER_TEMP/hound-testpypi-smoke"
+          mkdir -p "$smoke"
+          curl --fail --location "$wheel_url" --output "$smoke/$wheel_name"
+          test "$wheel_hash" = "$(sha256sum "$smoke/$wheel_name" | cut -d ' ' -f 1)"
+          uv venv "$smoke/venv"
+          uv pip install --python "$smoke/venv/bin/python" "$wheel_url"
+          cd "$smoke"
+          test "$(venv/bin/hound --version)" = "Hound ${VERSION}"
+          venv/bin/hound doctor --output-dir doctor-output --json
+          printf 'FAILED tests/test_candidate.py::test_candidate\nAssertionError: expected 1 but got 2\n' > failure.log
+          set +e
+          venv/bin/hound analyze --log failure.log --output-dir analysis-output --offline
+          status=$?
+          set -e
+          test "$status" -eq 1
+          test "$(jq -r .failure.kind analysis-output/report.json)" = "test_failure"
 
   publish-pypi:
     needs: [build, provenance, container-gate, windows, verify-testpypi]

@@ -226,8 +226,9 @@ Local verification:
 
 External release gates still requiring operator infrastructure:
 
-- Docker/Action/Trivy jobs must run on the configured GitHub runner because this
-  workstation has no Docker runtime.
+- Docker, Action-contract, and Trivy gates passed on GitHub Actions run
+  `33757388692` on 2026-09-03. Multi-stage runtime images exclude build-only
+  package managers and caches.
 - TestPyPI and PyPI environments, Trusted Publisher identities, tag ruleset, and
   branch/environment reviewers must be configured in GitHub/PyPI.
 - The mandatory two-repository, 100-300-real-failure pilot must be completed and

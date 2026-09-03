@@ -14,7 +14,7 @@ stages:
 The first stable user experience should be:
 
 ```powershell
-uv tool install hound
+uv tool install hound-tracer
 hound --version
 hound doctor
 ```
@@ -22,7 +22,7 @@ hound doctor
 Until PyPI publishing is ready, the supported command should be:
 
 ```powershell
-uv tool install "hound @ git+https://github.com/youthisss/hound.git@<reviewed-full-commit-sha>"
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 ```
 
 An unpinned install from `main` is a development channel, not a supported
@@ -32,20 +32,31 @@ SHA in user documentation with an immutable release tag such as `v0.4.0`.
 
 ## 2. Current State
 
-- The project is a Python package built with Hatchling.
-- `pyproject.toml` declares package version `0.4.0` and the `hound` console script.
-- The README currently presents `git clone` plus `uv sync --extra dev` as the
-  primary installation method. This is a contributor workflow, not an end-user
-  installation workflow.
-- The README still contains the placeholder repository URL
-  `https://github.com/your-org/hound.git`.
-- `.github/workflows/release.yml` builds and smoke-tests wheel artifacts when a
-  `v*` tag is pushed, but does not publish to PyPI.
-- The release workflow creates checksums and a GitHub Release.
-- CI is currently manual through `workflow_dispatch`.
-- The local checkout is nested under a Git repository rooted at `D:\Project`,
-  whose `origin` points to another project. This must be corrected before normal
-  release work to prevent unrelated project history from reaching Hound.
+Status updated 2026-09-03 after implementation evidence changed the original
+assumptions:
+
+- The Hatchling distribution is named `hound-tracer`; the import package and
+  console script remain `hound`.
+- Version metadata is sourced dynamically from `src/hound/__init__.py`, and the
+  supported Python range is `>=3.10,<3.13`.
+- README and user guides separate pinned GitHub installation, contributor setup,
+  Docker, upgrade, and uninstall paths. PyPI commands remain future-tense until a
+  verified `hound-tracer` release exists.
+- Automatic CI runs on pull requests and `main`, with Python 3.10-3.12,
+  packaging, Windows, Docker, Action-contract, dependency, secret, and image-scan
+  gates. Run `33757388692` passed every job.
+- The manual release workflow builds wheel and source distribution once,
+  validates both outside the checkout, verifies tag/version equality, creates
+  SHA-256 checksums and provenance, publishes through TestPyPI before PyPI, and
+  verifies published hashes before creating the GitHub Release.
+- Release and runtime images use multi-stage builds and do not ship `uv`, its
+  build cache, pip, setuptools, or wheel.
+- Work occurs in the dedicated checkout rooted at `D:\Project\hound`, whose
+  `origin` is `https://github.com/youthisss/hound.git`.
+- External release gates remain: `hound-tracer` currently returns 404 on both
+  PyPI indexes; Trusted Publisher identities, protected GitHub environments,
+  branch/tag rulesets, and the production pilot require maintainer configuration
+  or approval before publication.
 
 ## 3. Scope
 
@@ -109,8 +120,8 @@ successfully.
 **Purpose:** Remove the current risk that commits or pushes include sibling
 projects under `D:\Project`.
 
-**Context brief:** The current `git rev-parse --show-toplevel` resolves to
-`D:\Project`, and that repository contains unrelated projects. The Hound
+**Context brief:** The original `git rev-parse --show-toplevel` resolved to
+`D:\Project`, and that repository contained unrelated projects. The Hound
 remote is configured as a secondary remote. Release work must use a checkout
 whose Git root is exactly the Hound directory.
 
@@ -192,7 +203,7 @@ still needs a clone and development dependencies.
 **Verification:**
 
 ```powershell
-uv tool install "hound @ git+https://github.com/youthisss/hound.git@<reviewed-ref>"
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 hound --version
 hound doctor --output-dir hound-doctor-output --json
 uv tool uninstall hound
@@ -221,8 +232,9 @@ without requiring an actual release tag.
 
 1. Audit `pyproject.toml` metadata for project URLs, authors or maintainers,
    classifiers, keywords, supported Python versions, and license expression.
-2. Confirm the PyPI distribution name `hound` is available or controlled.
-   If not, choose a new distribution name while preserving the `hound` command.
+2. Use the selected PyPI distribution name `hound-tracer` while preserving the
+   `hound` command and `hound` import package. Confirm publisher ownership before
+   the first external publication.
 3. Establish one version source of truth. Avoid manual drift between
    `pyproject.toml` and `src/hound/__init__.py`.
 4. Add a packaging verification job or script that runs:
@@ -537,7 +549,7 @@ Track these after the first PyPI release:
 
 | Risk | Mitigation |
 |---|---|
-| `hound` PyPI name unavailable | Check ownership before workflow work; rename distribution only, preserve CLI name |
+| `hound-tracer` publisher ownership unavailable | Keep pinned GitHub installation; preserve the `hound` CLI/import and do not publish until ownership is configured |
 | Parent Git repository leaks unrelated files | Complete preflight before any implementation or release commit |
 | Manual CI allows broken tags | Make release validation mandatory inside the release workflow |
 | Version drift | Use one version source and enforce tag/version equality |

@@ -13,7 +13,7 @@ package manager tidak memasang proyek lain yang menggunakan nama `hound`:
 ### Jalur 1: Menggunakan uv tool (Rekomendasi End-User, tanpa clone)
 
 ```sh
-uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@fef7efcb2944336ba621e6f097722ae1bfdcae27"
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 hound --version
 hound doctor
 ```
@@ -28,7 +28,7 @@ uv tool uninstall hound-tracer
 ### Jalur 2: Menggunakan pipx
 
 ```sh
-pipx install "hound-tracer @ git+https://github.com/youthisss/hound.git@fef7efcb2944336ba621e6f097722ae1bfdcae27"
+pipx install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 hound --version
 hound doctor
 ```
