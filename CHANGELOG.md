@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed the distribution, import package, persisted paths, generated filenames,
   container/action identity, and public URLs to Hound. This is a breaking rename;
   legacy Python imports and distribution names are not provided.
+- Upgraded pinned GitHub Actions to Node.js 24-compatible releases and Trivy
+  `v0.36.0`, and removed the temporary dependency-audit exclusion.
+- Added release recovery by `source_run_id`, which reuses and verifies retained
+  distributions, checksums, and build identity without rebuilding artifacts.
 
 ## [0.4.0] - 2026-08-07
 

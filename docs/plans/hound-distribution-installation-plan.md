@@ -358,7 +358,9 @@ release governance around tags and publication ordering.
    commit is reachable from the protected release branch, validates it, builds
    once, and promotes the same retained artifacts to PyPI and GitHub Releases.
 3. Avoid rebuilding independently for PyPI and GitHub; publish the same validated
-   artifacts from a single workflow run.
+   artifacts from a single workflow run. If a later promotion fails, require the
+   original Release run ID and download its retained artifacts for recovery rather
+   than rebuilding.
 4. Split jobs and permissions:
    - Build and test: `contents: read` only.
    - Production PyPI: `id-token: write` only, plus `contents: read`, protected by

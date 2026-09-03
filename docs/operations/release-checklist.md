@@ -5,6 +5,7 @@
 - [ ] `git rev-parse --show-toplevel` identifies only the Hound checkout.
 - [ ] `git remote -v` points to `youthisss/hound`.
 - [ ] The release commit is reviewed, reachable from protected `main`, and clean.
+- [ ] The Release workflow is dispatched from protected `main`, not a feature branch.
 - [ ] `CHANGELOG.md` covers behavior, schema, CLI, and Action contract changes.
 - [ ] `hound --version` equals the intended `vX.Y.Z` tag exactly.
 - [ ] The `v*` tag ruleset and `pypi`/`github-release` environment reviewers are active.
@@ -41,6 +42,10 @@
 - Use PEP 440 prerelease versions (`aN`, `bN`, or `rcN`) and set the workflow's `prerelease` input for non-final releases.
 - Bootstrap the `hound-tracer` TestPyPI/PyPI projects with the maintainer account, then restrict publishing to this repository's `testpypi` and `pypi` GitHub environments through Trusted Publishing.
 - If TestPyPI contains the same version with different hashes, increment the version; do not overwrite candidate files.
-- If PyPI succeeds but GitHub Release fails, rerun the same version. `skip-existing` is safe only because the workflow verifies every retained hash before recreating the release.
+- If PyPI succeeds but GitHub Release fails, dispatch the same version again with
+  `source_run_id` set to the original Release run ID. The recovery path downloads
+  that run's distributions, checksums, and identity, verifies the build job and
+  hashes, and never rebuilds the package. `skip-existing` is safe only because the
+  workflow verifies every retained hash before recreating the release.
 - If PyPI fails, leave any GitHub release unpublished and fix forward without rebuilding or moving the tag.
 - If a published artifact is harmful, yank it in PyPI, record the reason in the changelog, and issue a new patch version. Never reuse the version number.

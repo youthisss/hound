@@ -231,7 +231,8 @@ External release gates still requiring operator infrastructure:
   package managers and caches.
 - GitHub `testpypi`, `pypi`, and `github-release` environments now require the
   configured reviewer and protected `main`; `main` requires strict `ci-result`
-  plus one review, and ruleset `22195421` restricts `v*` tag mutation to admins.
+  plus one review, applies those controls to administrators, disables force-push
+  and deletion, and ruleset `22195421` restricts `v*` tag mutation to admins.
 - TestPyPI and PyPI Trusted Publisher identities still require maintainer account
   configuration before the first candidate publication.
 - The mandatory two-repository, 100-300-real-failure pilot must be completed and

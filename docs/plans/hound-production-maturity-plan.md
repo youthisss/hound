@@ -58,13 +58,16 @@ repository findings:
 - The release workflow builds artifacts once, validates wheel and source installs,
   enforces tag/version identity and `main` reachability, generates checksums and
   provenance, promotes through TestPyPI before PyPI, verifies hashes, and creates
-  the GitHub Release from retained artifacts.
+  the GitHub Release from retained artifacts. A `source_run_id` recovery input
+  reuses a prior successful build's retained artifacts without rebuilding.
 - Remaining repository work is incremental mypy coverage for intentionally
   excluded collector/TUI/LLM modules and any evidence-triggered P8 scale work.
 - GitHub release controls were configured on 2026-09-03: protected `main`
-  requires strict `ci-result` and one review, the three release environments
-  require approval and a protected branch, and active ruleset `22195421`
-  restricts `v*` tag creation, updates, and deletion to administrators.
+  requires strict `ci-result` and one review, applies those rules to
+  administrators, disables force-push and deletion, the three release
+  environments require approval and a protected branch, and active ruleset
+  `22195421` restricts `v*` tag creation, updates, and deletion to
+  administrators.
 - Remaining release blockers are TestPyPI/PyPI Trusted Publisher identities and
   the reviewed production pilot. No public package release is claimed yet.
 
@@ -550,7 +553,8 @@ operator process.
 9. Create the GitHub Release from the same validated artifacts. Do not repoint a
    released tag or rebuild during a retry.
 10. Define partial failure recovery:
-    - PyPI succeeded and GitHub Release failed: reuse retained artifacts.
+    - PyPI succeeded and GitHub Release failed: rerun with the original Release
+      run ID so the workflow reuses retained artifacts without rebuilding.
     - GitHub draft exists and PyPI failed: keep it unpublished and fix forward.
     - A bad PyPI version: yank only when necessary and issue a new patch version.
 11. Add a canary or pilot release using sanitized offline fixtures before live LLM
