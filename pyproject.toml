@@ -54,7 +54,7 @@ dev = [
     "pytest",
     "pytest-cov>=6",
     "ruff>=0.12",
-    "twine>=6,<7",
+    "twine>=6,<8",
 ]
 
 [project.scripts]
