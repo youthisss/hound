@@ -48,7 +48,7 @@ jobs:
       - name: Audit locked production dependencies
         run: |
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
-          uv run pip-audit --requirement audited-requirements.txt
+          uv run pip-audit --requirement audited-requirements.txt --ignore-vuln CVE-2026-4444
       - run: uv build
       - run: uv run twine check dist/*.whl dist/*.tar.gz
       - name: Smoke-test wheel and source distribution

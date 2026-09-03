@@ -80,4 +80,4 @@ fi
 if [ -n "${GITHUB_OUTPUT:-}" ] && [ -e "$GITHUB_OUTPUT" ]; then
     chown hound:hound "$GITHUB_OUTPUT"
 fi
-exec su -s /bin/sh hound -c 'exec /app/.venv/bin/hound "$@"' -- action-entrypoint "$@"
+exec su -m -s /bin/sh hound -c 'exec /app/.venv/bin/hound "$@"' -- action-entrypoint "$@"
