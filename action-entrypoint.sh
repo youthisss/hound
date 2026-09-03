@@ -25,6 +25,8 @@ if [ -n "${GITHUB_WORKSPACE:-}" ]; then
         echo "error: GITHUB_WORKSPACE must be an existing directory" >&2
         exit 2
     fi
+    workspace_uid=$(stat -c '%u' "$workspace")
+    workspace_gid=$(stat -c '%g' "$workspace")
 
     resolve_workspace_path() {
         case "$1" in
@@ -81,6 +83,8 @@ fi
 # Analyze untrusted repository artifacts without root privileges.
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     touch "$GITHUB_OUTPUT"
+    github_output_uid=$(stat -c '%u' "$GITHUB_OUTPUT")
+    github_output_gid=$(stat -c '%g' "$GITHUB_OUTPUT")
     chown hound:hound "$GITHUB_OUTPUT"
 fi
 export GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-}"
@@ -88,4 +92,16 @@ export GITHUB_OUTPUT="${GITHUB_OUTPUT:-}"
 export HOME=/home/hound
 export XDG_CONFIG_HOME=/home/hound/.config
 export XDG_CACHE_HOME=/home/hound/.cache
-exec su -m -s /bin/sh -c 'cd "$GITHUB_WORKSPACE" && exec /app/.venv/bin/hound "$@"' -- hound action-entrypoint "$@"
+set +e
+su -m -s /bin/sh -c 'cd "$GITHUB_WORKSPACE" && exec /app/.venv/bin/hound "$@"' -- hound action-entrypoint "$@"
+status=$?
+set -e
+
+# Return generated artifacts to the host runner without making them world-readable.
+if [ -n "${output:-}" ]; then
+    chown -R "$workspace_uid:$workspace_gid" "$output"
+fi
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    chown "$github_output_uid:$github_output_gid" "$GITHUB_OUTPUT"
+fi
+exit "$status"
