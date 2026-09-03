@@ -172,7 +172,10 @@ def test_new_runner_artifacts_produce_valid_pipeline_documents(name, kind, tmp_p
     assert doc["failure"]["kind"] == kind
 
 
-def test_changed_frame_commit_subject_enriches_offline_evidence(fake_repo, tmp_path):
+def test_changed_frame_commit_subject_enriches_offline_evidence(fake_repo, tmp_path, monkeypatch):
+    # This test constructs an isolated repository. Ignore the hosting workflow's
+    # PR commit context, which cannot exist in that temporary repository.
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     repo, path = fake_repo
     cart = path / "app" / "cart.py"
     cart.write_text("class Cart:\n    total = 10.0\n", encoding="utf-8")
