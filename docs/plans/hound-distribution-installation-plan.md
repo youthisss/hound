@@ -53,10 +53,13 @@ assumptions:
   build cache, pip, setuptools, or wheel.
 - Work occurs in the dedicated checkout rooted at `D:\Project\hound`, whose
   `origin` is `https://github.com/youthisss/hound.git`.
+- GitHub release controls were configured on 2026-09-03: protected `main`
+  requires strict `ci-result` and one review, release environments require a
+  reviewer and protected branch, and active ruleset `22195421` restricts `v*`
+  tag creation, updates, and deletion to repository administrators.
 - External release gates remain: `hound-tracer` currently returns 404 on both
-  PyPI indexes; Trusted Publisher identities, protected GitHub environments,
-  branch/tag rulesets, and the production pilot require maintainer configuration
-  or approval before publication.
+  PyPI indexes; TestPyPI/PyPI Trusted Publisher identities and the production
+  pilot require maintainer account access or approval before publication.
 
 ## 3. Scope
 

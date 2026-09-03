@@ -61,9 +61,12 @@ repository findings:
   the GitHub Release from retained artifacts.
 - Remaining repository work is incremental mypy coverage for intentionally
   excluded collector/TUI/LLM modules and any evidence-triggered P8 scale work.
-- Remaining release blockers are external controls: GitHub branch/tag rulesets,
-  protected environment reviewers, TestPyPI/PyPI Trusted Publisher identities,
-  and the reviewed production pilot. No public package release is claimed yet.
+- GitHub release controls were configured on 2026-09-03: protected `main`
+  requires strict `ci-result` and one review, the three release environments
+  require approval and a protected branch, and active ruleset `22195421`
+  restricts `v*` tag creation, updates, and deletion to administrators.
+- Remaining release blockers are TestPyPI/PyPI Trusted Publisher identities and
+  the reviewed production pilot. No public package release is claimed yet.
 
 ## 4. Scope and Non-Goals
 
