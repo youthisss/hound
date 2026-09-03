@@ -110,18 +110,25 @@ jobs:
           touch action-smoke/github-output
           chmod -R 777 action-smoke
           set +e
-          docker run --rm \
+          output=$(docker run --rm \
             -w /workspace \
             -e GITHUB_WORKSPACE=/workspace \
             -e GITHUB_OUTPUT=/workspace/github-output \
             -v "$PWD/action-smoke:/workspace" \
-            hound-action:test analyze --log failure.log --repo-dir . --output-dir out --offline-value true
+            hound-action:test analyze --log failure.log --repo-dir . --output-dir out --offline-value true 2>&1)
           status=$?
           set -e
           echo "Status: $status"
+          echo "Output from docker run:"
+          echo "$output"
+          echo "=== github-output ==="
           cat action-smoke/github-output || true
+          echo "=== ls action-smoke ==="
           ls -la action-smoke || true
+          echo "=== ls action-smoke/out ==="
           ls -la action-smoke/out || true
+          echo "=== report.json ==="
+          cat action-smoke/out/report.json || true
           test "$status" -eq 1
           test -f action-smoke/out/report.json
           grep -q '^report<<TRACEHOUND_' action-smoke/github-output
