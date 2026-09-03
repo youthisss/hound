@@ -108,7 +108,6 @@ jobs:
           mkdir action-smoke
           cp tests/fixtures/pytest_fail.log action-smoke/failure.log
           touch action-smoke/github-output
-          chmod -R 777 action-smoke
           set +e
           output=$(docker run --rm \
             -w /workspace \
@@ -121,24 +120,14 @@ jobs:
           echo "Status: $status"
           echo "Output from docker run:"
           echo "$output"
-          echo "=== github-output ==="
           cat action-smoke/github-output || true
-          echo "=== ls action-smoke ==="
           ls -la action-smoke || true
-          echo "=== ls action-smoke/out ==="
           ls -la action-smoke/out || true
-          echo "=== report.json ==="
-          cat action-smoke/out/report.json || true
           test "$status" -eq 1
-          echo "Status test passed ($status == 1)"
           test -f action-smoke/out/report.json
-          echo "report.json existence test passed"
           grep -q '^report<<TRACEHOUND_' action-smoke/github-output
-          echo "report in github-output test passed"
           grep -q '^severity<<TRACEHOUND_' action-smoke/github-output
-          echo "severity in github-output test passed"
           grep -q '"kind": "test_failure"' action-smoke/out/report.json
-          echo "test_failure in report.json test passed"
       - name: Scan runtime image
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:

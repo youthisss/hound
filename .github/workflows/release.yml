@@ -133,7 +133,6 @@ jobs:
           mkdir action-smoke
           cp tests/fixtures/pytest_fail.log action-smoke/failure.log
           touch action-smoke/github-output
-          chmod -R 777 action-smoke
           set +e
           docker run --rm -w /workspace -e GITHUB_WORKSPACE=/workspace -e GITHUB_OUTPUT=/workspace/github-output \
             -v "$PWD/action-smoke:/workspace" hound-action:release \

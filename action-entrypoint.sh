@@ -72,8 +72,7 @@ if [ -n "${GITHUB_WORKSPACE:-}" ]; then
                 exit 2
             fi
             mkdir -p "$output"
-            chown -R hound:hound "$output"
-            chmod -R 777 "$output"
+            chown hound:hound "$output"
             ;;
         esac
     fi
@@ -83,8 +82,7 @@ fi
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     touch "$GITHUB_OUTPUT"
     chown hound:hound "$GITHUB_OUTPUT"
-    chmod 666 "$GITHUB_OUTPUT"
 fi
 export GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-}"
 export GITHUB_OUTPUT="${GITHUB_OUTPUT:-}"
-exec su -m -s /bin/sh hound -c 'cd "$GITHUB_WORKSPACE" && exec /app/.venv/bin/hound "$@"' action-entrypoint "$@"
+exec su -m -s /bin/sh -c 'cd "$GITHUB_WORKSPACE" && exec /app/.venv/bin/hound "$@"' -- hound action-entrypoint "$@"

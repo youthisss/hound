@@ -10,7 +10,7 @@ def test_action_entrypoint_preserves_first_cli_argument():
 
     script = entrypoint.read_text(encoding="utf-8")
 
-    assert "exec /app/.venv/bin/hound \"$@\"' action-entrypoint \"$@\"" in script
+    assert "-c 'cd \"$GITHUB_WORKSPACE\" && exec /app/.venv/bin/hound \"$@\"' -- hound action-entrypoint \"$@\"" in script
     assert "cd \"$workspace\"" in script
 
 
