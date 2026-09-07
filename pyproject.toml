@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "hound-tracer"
 dynamic = ["version"]
-description = "Hound: all-in-one QA/QC agent that auto-investigates CI/build/test failures, finds root cause, triages, and drafts tickets."
+description = "Hound Tracer: all-in-one QA/QC agent that auto-investigates CI/build/test failures, finds root cause, triages, and drafts tickets."
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
-    { name = "Hound Maintainers", email = "maintainers@hound.local" },
+    { name = "Hound Tracer Maintainers", email = "maintainers@hound-tracer.local" },
 ]
 keywords = ["ci-cd", "root-cause-analysis", "triage", "devops", "qa", "testing"]
 classifiers = [
@@ -40,11 +40,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/youthisss/hound"
-Documentation = "https://github.com/youthisss/hound/tree/main/docs"
-Repository = "https://github.com/youthisss/hound.git"
-Issues = "https://github.com/youthisss/hound/issues"
-Changelog = "https://github.com/youthisss/hound/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/youthisss/hound-tracer"
+Documentation = "https://github.com/youthisss/hound-tracer/tree/main/docs"
+Repository = "https://github.com/youthisss/hound-tracer.git"
+Issues = "https://github.com/youthisss/hound-tracer/issues"
+Changelog = "https://github.com/youthisss/hound-tracer/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

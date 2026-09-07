@@ -1,4 +1,4 @@
-"""Hound CLI."""
+"""Hound Tracer CLI."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +7,6 @@ import re
 import shutil
 import sqlite3
 import sys
-import threading
 from collections.abc import Sequence
 from dataclasses import replace
 from urllib.parse import urlsplit
@@ -16,7 +15,7 @@ from pathlib import Path
 
 from hound import __version__
 from hound import service
-from hound.analyze.cost import estimate_cost
+from hound.analyze.cost import TransportBudget as _BatchBudget, RequestAccount, format_cost
 from hound.collector import CollectionInputError, collect_command, collect_stdin
 from hound.config import PROVIDERS, load_config, set_model_config
 from hound.formatters import format_document, format_runs
@@ -106,7 +105,10 @@ def _add_llm_args(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--provider", default=None,
                        help="LLM provider preset: openai, anthropic, gemini, groq, "
                              "ollama, deepseek, azure, 9router, custom (default: $HOUND_API_PROVIDER or openai)")
-    group.add_argument("--model", default=None, help="model name (default: provider preset or $HOUND_MODEL)")
+    group.add_argument(
+        "--model", default=None,
+        help="model name, or 'auto' for the provider recommendation (default: provider preset or $HOUND_MODEL)",
+    )
     group.add_argument("--base-url", default=None, help="API base URL override (default: $HOUND_BASE_URL)")
     group.add_argument("--api-key", default=None,
                        help="API key override (default: $HOUND_API_KEY or provider env). "
@@ -220,6 +222,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_llm_args(server_cmd)
     providers_cmd = sub.add_parser("providers", help="list built-in LLM provider presets")
     providers_cmd.add_argument("--json", action="store_true", help="output as JSON")
+    models_cmd = sub.add_parser("models", help="list or refresh a provider model catalog")
+    models_cmd.add_argument("--provider", required=True, help="provider ID to inspect")
+    models_cmd.add_argument("--base-url", default=None, help="provider base URL override")
+    models_cmd.add_argument("--api-key", default=None, help="provider API key override")
+    models_cmd.add_argument("--refresh", action="store_true", help="discover and cache the current provider catalog")
+    models_cmd.add_argument("--json", action="store_true", help="output as JSON")
     report_cmd = sub.add_parser("report", help="show a stored analysis run")
     report_cmd.add_argument("run_id", help="run ID under the output directory")
     report_cmd.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
@@ -359,7 +367,7 @@ def build_parser() -> argparse.ArgumentParser:
     gate_cmd.add_argument("--output-dir", dest="out", default=DEFAULT_OUT)
     gate_cmd.add_argument("--output", default=None)
     gate_cmd.add_argument("--report-only", action="store_true")
-    doctor_cmd = sub.add_parser("doctor", help="check local Hound readiness without exposing secrets")
+    doctor_cmd = sub.add_parser("doctor", help="check local Hound Tracer readiness without exposing secrets")
     doctor_cmd.add_argument("--config", default=None, help="optional YAML config path")
     doctor_cmd.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="output directory to check")
     doctor_cmd.add_argument("--json", action="store_true", help="output JSON")
@@ -424,7 +432,7 @@ def run_analyze(args: argparse.Namespace) -> int:
         print("error: analyze requires <log-directory>", file=sys.stderr)
         return 2
     path = Path(input_path).expanduser()
-    legacy_file = bool(getattr(args, "legacy_log", None)) and path.is_file()
+    legacy_file = path.is_file()
     if args.offline_value is not None:
         args.offline = args.offline_value == "true"
     if args.offline and any(
@@ -901,8 +909,8 @@ def run_init(args: argparse.Namespace) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("x", encoding="utf-8") as stream:
             stream.write(
-                "# Hound CI/CD analysis configuration\n"
-                "llm:\n  provider: openai\n  model: gpt-4o-mini\n"
+                "# Hound Tracer CI/CD analysis configuration\n"
+                "llm:\n  provider: openai\n  model: auto  # resolve from the discovered catalog\n"
                 "trust:\n  source_class: local_artifact\n"
                 "redact: true\ncomponents: {}\n"
             )
@@ -936,8 +944,8 @@ def run_log(args: argparse.Namespace) -> int:
         print(f"error: log collection failed: {exc}", file=sys.stderr)
         return 3
 
-    print(f"Hound: log saved to {collected.log_file}", file=sys.stderr)
-    print(f"Hound: metadata saved to {collected.metadata_file}", file=sys.stderr)
+    print(f"Hound Tracer: log saved to {collected.log_file}", file=sys.stderr)
+    print(f"Hound Tracer: metadata saved to {collected.metadata_file}", file=sys.stderr)
     if args.analyze:
         try:
             from hound.output.report import ensure_outdir
@@ -976,7 +984,7 @@ def run_log(args: argparse.Namespace) -> int:
                 source_class=getattr(args, "source_class", None),
             )
             print(format_document(document, "text"), file=sys.stderr)
-            print(f"Hound: report saved to {run_dir}", file=sys.stderr)
+            print(f"Hound Tracer: report saved to {run_dir}", file=sys.stderr)
         except Exception as exc:
             print(f"error: captured log analysis failed: {exc}", file=sys.stderr)
             if collected.exit_code == 0:
@@ -1124,63 +1132,6 @@ def _maybe_file(args: argparse.Namespace, doc: dict, cfg_path: str | None) -> bo
     return valid
 
 
-class _BatchBudget:
-    """Thread-safe budget guardrail for batch LLM usage.
-
-    ``reserve_llm`` atomically consumes a call-attempt slot before work starts;
-    ``record`` releases the in-flight reservation and refunds cache reuse only.
-    The call cap is strict, while the cost cap remains an estimate because
-    actual token usage is only known after a response.
-    """
-
-    def __init__(self, max_calls: int | None, max_cost: float | None):
-        self.max_calls = max_calls
-        self.max_cost = max_cost
-        self.calls = 0
-        self.reserved_calls = 0
-        self.cost = 0.0
-        self.reused_runs = 0
-        self.skipped_runs = 0
-        self.tokens = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        self._lock = threading.Lock()
-
-    def reserve_llm(self) -> bool:
-        with self._lock:
-            if self.max_calls is not None and self.calls >= self.max_calls:
-                return False
-            if self.max_cost is not None and self.cost >= self.max_cost:
-                return False
-            self.calls += 1
-            self.reserved_calls += 1
-            return True
-
-    def record(self, llm_called: bool, cost: float, reused: bool, skipped: bool, usage: dict) -> None:
-        with self._lock:
-            if not skipped:
-                self.reserved_calls -= 1
-            if reused:
-                self.calls = max(0, self.calls - 1)
-            self.cost += max(0.0, cost)
-            if reused:
-                self.reused_runs += 1
-            if skipped:
-                self.skipped_runs += 1
-            for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
-                self.tokens[key] += int(usage.get(key, 0) or 0)
-
-    def snapshot(self) -> dict:
-        with self._lock:
-            return {
-                "schema_version": SCHEMA_VERSION,
-                "llm_calls": self.calls,
-                "estimated_cost_usd": round(self.cost, 6),
-                "reused_runs": self.reused_runs,
-                "budget_skipped_runs": self.skipped_runs,
-                "total_tokens": dict(self.tokens),
-                "limits": {"max_llm_calls": self.max_calls, "max_cost_usd": self.max_cost},
-            }
-
-
 def run_batch(args: argparse.Namespace) -> int:
     from hound.output.report import ensure_outdir
     from hound.ingest.redact import redact_text
@@ -1248,8 +1199,8 @@ def run_batch(args: argparse.Namespace) -> int:
     batch_id = uuid4().hex[:12]
     jobs = max(1, int(getattr(args, "jobs", 1) or 1))
     budget = _BatchBudget(
-        max_calls=int(getattr(args, "max_llm_calls", None) or 0) or None,
-        max_cost=float(getattr(args, "max_cost_usd", None) or 0.0) or None,
+        max_calls=getattr(args, "max_llm_calls", None),
+        max_cost=getattr(args, "max_cost_usd", None),
     )
 
     def _process_one(item: tuple[int, Path]) -> tuple[int, dict | None, str | None, bool]:
@@ -1257,8 +1208,8 @@ def run_batch(args: argparse.Namespace) -> int:
         stem = f"run-{batch_id}-{index:04d}"
         sub_out = out / stem
         print(f"== {redact_text(log.name)[0]} ==", flush=True)
-        allow_llm = budget.reserve_llm()
-        run_config = replace(config, offline=True) if not allow_llm else config
+        account = RequestAccount(budget)
+        run_config = replace(config, request_account=account)
         try:
             doc = service.analyze_log(
                 log,
@@ -1281,11 +1232,11 @@ def run_batch(args: argparse.Namespace) -> int:
                 _config=run_config,
             )
         except FileNotFoundError as exc:
-            budget.record(False, 0.0, False, not allow_llm, {})
+            budget.record(skipped=account.skipped)
             print(f"error: {exc}", file=sys.stderr, flush=True)
             return index, None, None, True
         except Exception as exc:
-            budget.record(False, 0.0, False, not allow_llm, {})
+            budget.record(skipped=account.skipped)
             print(f"error: pipeline failed for {log.name}: {exc}", file=sys.stderr, flush=True)
             return index, None, None, True
 
@@ -1293,13 +1244,9 @@ def run_batch(args: argparse.Namespace) -> int:
         tr = doc["triage"]
         usage = meta.get("usage") or {}
         reused = bool(meta.get("reused", False))
-        llm_called = allow_llm and not reused and meta.get("engine") in {"llm", "merged"}
         budget.record(
-            llm_called=llm_called,
-            cost=estimate_cost(usage, config),
             reused=reused,
-            skipped=not allow_llm,
-            usage=usage,
+            skipped=account.skipped,
         )
         row = {
             "schema_version": SCHEMA_VERSION,
@@ -1313,7 +1260,7 @@ def run_batch(args: argparse.Namespace) -> int:
             "is_duplicate_of": tr["is_duplicate_of"],
             "flaky_suspect": tr["flaky_suspect"],
             "reused": reused,
-            "budget_skipped": not allow_llm,
+            "budget_skipped": account.skipped,
             "usage": usage,
             "ticket_title": doc["ticket"]["title"],
             "report": str(sub_out / "report.json"),
@@ -1358,7 +1305,7 @@ def run_batch(args: argparse.Namespace) -> int:
     print(
         f"usage   : {usage_block['llm_calls']} LLM calls, {usage_block['reused_runs']} reused, "
         f"{usage_block['budget_skipped_runs']} budget-skipped, "
-        f"${usage_block['estimated_cost_usd']:.4f} estimated ({usage_path.name})"
+        f"{format_cost(usage_block['estimated_cost_usd'])} estimated ({usage_path.name})"
     )
     if processing_errors:
         return 3
@@ -1503,6 +1450,36 @@ def run_config_show(args: argparse.Namespace) -> int:
         print(f"trust.source_class {payload['trust']['source_class']}")
         for name, ready in payload["integrations"].items():
             print(f"integration.{name:<7} {'ready' if ready else 'not configured'}")
+    return 0
+
+
+def run_models(args: argparse.Namespace) -> int:
+    """Expose catalog discovery without coupling an analysis run to discovery."""
+    from hound.providers import cache_models, cached_models, discover_models
+
+    try:
+        config = load_config(
+            provider=args.provider,
+            model="auto",
+            base_url=args.base_url,
+            api_key=args.api_key,
+        )
+        if args.refresh:
+            if not config.base_url:
+                raise ValueError(f"provider {config.provider!r} requires a base URL for model discovery")
+            models = discover_models(config.base_url, config.api_key)
+            cache_models(config.provider, config.base_url, models)
+        else:
+            models = cached_models(config.provider, base_url=config.base_url)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps({"provider": config.provider, "base_url": config.base_url, "models": models}, indent=2))
+    elif models:
+        print("\n".join(models))
+    else:
+        print("No cached models. Run `hound models --provider <id> --refresh` or set --model explicitly.")
     return 0
 
 
@@ -1675,6 +1652,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_server(args)
     if args.command in {"list-providers", "providers"}:
         return run_list_providers(args)
+    if args.command == "models":
+        return run_models(args)
     if args.command == "report":
         return run_report(args)
     if args.command in {"list-runs", "runs"}:

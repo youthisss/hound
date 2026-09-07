@@ -38,7 +38,7 @@ def test_specific_deployment_kinds(text, kind):
 
 def test_successful_rollback_is_recovery_not_failure():
     stage, kind, _, _ = parse_log("kubectl rollout undo deployment/api\nrollback completed successfully")
-    assert stage == "deploy"
+    assert stage == "unknown"
     assert kind == "unknown"
 
 

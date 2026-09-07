@@ -13,6 +13,8 @@ must not claim pilot targets are met until reviewed pilot data is attached.
 ## Required pilot measurements
 
 - median triage-time reduction
+- healthy-log false-positive rate, with an explicit healthy-run denominator
+- reviewed root-cause correctness and abstention rate, separate from failure-kind accuracy
 - supported-kind and regression/flaky precision
 - false deduplication and unknown rate
 - ticket edit rate
@@ -32,6 +34,14 @@ and accepted misses.
 Record the reviewed aggregates using
 [`pilot-evidence-template.md`](pilot-evidence-template.md). Do not replace real
 pilot evidence with generated fixtures or the synthetic scale benchmark.
+
+For triage-time comparisons, use matched tasks and record the baseline and
+Hound-assisted time to the same reviewer-confirmed diagnosis. Report sample
+counts and medians; do not infer time savings from processing latency. Review
+cause hypotheses against the eventual fix or other independently collected
+evidence. Count unsupported hypotheses separately from incorrect ones, and
+break correctness down by confidence band and failure category. Include healthy
+and unsupported artifacts so failure-only sampling cannot hide false alarms.
 
 ## Go/no-go
 

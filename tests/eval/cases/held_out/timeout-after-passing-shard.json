@@ -1,0 +1,1 @@
+{"eval_case_version":"1.0","id":"held-timeout-after-passing-shard","artifact":"timeout-after-passing-shard.log","expected":{"stage":"test","kind":"timeout","primary_event":{"stage":"test","kind":"timeout"},"failed_tests":[],"stack_frames":[],"severity_range":["medium"],"duplicate_group":null,"redactions":[],"is_failure":true}}

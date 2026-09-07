@@ -1,0 +1,1 @@
+{"eval_case_version":"1.0","id":"held-deploy-network","artifact":"deploy-network.log","expected":{"stage":"deploy","kind":"network_failure","primary_event":{"stage":"deploy","kind":"network_failure"},"failed_tests":[],"stack_frames":[],"severity_range":["high"],"duplicate_group":null,"redactions":[],"is_failure":true}}

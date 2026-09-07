@@ -1,4 +1,4 @@
-"""Load trusted CI/CD context from collector sidecars or GitHub Actions."""
+"""Load CI/CD context, merging configured fields with log-derived hints."""
 from __future__ import annotations
 
 import json
@@ -19,6 +19,10 @@ def load_context(log_path: Path, text: str, explicit_path: str | None = None) ->
     2. the collector sidecar ``<log>.json`` written by ``hound log``,
        auto-loaded only when no explicit path is given;
     3. GitHub Actions environment when running inside Actions.
+
+    Missing deployment fields are then filled from untrusted log hints.
+    Environment is configuration-only; customer impact may be configured or
+    inferred. DeploymentContext does not record per-field provenance.
     """
     if explicit_path:
         data = _load_json(Path(explicit_path))
@@ -147,7 +151,7 @@ def _detect_customer_impact(text: str) -> str:
     """
     lower = text.lower()
     if re.search(r"\b(?:outage|service disruption|major incident|customer[- ]?facing|"
-                 r"unavailable(?: to customers)?|error budget(?: exhausted)?|sla breach)\b", lower):
+                  r"unavailable(?: to customers)?|sla breach)\b", lower):
         return "outage"
     if re.search(r"\b(?:degraded|partial(?:ly)?|error rate|latency|p95|p99|"
                  r"slow(?:ing|ed)?|intermittent|impacted(?: customers)?)\b", lower):

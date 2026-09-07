@@ -37,7 +37,7 @@ def test_fallback_low_confidence_unknown():
 
 def test_llm_merge(monkeypatch):
     artifacts = make_artifacts("pytest_fail.log")
-    config = Config(api_key="k", offline=False)
+    config = Config(api_key="k", offline=False, model="test-model")
 
     def fake_llm(a, c):
         return {"hypothesis": "Tax rounding bug", "confidence": "high",
@@ -57,9 +57,32 @@ def test_llm_merge(monkeypatch):
     assert any(e.startswith("[rule] ") for e in rc.evidence)
 
 
+def test_auto_model_is_resolved_before_request_and_reported(monkeypatch):
+    artifacts = make_artifacts("pytest_fail.log")
+    config = Config(api_key="k", offline=False, provider="openai", model="auto")
+    seen = {}
+
+    def fake_llm(_artifacts, resolved_config):
+        seen["model"] = resolved_config.model
+        return {
+            "hypothesis": "Tax rounding bug", "confidence": "high",
+            "evidence_refs": ["ev-001"], "contradicting_evidence_refs": [],
+            "missing_information": [], "recommended_checks": [],
+            "fix_suggestion": "use Decimal",
+        }, {}
+
+    monkeypatch.setattr("hound.analyze.rca.resolve_model_name", lambda *_args, **_kwargs: "catalog-model")
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", fake_llm)
+
+    rc = run_analysis(artifacts, config)
+
+    assert seen["model"] == "catalog-model"
+    assert rc.model == "openai:catalog-model"
+
+
 def test_llm_failure_falls_back(monkeypatch):
     artifacts = make_artifacts("pytest_fail.log")
-    config = Config(api_key="k", offline=False)
+    config = Config(api_key="k", offline=False, model="test-model")
 
     def bad_llm(a, c):
         raise LlmError("network down")
@@ -75,12 +98,12 @@ def test_require_llm_raises_when_provider_fails(monkeypatch):
     monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", lambda *_: (_ for _ in ()).throw(TimeoutError()))
     artifacts = make_artifacts("pytest_fail.log")
     with pytest.raises(RuntimeError, match="required LLM analysis failed"):
-        run_analysis(artifacts, Config(api_key="k", require_llm=True))
+        run_analysis(artifacts, Config(api_key="k", model="test-model", require_llm=True))
 
 
 def test_llm_bad_confidence_normalized(monkeypatch):
     artifacts = make_artifacts("pytest_fail.log")
-    config = Config(api_key="k", offline=False)
+    config = Config(api_key="k", offline=False, model="test-model")
 
     def weird_llm(a, c):
         return {"hypothesis": "x", "confidence": "maybe", "evidence_refs": ["ev-001"],
@@ -91,6 +114,24 @@ def test_llm_bad_confidence_normalized(monkeypatch):
     rc = run_analysis(artifacts, config)
     assert rc.confidence == "medium"
     assert rc.engine == "fallback"
+
+
+def test_llm_tolerates_harmless_contract_variations(monkeypatch):
+    artifacts = make_artifacts("pytest_fail.log")
+    payload = {
+        "hypothesis": "Tax rounding bug",
+        "confidence": "HIGH",
+        "evidence_refs": ["ev-001"],
+        "fix_suggestion": "use Decimal",
+        "explanation": "extra field emitted by this model",
+    }
+    monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", lambda *_: (payload, {}))
+
+    rc = run_analysis(artifacts, Config(api_key="k", model="test-model"))
+
+    assert rc.engine == "merged"
+    assert rc.confidence == "high"
+    assert rc.contradicting_evidence_refs == []
 
 
 @pytest.mark.parametrize(
@@ -108,7 +149,7 @@ def test_llm_bad_confidence_normalized(monkeypatch):
 def test_malformed_llm_contract_falls_back(monkeypatch, payload):
     artifacts = make_artifacts("pytest_fail.log")
     monkeypatch.setattr("hound.analyze.rca.analyze_with_llm", lambda *_: (payload, {}))
-    assert run_analysis(artifacts, Config(api_key="k")).engine == "fallback"
+    assert run_analysis(artifacts, Config(api_key="k", model="test-model")).engine == "fallback"
 
 
 def test_offline_ignores_key():

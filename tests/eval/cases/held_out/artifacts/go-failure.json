@@ -1,0 +1,3 @@
+{"Action":"output","Package":"example.test/codec","Test":"TestEncode","Output":"expected encoded size 8, got 7\n"}
+{"Action":"fail","Package":"example.test/codec","Test":"TestEncode","Elapsed":0.01}
+{"Action":"fail","Package":"example.test/codec","Elapsed":0.02}

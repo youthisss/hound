@@ -43,7 +43,7 @@ def format_document(document: dict, output_format: str = "text") -> str:
     hypothesis = _hypothesis(document)
     if output_format == "markdown":
         lines = [
-            "# Hound report",
+            "# Hound Tracer report",
             "",
             f"- **Severity:** {triage['severity']}",
             f"- **Failed step:** {failure['stage']} / {failure['kind']}",

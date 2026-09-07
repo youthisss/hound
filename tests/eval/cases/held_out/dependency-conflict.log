@@ -1,0 +1,4 @@
+npm ci
+npm ERR! code ERESOLVE
+npm ERR! unable to resolve dependency tree
+npm ERR! peer dependency conflict between ui-kit and react

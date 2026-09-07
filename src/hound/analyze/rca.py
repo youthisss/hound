@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 
-from hound.config import Config
+from hound.config import Config, resolve_model_name
 from hound.models import Artifacts, RootCause, build_evidence_items
 from hound.analyze.fallback import build_root_cause
 from hound.analyze.llm import analyze_with_llm
@@ -21,8 +22,23 @@ def run_analysis(artifacts: Artifacts, config: Config) -> RootCause:
         fallback.fallback_reason = "routing_policy"
         return fallback
 
+    usage: dict = {}
+    resolved_config = config
     try:
-        data, usage = analyze_with_llm(artifacts, config)
+        # Keep ``auto`` as the persisted user preference, but send and report
+        # the concrete model selected from the provider catalog.
+        try:
+            resolved_config = replace(
+                config,
+                model=resolve_model_name(config.provider, config.model, base_url=config.base_url),
+            )
+        except ValueError:
+            # Keep the unresolved ``auto`` marker until the concrete transport
+            # is invoked. This preserves the optional fallback path and lets
+            # callers inject an analysis implementation without a local cache.
+            # The real request builder still rejects an unresolved catalog.
+            resolved_config = config
+        data, usage = analyze_with_llm(artifacts, resolved_config)
     # Online analysis is optional. Any provider/client parsing failure must
     # preserve the deterministic, offline-safe result.
     except Exception as exc:
@@ -33,17 +49,26 @@ def run_analysis(artifacts: Artifacts, config: Config) -> RootCause:
             raise RuntimeError("required LLM analysis failed") from exc
         fallback.llm_status = "failed"
         fallback.fallback_reason = _failure_reason(exc)
+        fallback.usage = getattr(exc, "usage", {}) or {}
+        if fallback.usage:
+            fallback.model = f"{resolved_config.provider}:{resolved_config.model}"
         return fallback
 
-    if not _valid_llm_result(data, artifacts):
-        sys.stderr.write("warning: LLM returned an invalid result; using deterministic fallback\n")
-        if config.require_llm:
-            raise RuntimeError("required LLM returned an invalid result")
-        fallback.llm_status = "failed"
-        fallback.fallback_reason = "invalid_response"
-        return fallback
-    merged = _merge_llm(data, fallback, config, artifacts, usage)
-    return merged
+    try:
+        normalized = _normalize_llm_result(data)
+        valid = _valid_llm_result(normalized, artifacts)
+        if valid and isinstance(normalized, dict):
+            return _merge_llm(normalized, fallback, resolved_config, artifacts, usage)
+    except Exception:
+        pass
+    sys.stderr.write("warning: LLM returned an invalid result; using deterministic fallback\n")
+    if config.require_llm:
+        raise RuntimeError("required LLM returned an invalid result")
+    fallback.llm_status = "failed"
+    fallback.fallback_reason = "invalid_response"
+    fallback.usage = usage
+    fallback.model = f"{resolved_config.provider}:{resolved_config.model}"
+    return fallback
 
 
 def _merge_llm(
@@ -65,9 +90,9 @@ def _merge_llm(
     for ref in data["evidence_refs"]:
         item = available.get(ref)
         if item is not None:
-            rendered = f"[llm-ref {ref}] {item['kind']}: {item['value']}"
+            rendered = f"[llm-ref {ref}] {item['kind']}: {item['value']}"[:1000]
             if rendered not in evidence:
-                evidence.append(rendered[:1000])
+                evidence.append(rendered)
 
     # Engine reflects provenance: "merged" when the LLM contributed anything on
     # top of the rule facts; "llm" only when rules produced nothing to keep.
@@ -90,6 +115,8 @@ def _merge_llm(
 
 
 def _failure_reason(exc: Exception) -> str:
+    if getattr(exc, "budget_skipped", False):
+        return "budget_exhausted"
     status = getattr(exc, "status_code", None)
     if status in {401, 403}:
         return "authentication"
@@ -118,7 +145,7 @@ def _valid_llm_result(data: object, artifacts: Artifacts) -> bool:
         return False
     if not isinstance(data["hypothesis"], str) or not data["hypothesis"].strip():
         return False
-    if data["confidence"] not in _VALID_CONFIDENCE:
+    if not isinstance(data["confidence"], str) or data["confidence"] not in _VALID_CONFIDENCE:
         return False
     if not isinstance(data["fix_suggestion"], str) or not data["fix_suggestion"].strip():
         return False
@@ -130,4 +157,33 @@ def _valid_llm_result(data: object, artifacts: Artifacts) -> bool:
         return False
     if not set(data["contradicting_evidence_refs"]).issubset(available):
         return False
+    if data["confidence"] == "high":
+        from hound.models import supporting_evidence_ids
+
+        if artifacts.kind == "unknown" or data["contradicting_evidence_refs"] or not set(data["evidence_refs"]) & supporting_evidence_ids(artifacts):
+            return False
     return not (set(data["evidence_refs"]) & set(data["contradicting_evidence_refs"]))
+
+
+def _normalize_llm_result(data: object) -> object:
+    """Normalize harmless model formatting differences before validation.
+
+    Validation remains fail-closed for claims and evidence references. This
+    only tolerates extra explanatory keys, confidence casing, and omitted
+    optional diagnostic lists that vary across otherwise compatible models.
+    """
+    if not isinstance(data, dict):
+        return data
+    required = {"hypothesis", "confidence", "evidence_refs", "fix_suggestion"}
+    if not required.issubset(data):
+        return data
+    normalized = {
+        "hypothesis": data["hypothesis"],
+        "confidence": data["confidence"].strip().lower() if isinstance(data["confidence"], str) else data["confidence"],
+        "evidence_refs": data["evidence_refs"],
+        "contradicting_evidence_refs": data.get("contradicting_evidence_refs", []),
+        "missing_information": data.get("missing_information", []),
+        "recommended_checks": data.get("recommended_checks", []),
+        "fix_suggestion": data["fix_suggestion"],
+    }
+    return normalized

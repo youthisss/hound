@@ -205,6 +205,7 @@ class RootCause:
     contradicting_evidence_refs: list[str] = field(default_factory=list)
     missing_information: list[str] = field(default_factory=list)
     recommended_checks: list[str] = field(default_factory=list)
+    original_run: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -368,8 +369,29 @@ def _observed_facts(artifacts: Artifacts, evidence: list[dict]) -> list[dict]:
     return facts
 
 
-def score_confidence(artifacts: Artifacts) -> tuple[float, list[str]]:
-    """Score only deterministic observations; never score an LLM assertion."""
+def supporting_evidence_ids(artifacts: Artifacts) -> set[str]:
+    """Evidence of failure, excluding administrative metadata and change lists."""
+    kinds = {"failure_message", "failure_event", "stack_frame", "failed_test",
+             "connector_observation", "metric_sample", "trace_span", "source_context"}
+    refs: set[str] = set()
+    for item in build_evidence_items(artifacts):
+        kind, value = item["kind"], item["value"]
+        if kind not in kinds:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        if kind == "stack_frame" and not value.get("file", "").strip():
+            continue
+        if kind == "failed_test" and not any(value.get(key) for key in ("name", "assertion")):
+            continue
+        if kind == "failure_event" and not value.get("message", "").strip():
+            continue
+        refs.add(item["id"])
+    return refs
+
+
+def score_evidence_completeness(artifacts: Artifacts) -> tuple[float, list[str]]:
+    """Measure collected observations, not the probability a hypothesis is true."""
     score = 0.1
     reasons: list[str] = []
     if artifacts.kind != "unknown":
@@ -394,12 +416,19 @@ def score_confidence(artifacts: Artifacts) -> tuple[float, list[str]]:
     return round(min(score, 0.95), 2), reasons or ["no deterministic failure evidence"]
 
 
+def score_confidence(artifacts: Artifacts) -> tuple[float, list[str]]:
+    """Compatibility alias for the historical evidence-completeness score."""
+    return score_evidence_completeness(artifacts)
+
+
 def _analysis_section(artifacts: Artifacts, root_cause: RootCause, generated_at: str) -> dict:
     evidence = build_evidence_items(artifacts, generated_at)
     available = {item["id"] for item in evidence}
     supporting = [ref for ref in root_cause.evidence_refs if ref in available]
     contradicting = [ref for ref in root_cause.contradicting_evidence_refs if ref in available]
-    if supporting:
+    if artifacts.kind == "unknown" and root_cause.engine == "fallback":
+        support_status = "insufficient_evidence"
+    elif set(supporting) & supporting_evidence_ids(artifacts):
         support_status = "supported"
     elif artifacts.kind == "unknown" or not evidence:
         support_status = "insufficient_evidence"
@@ -411,7 +440,11 @@ def _analysis_section(artifacts: Artifacts, root_cause: RootCause, generated_at:
     checks = list(dict.fromkeys(root_cause.recommended_checks))
     if not checks and root_cause.fix_suggestion:
         checks = [root_cause.fix_suggestion]
-    score, reasons = score_confidence(artifacts)
+    score, reasons = score_evidence_completeness(artifacts)
+    reasons = [
+        "score measures evidence completeness, not hypothesis probability; band reports hypothesis confidence",
+        *reasons,
+    ]
     hypothesis = {
         "id": "hyp-001",
         "statement": root_cause.hypothesis,

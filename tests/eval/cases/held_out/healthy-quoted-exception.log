@@ -1,0 +1,4 @@
+pytest
+tests/test_errors.py::test_error_message PASSED
+Captured stdout: expected diagnostic string is "AssertionError: invalid count"
+1 passed in 0.02s

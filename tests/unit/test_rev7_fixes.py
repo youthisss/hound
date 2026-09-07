@@ -79,6 +79,7 @@ def test_live_owner_lock_blocks_but_dead_owner_lock_recovered(tmp_path, monkeypa
 
     monkeypatch.setattr(dedup, "_LOCK_RETRIES", 3)
     monkeypatch.setattr(dedup, "_LOCK_RETRY_DELAY", 0.01)
+    dedup.configure_store("file")
 
     make_artifacts("pytest_fail.log")
     state = str(tmp_path / "state.json")
@@ -316,8 +317,11 @@ def test_tui_lists_structured_artifacts_alongside_logs(tmp_path):
             await pilot.pause()
             (tmp_path / "junit.xml").write_text(JUNIT_XML, encoding="utf-8")
             app.action_refresh()
-            await pilot.pause()
-            await pilot.pause()
+            for _ in range(200):
+                await pilot.pause(0.05)
+                items = app.query_one("#log-list", ListView)
+                if items.children and "TEST" in str(items.children[0].query_one(Static).renderable):
+                    break
             items = app.query_one("#log-list", ListView)
             names = {str(child.query_one(Static).renderable).splitlines()[0].split()[0] for child in items.children}
             assert names == {"junit.xml"}

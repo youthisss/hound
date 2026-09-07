@@ -1,0 +1,1 @@
+{"eval_case_version":"1.0","id":"held-dependency-conflict","artifact":"dependency-conflict.log","expected":{"stage":"build","kind":"dependency_resolution","primary_event":{"stage":"build","kind":"dependency_resolution"},"failed_tests":[],"stack_frames":[],"severity_range":["medium","high"],"duplicate_group":null,"redactions":[],"is_failure":true}}

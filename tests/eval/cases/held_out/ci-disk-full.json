@@ -1,0 +1,1 @@
+{"eval_case_version":"1.0","id":"held-ci-disk-full","artifact":"ci-disk-full.log","expected":{"stage":"ci","kind":"disk_full","primary_event":{"stage":"ci","kind":"disk_full"},"failed_tests":[],"stack_frames":[],"severity_range":["high"],"duplicate_group":null,"redactions":[],"is_failure":true}}

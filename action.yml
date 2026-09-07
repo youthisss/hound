@@ -1,4 +1,4 @@
-name: "Hound"
+name: "Hound Tracer"
 description: "Auto-investigate CI/CD failures: root cause -> triage -> ticket draft."
 branding:
   icon: "search"

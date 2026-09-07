@@ -1,6 +1,6 @@
-# Contributing to Hound
+# Contributing to Hound Tracer
 
-Thank you for your interest in contributing to Hound! We welcome contributions from the community.
+Thank you for your interest in contributing to Hound Tracer! We welcome contributions from the community.
 
 ## Code of Conduct
 
@@ -17,8 +17,8 @@ Please be respectful, constructive, and collaborative in all communications and 
 
 1. Fork and clone the repository:
    ```sh
-   git clone https://github.com/youthisss/hound.git
-   cd hound
+   git clone https://github.com/youthisss/hound-tracer.git
+   cd hound-tracer
    ```
 
 2. Create virtual environment and install dev dependencies:

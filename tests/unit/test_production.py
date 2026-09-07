@@ -254,6 +254,34 @@ class TestLlm:
         assert usage["prompt_tokens"] == 10
         assert usage["total_tokens"] == 15
 
+    def test_accepts_json_wrapped_in_model_commentary(self, monkeypatch):
+        from hound.analyze.llm import analyze_with_llm
+
+        message = type("Msg", (), {"content": 'Result follows:\n```json\n{"hypothesis": "h"}\n```'})()
+        response = type("Resp", (), {"choices": [type("Choice", (), {"message": message})()], "usage": None})()
+        client = type("Client", (), {})()
+        client.chat = type("Chat", (), {})()
+        client.chat.completions = type("Completions", (), {"create": lambda self, **kwargs: response})()
+        monkeypatch.setattr("hound.analyze.llm._make_client", lambda cfg: client)
+
+        data, _usage = analyze_with_llm(make_artifacts("pytest_fail.log"), self._config())
+
+        assert data == {"hypothesis": "h"}
+
+    def test_accepts_content_parts_from_compatible_provider(self, monkeypatch):
+        from hound.analyze.llm import analyze_with_llm
+
+        message = type("Msg", (), {"content": [{"type": "text", "text": '{"hypothesis": "h"}'}]})()
+        response = type("Resp", (), {"choices": [type("Choice", (), {"message": message})()], "usage": None})()
+        client = type("Client", (), {})()
+        client.chat = type("Chat", (), {})()
+        client.chat.completions = type("Completions", (), {"create": lambda self, **kwargs: response})()
+        monkeypatch.setattr("hound.analyze.llm._make_client", lambda cfg: client)
+
+        data, _usage = analyze_with_llm(make_artifacts("pytest_fail.log"), self._config())
+
+        assert data == {"hypothesis": "h"}
+
     def test_usage_in_doc_meta(self, tmp_path):
         from hound.pipeline import analyze
 
@@ -396,7 +424,7 @@ class TestTrackers:
 
         monkeypatch.setattr("hound.output.slack.urlopen", fake_urlopen)
         send_slack(self._ticket(), "https://hooks.slack.com/services/abc")
-        assert captured["payload"]["text"].startswith("*Hound:")
+        assert captured["payload"]["text"].startswith("*Hound Tracer:")
 
 
 # -------------------------------------------------------- config discovery

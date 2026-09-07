@@ -1,0 +1,3 @@
+npm run build
+src/cart.ts(9,7): error TS2322: Type 'string' is not assignable to type 'number'.
+Asset upload completed successfully.

@@ -1,0 +1,1 @@
+{"eval_case_version":"1.0","id":"dev-deploy-image-pull","artifact":"deploy-image-pull.log","expected":{"stage":"deploy","kind":"image_pull_error","primary_event":{"stage":"deploy","kind":"image_pull_error"},"failed_tests":[],"stack_frames":[],"severity_range":["high"],"duplicate_group":null,"redactions":[],"is_failure":true}}

@@ -1,0 +1,3 @@
+helm upgrade catalog-preview ./chart
+Error: network unreachable while connecting to cluster endpoint
+Release catalog-preview failed

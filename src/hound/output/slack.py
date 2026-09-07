@@ -34,7 +34,7 @@ def send_slack(ticket: Ticket, webhook_url: str) -> None:
     safe_body = _escape_mrkdwn(ticket.body_md[:2000])
     payload = json.dumps(
         {
-            "text": f"*Hound: {safe_title}*\n{safe_body}",
+            "text": f"*Hound Tracer: {safe_title}*\n{safe_body}",
         }
     ).encode("utf-8")
     request = Request(

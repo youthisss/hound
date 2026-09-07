@@ -84,7 +84,7 @@ def test_doctor_json_is_machine_readable(tmp_path, monkeypatch, capsys):
     assert payload["config"]["api_key"] == "configured"
 
 
-@pytest.mark.parametrize("path_kind", ["missing", "file", "empty"])
+@pytest.mark.parametrize("path_kind", ["missing", "empty"])
 def test_analyze_validates_directory(tmp_path, path_kind, capsys):
     path = tmp_path / path_kind
     if path_kind == "file":
@@ -94,6 +94,12 @@ def test_analyze_validates_directory(tmp_path, path_kind, capsys):
 
     assert main(["analyze", str(path), "--offline"]) == 2
     assert "error:" in capsys.readouterr().err
+
+
+def test_analyze_accepts_single_artifact_file(tmp_path):
+    artifact = tmp_path / "artifact.log"
+    artifact.write_text("pytest\nFAILED tests/test_a.py::test_a - AssertionError: mismatch\n", encoding="utf-8")
+    assert main(["analyze", str(artifact), "--offline", "--out", str(tmp_path / "out")]) == 1
 
 
 def test_json_output_is_valid_and_quiet(tmp_path, capsys):
@@ -273,8 +279,6 @@ def test_offline_rejects_network_integrations(tmp_path, capsys):
 
 
 def test_config_set_model_preserves_config(tmp_path, capsys):
-    from hound.config import PROVIDERS
-
     config = tmp_path / ".hound.yml"
     config.write_text("redact: true\ncomponents:\n  src/*: core\n", encoding="utf-8")
 
@@ -282,8 +286,29 @@ def test_config_set_model_preserves_config(tmp_path, capsys):
     text = config.read_text(encoding="utf-8")
     assert "components:" in text
     assert "provider: gemini" in text
-    assert f"model: {PROVIDERS['gemini']['default_model']}" in text
+    assert "model: auto" in text
     assert "API" not in capsys.readouterr().out
+
+
+def test_models_refresh_discovers_and_caches_catalog(monkeypatch, capsys):
+    from hound.cli import main
+
+    cached = {}
+    monkeypatch.setattr("hound.providers.discover_models", lambda _url, _key: ["team/model-b", "team/model-a"])
+    monkeypatch.setattr(
+        "hound.providers.cache_models",
+        lambda provider, base_url, models: cached.update(provider=provider, base_url=base_url, models=models),
+    )
+
+    assert main([
+        "models", "--provider", "openai", "--base-url", "https://models.example/v1",
+        "--api-key", "key", "--refresh",
+    ]) == 0
+    assert cached == {
+        "provider": "openai", "base_url": "https://models.example/v1",
+        "models": ["team/model-b", "team/model-a"],
+    }
+    assert capsys.readouterr().out.splitlines() == ["team/model-b", "team/model-a"]
 
 
 def test_report_reads_run_by_id(tmp_path, capsys):

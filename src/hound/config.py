@@ -14,7 +14,7 @@ from hound.fsio import atomic_write
 from hound.models import KINDS
 from hound.trust import policy_for, resolve_source_class
 
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "auto"
 DEFAULT_CONFIG_PATH = Path(".hound.yml")
 
 CONFIG_SCHEMA: dict[str, object] = {
@@ -118,7 +118,6 @@ def _validate_http_url(value: object, label: str) -> str:
 PROVIDERS: dict[str, dict] = {
     "openai": {
         "base_url": "https://api.openai.com/v1",
-        "default_model": "gpt-4o-mini",
         "env": {"api_key": "OPENAI_API_KEY", "model": "OPENAI_MODEL", "base_url": "OPENAI_BASE_URL"},
     },
     # Note: Anthropic's native API is not OpenAI-compatible. This preset only
@@ -126,42 +125,34 @@ PROVIDERS: dict[str, dict] = {
     # front of Anthropic (or a gateway that translates the protocol).
     "anthropic": {
         "base_url": None,
-        "default_model": "claude-sonnet-4-20250514",
         "env": {"api_key": "ANTHROPIC_API_KEY", "model": "ANTHROPIC_MODEL", "base_url": "ANTHROPIC_BASE_URL"},
     },
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "default_model": "gemini-3.7-flash",
         "env": {"api_key": "GEMINI_API_KEY", "model": "GEMINI_MODEL", "base_url": "GEMINI_BASE_URL"},
     },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
-        "default_model": "llama-3.3-70b-versatile",
         "env": {"api_key": "GROQ_API_KEY", "model": "GROQ_MODEL", "base_url": "GROQ_BASE_URL"},
     },
     "ollama": {
         "base_url": "http://localhost:11434/v1",
-        "default_model": "llama3.1",
         "env": {"model": "OLLAMA_MODEL", "base_url": "OLLAMA_BASE_URL"},
     },
     "deepseek": {
         "base_url": "https://api.deepseek.com/v1",
-        "default_model": "deepseek-chat",
         "env": {"api_key": "DEEPSEEK_API_KEY", "model": "DEEPSEEK_MODEL", "base_url": "DEEPSEEK_BASE_URL"},
     },
     "9router": {
         "base_url": "http://127.0.0.1:20128/v1",
-        "default_model": "ag/gemini-3.7-flash-low",
         "env": {"api_key": "NINE_ROUTER_API_KEY", "model": "NINE_ROUTER_MODEL", "base_url": "NINE_ROUTER_BASE_URL"},
     },
     "azure": {
         "base_url": None,  # Azure needs a custom base URL, always
-        "default_model": "",
         "env": {"api_key": "AZURE_OPENAI_API_KEY", "model": "AZURE_OPENAI_MODEL", "base_url": "AZURE_OPENAI_BASE_URL"},
     },
     "custom": {
         "base_url": None,
-        "default_model": "",
         "env": {"api_key": "CUSTOM_API_KEY", "model": "CUSTOM_MODEL", "base_url": "CUSTOM_BASE_URL"},
     },
 }
@@ -193,6 +184,34 @@ def _effective_providers() -> dict[str, dict]:
     return providers
 
 
+def resolve_model_name(provider: str, model: str, *, base_url: str | None = None) -> str:
+    """Resolve ``auto`` from a user-managed or discovered provider catalog.
+
+    Analysis stays cache-only: it never sends a surprise discovery request.
+    Built-in providers deliberately have no hard-coded model. A custom
+    provider may define a user-owned preferred model, otherwise the first
+    cached catalog entry is selected deterministically.
+    """
+    if model.strip().lower() != "auto":
+        return model
+
+    from hound.providers import cached_models
+
+    preset = _effective_providers()[provider]
+    default = str(preset.get("default_model") or "").strip()
+    configured = [str(value) for value in preset.get("models", []) if str(value).strip()]
+    discovered = cached_models(provider, base_url=base_url)
+    available = list(dict.fromkeys([*configured, *discovered]))
+    if default:
+        return default
+    if available:
+        return available[0]
+    raise ValueError(
+        f"provider {provider!r} has no cached model catalog; "
+        "discover models or select one explicitly with --model"
+    )
+
+
 def _env(name: str | None) -> str | None:
     if not name:
         return None
@@ -211,6 +230,7 @@ class Config:
     max_retries: int = 3
     max_concurrency: int = 4
     offline: bool = False
+    request_account: object | None = field(default=None, repr=False, compare=False)
     redact: bool = True
     components: dict[str, str] = field(default_factory=dict)
     state_file: str | None = None
@@ -306,7 +326,7 @@ def load_config(
     preset = _effective_providers()[provider]
     env = preset.get("env", {})
 
-    # 2) Precedence ladder: CLI > YAML > HOUND_* > Provider env > OPENAI_* env > Preset default
+    # 2) Precedence ladder: CLI > YAML > HOUND_* > Provider env > auto.
     p_key_env = env.get("api_key")
     yaml_key = llm_cfg.get("api_key")
     if yaml_key:
@@ -352,10 +372,6 @@ def load_config(
             legacy_url = os.environ.get("OPENAI_BASE_URL")
             if legacy_url:
                 base_url = legacy_url
-
-        # If we got the preset DEFAULT_MODEL and no HOUND_ config was set, check OPENAI_MODEL
-        if model == preset.get("default_model") and not llm_cfg.get("model") and not _env(p_model_env):
-            model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
 
     if not str(model).strip():
         raise ValueError("model must not be empty")
@@ -652,11 +668,10 @@ def set_model_config(value: str, config_path: str | Path = DEFAULT_CONFIG_PATH) 
     if llm is not None and not isinstance(llm, dict):
         raise ValueError(f"config llm section must be a mapping: {path}")
     llm = dict(llm or {})
-    if value.lower() in PROVIDERS:
+    if value.lower() in _effective_providers():
         provider = value.lower()
         llm["provider"] = provider
-        if default_model := PROVIDERS[provider].get("default_model"):
-            llm["model"] = default_model
+        llm["model"] = "auto"
     else:
         llm["model"] = value
     data["llm"] = llm

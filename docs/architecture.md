@@ -150,7 +150,7 @@ hound/
 
 `models.validate(doc) -> None` reads both v1.4 and v2.0 and raises on missing fields/types. New writes use v2.0. `root_cause` remains the compatibility projection; v2.0 consumers use `analysis` for typed facts, provenance, citations, missing information, and checks.
 
-Evidence IDs are deterministic counters scoped to one report (`ev-001`, `ev-002`, ...), never hashes of evidence values. The numeric confidence score is computed only from deterministic observations; the human-readable confidence band remains separate. Unknown, overlapping, or otherwise malformed LLM references invalidate the LLM result and trigger deterministic fallback. The normative machine contract and reader fixtures are in `docs/schema/rca-v2.0.schema.json` and `tests/golden/rca-v*.json`.
+Evidence IDs are deterministic counters scoped to one report (`ev-001`, `ev-002`, ...), never hashes of evidence values. The numeric observation score measures evidence completeness, not a calibrated probability of root-cause correctness. Hypothesis confidence is separately constrained by available support and contradictions. Unknown, overlapping, or otherwise malformed LLM references invalidate the LLM result and trigger deterministic fallback. The normative machine contract and reader fixtures are in `docs/schema/rca-v2.0.schema.json` and `tests/golden/rca-v*.json`.
 
 ## Contracts between stages
 
@@ -172,6 +172,7 @@ Evidence IDs are deterministic counters scoped to one report (`ev-001`, `ev-002`
 - Repository-local config is not auto-discovered because analyzed repositories are untrusted input.
 - Redaction: on by default; `--allow-unredacted` or `redact: false` disables.
 - Dedup store: `file` (locked JSON at `<out>/.hound/state.json`, atomic `os.replace`, bounded to 1000 entries) or `sqlite` (`<out>/.hound/state.sqlite3`, WAL, atomic upserts, bounded by `max_entries` (default 50000) + `retention_days` (default 90)). HTTP state is disabled until conditional writes are supported.
+- Incident keys and RCA cache validity are independent: versioned project-scoped identities preserve assertion differences; context fingerprints reject snapshots when analysis inputs change. Legacy unscoped entries remain historical records and cannot authorize automatic reuse. See the [migration contract](reference/schema-migration-v1.4-to-v2.0.md).
 - LLM resilience: `max_retries` (default 3) with exponential backoff on 429/5xx; token usage captured into `meta.usage`; `max_concurrency` (default 4, `HOUND_MAX_CONCURRENCY`) throttles simultaneous in-process LLM calls during parallel `--jobs` runs.
 - Server limits: `--workers` (default 4), `--max-queue` (default 64), `--rate-limit` (default 60/min/client), `--job-ttl` (default 3600s); each also settable via `HOUND_SERVER_WORKERS`/`HOUND_SERVER_MAX_QUEUE`/`HOUND_SERVER_RATE_LIMIT`/`HOUND_SERVER_JOB_TTL`.
 

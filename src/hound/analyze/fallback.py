@@ -84,7 +84,9 @@ def build_root_cause(artifacts: Artifacts) -> RootCause:
     if artifacts.enrichment:
         evidence.append(f"read-only deployment evidence collected: {len(artifacts.enrichment)} command results")
 
-    if any(path_matches(frame, changed) for frame in frame_files):
+    if kind not in HYPOTHESIS_BY_KIND or kind == "unknown":
+        confidence = "low"
+    elif any(path_matches(frame, changed) for frame in frame_files):
         confidence = "high"
     elif artifacts.frames or artifacts.failed_tests:
         confidence = "medium"
@@ -112,7 +114,8 @@ def build_root_cause(artifacts: Artifacts) -> RootCause:
         engine="fallback",
         evidence_refs=[item["id"] for item in build_evidence_items(artifacts)],
         missing_information=(
-            ["No direct stack frame, failed test, or change intersection was observed."]
+            ["No recognized failure kind was observed." if kind not in HYPOTHESIS_BY_KIND or kind == "unknown"
+             else "No direct stack frame, failed test, or change intersection was observed."]
             if confidence == "low" else []
         ),
         recommended_checks=[fix],

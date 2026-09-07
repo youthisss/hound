@@ -1,0 +1,3 @@
+kubectl describe pod catalog-preview
+Warning Failed Failed to pull image "registry.example.test/catalog:missing": manifest unknown
+State: Waiting Reason: ImagePullBackOff

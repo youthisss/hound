@@ -1,0 +1,1 @@
+{"eval_case_version":"1.0","id":"dev-ci-rate-limit","artifact":"ci-rate-limit.log","expected":{"stage":"ci","kind":"api_rate_limited","primary_event":{"stage":"ci","kind":"api_rate_limited"},"failed_tests":[],"stack_frames":[],"severity_range":["medium"],"duplicate_group":null,"redactions":[],"is_failure":true}}

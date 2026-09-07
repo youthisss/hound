@@ -28,7 +28,7 @@ USER hound
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-LABEL org.opencontainers.image.title="Hound" \
+LABEL org.opencontainers.image.title="Hound Tracer" \
       org.opencontainers.image.licenses="MIT"
 
 ENTRYPOINT ["/app/.venv/bin/hound"]
