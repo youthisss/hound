@@ -35,3 +35,25 @@ def test_authenticated_model_discovery_disables_redirects():
     from hound.providers import _NoRedirect
 
     assert _NoRedirect().redirect_request(None, None, 302, "Found", {}, "https://other.example/models") is None
+
+
+def test_auto_model_uses_first_discovered_catalog_entry(monkeypatch):
+    from hound.config import PROVIDERS, resolve_model_name
+
+    monkeypatch.setattr("hound.providers.cached_models", lambda *_args, **_kwargs: ["other", "newly-added-model"])
+    assert "default_model" not in PROVIDERS["openai"]
+    assert resolve_model_name("openai", "auto") == "other"
+
+
+def test_auto_model_uses_discovered_model_when_default_is_unavailable(monkeypatch):
+    from hound.config import resolve_model_name
+
+    monkeypatch.setattr("hound.providers.cached_models", lambda *_args, **_kwargs: ["available-a", "available-b"])
+    assert resolve_model_name("openai", "auto") == "available-a"
+
+
+def test_manual_model_is_not_rewritten(monkeypatch):
+    from hound.config import resolve_model_name
+
+    monkeypatch.setattr("hound.providers.cached_models", lambda *_args, **_kwargs: ["other"])
+    assert resolve_model_name("openai", "my-model") == "my-model"

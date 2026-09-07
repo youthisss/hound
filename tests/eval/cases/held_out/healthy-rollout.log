@@ -1,0 +1,3 @@
+kubectl rollout status deployment/catalog
+deployment "catalog" successfully rolled out
+All replicas ready.

@@ -19,6 +19,10 @@ reviewed aggregate evidence. Raw production logs remain outside the repository.
 | Metric | Result | Accepted limitation |
 |---|---:|---|
 | Median triage-time reduction | `<value>` | `<none or rationale>` |
+| Healthy-log false-positive rate / healthy support | `<rate / count>` | `<none or rationale>` |
+| Reviewed cause correctness / reviewed support | `<rate / count>` | `<none or rationale>` |
+| Unsupported / incorrect cause hypotheses | `<counts>` | `<none or rationale>` |
+| Cause correctness by confidence band | `<rates / counts>` | `<none or rationale>` |
 | Supported-kind precision | `<value>` | `<none or rationale>` |
 | Regression/flaky precision | `<value>` | `<none or rationale>` |
 | False deduplication rate | `<value>` | `<none or rationale>` |

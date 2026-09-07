@@ -13,7 +13,7 @@ package manager tidak memasang proyek lain yang menggunakan nama `hound`:
 ### Jalur 1: Menggunakan uv tool (Rekomendasi End-User, tanpa clone)
 
 ```sh
-uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 hound --version
 hound doctor
 ```
@@ -28,7 +28,7 @@ uv tool uninstall hound-tracer
 ### Jalur 2: Menggunakan pipx
 
 ```sh
-pipx install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
+pipx install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 hound --version
 hound doctor
 ```
@@ -40,14 +40,14 @@ Setelah rilis PyPI pertama diverifikasi, source Git dapat diganti dengan
 ### Jalur 3: Docker
 
 ```sh
-docker run --rm -v ${PWD}:/work -w /work ghcr.io/youthisss/hound:latest analyze /work/ci-logs
+docker run --rm -v ${PWD}:/work -w /work ghcr.io/youthisss/hound-tracer:latest analyze /work/ci-logs
 ```
 
 ### Jalur 4: Setup Kontributor (Clone Repo)
 
 ```sh
-git clone https://github.com/youthisss/hound.git
-cd hound
+git clone https://github.com/youthisss/hound-tracer.git
+cd hound-tracer
 uv sync --extra dev
 uv run hound --version
 ```

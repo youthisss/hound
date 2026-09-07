@@ -1,0 +1,1 @@
+{"eval_case_version":"1.0","id":"held-assertion-count-repeat","artifact":"assertion-count-repeat.log","expected":{"stage":"test","kind":"test_failure","primary_event":{"stage":"test","kind":"test_failure"},"failed_tests":["test_inventory"],"stack_frames":[],"severity_range":["medium"],"duplicate_group":"inventory-count","redactions":[],"is_failure":true}}

@@ -1,0 +1,1 @@
+{"eval_case_version":"1.0","id":"dev-build-import","artifact":"build-import.log","expected":{"stage":"build","kind":"import_error","primary_event":{"stage":"build","kind":"import_error"},"failed_tests":[],"stack_frames":[{"file":"tools/package.py","line":6,"function":"<module>"}],"severity_range":["medium","high"],"duplicate_group":null,"redactions":[],"is_failure":true}}

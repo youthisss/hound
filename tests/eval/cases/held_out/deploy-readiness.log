@@ -1,0 +1,3 @@
+kubectl describe pod catalog-preview
+Warning Unhealthy Readiness probe failed: HTTP probe failed with statuscode: 503
+Image download completed successfully.

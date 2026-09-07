@@ -77,14 +77,38 @@ def gather(repo_dir: str | None, base_sha: str = "", head_sha: str = "") -> GitI
     try:
         info.head = _run(repo, "rev-parse", "--verify", f"{head_sha or 'HEAD'}^{{commit}}")
     except (OSError, subprocess.SubprocessError) as exc:
-        _warn("head commit", exc)
+        # CI metadata can refer to commits that are not present in a bounded
+        # checkout (and tests may intentionally use a temporary repository).
+        # Keep the local repository useful instead of dropping all Git context.
+        if head_sha:
+            try:
+                info.head = _run(repo, "rev-parse", "--verify", "HEAD^{commit}")
+            except (OSError, subprocess.SubprocessError):
+                _warn("head commit", exc)
+        else:
+            _warn("head commit", exc)
+
+    changed: list[str] = []
     try:
         diff_target = f"{base_sha}...{head_sha or 'HEAD'}" if base_sha else "HEAD"
         changed = _run(repo, "diff", "--no-ext-diff", "--name-only", diff_target).splitlines()
-        untracked = _run(repo, "ls-files", "--others", "--exclude-standard").splitlines()
-        info.changed_files = sorted(set(filter(None, changed + untracked)))
     except (OSError, subprocess.SubprocessError) as exc:
-        _warn("changed files", exc)
+        # A PR base/head pair is not guaranteed to exist in the analyzed
+        # repository. Fall back to the local worktree, which is the correct
+        # boundary for source-context and offline evidence enrichment.
+        if base_sha or head_sha:
+            try:
+                changed = _run(repo, "diff", "--no-ext-diff", "--name-only", "HEAD").splitlines()
+            except (OSError, subprocess.SubprocessError):
+                _warn("changed files", exc)
+        else:
+            _warn("changed files", exc)
+    try:
+        untracked = _run(repo, "ls-files", "--others", "--exclude-standard").splitlines()
+    except (OSError, subprocess.SubprocessError) as exc:
+        _warn("untracked files", exc)
+        untracked = []
+    info.changed_files = sorted(set(filter(None, changed + untracked)))
     return info
 
 

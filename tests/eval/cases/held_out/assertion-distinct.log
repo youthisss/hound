@@ -1,0 +1,3 @@
+pytest
+FAILED tests/test_inventory.py::test_inventory - AssertionError: expected count 4, got 2
+8 passed, 1 failed in 0.40s

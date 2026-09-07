@@ -51,8 +51,9 @@ def render_md(doc: dict) -> str:
     t = doc["ticket"]
 
     lines = [
-        "# RCA Report",
+        "# Root Cause Analysis Report",
         "",
+        "## Investigation details",
         f"- **Engine**: {doc['meta']['engine']}" + (f" ({doc['meta']['model']})" if doc["meta"]["model"] else ""),
         f"- **Log**: {escape_text(doc['meta']['log_file'])}",
         f"- **Generated**: {doc['meta']['generated_at']}",

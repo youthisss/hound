@@ -343,7 +343,7 @@ class _Server(ThreadingHTTPServer):
 
 class _Handler(BaseHTTPRequestHandler):
     server: _Server
-    server_version = "Hound/1.0"
+    server_version = "Hound-Tracer/1.0"
 
     def setup(self) -> None:
         super().setup()

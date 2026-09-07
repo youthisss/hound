@@ -1,0 +1,1 @@
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"synthetic-checker"}},"results":[{"ruleId":"UNUSED","level":"warning","message":{"text":"unused variable"}},{"ruleId":"TYPE","level":"error","message":{"text":"incompatible return type in catalog adapter"}}]}]}

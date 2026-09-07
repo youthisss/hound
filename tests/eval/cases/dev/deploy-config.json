@@ -1,0 +1,1 @@
+{"eval_case_version":"1.0","id":"dev-deploy-config","artifact":"deploy-config.log","expected":{"stage":"deploy","kind":"config_missing","primary_event":{"stage":"deploy","kind":"config_missing"},"failed_tests":[],"stack_frames":[],"severity_range":["high"],"duplicate_group":null,"redactions":[],"is_failure":true}}

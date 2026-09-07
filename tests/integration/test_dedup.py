@@ -11,7 +11,7 @@ from tests.conftest import make_artifacts
 
 
 def test_normalize_strips_noise():
-    assert normalize("ERROR at /tmp/x file.py:42 [0x1a2b] 2026-01-01 12:00:00") == "error at file.py"
+    assert normalize("ERROR at /tmp/x file.py:42 [0x1a2b] 2026-01-01 12:00:00") == "error at file.py [0x1a2b]"
     assert normalize("MiXeD  CASE") == "mixed case"
 
 
@@ -300,6 +300,7 @@ def test_sqlite_max_entries_bounds_undelivered_incidents(tmp_path):
         for index in range(5):
             artifacts = make_artifacts("pytest_fail.log")
             artifacts.message = f"unique failure {index}"
+            artifacts.failed_tests[0].assertion = f"assert {index} == 10"
             check_duplicate(artifacts, path)
         entries = dedup.load_sqlite_entries(path)
         assert len(entries) == 2

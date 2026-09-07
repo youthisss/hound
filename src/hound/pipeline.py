@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import sys
 import time
+import hashlib
+import inspect
+import json
+import os
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,7 +14,8 @@ from pathlib import Path
 from hound.analyze.rca import run_analysis
 from hound.analyze.fallback import build_root_cause
 from hound.analyze.llm import build_request_preview
-from hound.config import Config, load_config
+from hound.analyze import prompts
+from hound.config import Config, load_config, resolve_model_name
 from hound.connectors.observability import collect_observability_bundle
 from hound.devops.investigation import build_investigation
 from hound.devops.timeline import build_timeline, timeline_to_dict
@@ -32,7 +37,10 @@ from hound.output.tickets import build_ticket, write_ticket
 from hound.source.context import collect_source_evidence
 from hound.source.impact import build_test_impact
 from hound.triage.component import assign
-from hound.triage.dedup import check_duplicate, configure_store, fingerprint, lookup_incident, record_triage
+from hound.triage.dedup import (
+    check_duplicate, configure_store, context_fingerprint, fingerprint, lookup_incident,
+    record_triage, reusable_root_cause,
+)
 from hound.triage.severity import classify
 from hound.telemetry import telemetry
 
@@ -65,6 +73,7 @@ def _root_cause_snapshot(root_cause: RootCause) -> dict:
         "contradicting_evidence_refs": list(root_cause.contradicting_evidence_refs),
         "missing_information": list(root_cause.missing_information),
         "recommended_checks": list(root_cause.recommended_checks),
+        "original_run": dict(root_cause.original_run),
     }
 
 
@@ -78,9 +87,16 @@ def _root_cause_from_snapshot(snapshot: dict) -> RootCause | None:
             *[str(item) for item in snapshot.get("missing_information", [])],
             "Stored hypothesis was reused; evidence references are scoped to the original run.",
         ]))
+        original_run = snapshot.get("original_run", {})
+        if not isinstance(original_run, dict):
+            return None
+        if original_run:
+            provenance = "Original analysis run: " + json.dumps(original_run, sort_keys=True)
+            if provenance not in missing_information:
+                missing_information.append(provenance)
         return RootCause(
             hypothesis=str(snapshot.get("hypothesis", "")),
-            confidence=confidence if confidence in {"high", "medium", "low"} else "low",
+            confidence=confidence if confidence in {"medium", "low"} else "low",
             evidence=[str(item) for item in snapshot.get("evidence", [])],
             fix_suggestion=str(snapshot.get("fix_suggestion", "")),
             engine=engine if engine in ENGINES else "fallback",
@@ -94,9 +110,27 @@ def _root_cause_from_snapshot(snapshot: dict) -> RootCause | None:
             contradicting_evidence_refs=[],
             missing_information=missing_information,
             recommended_checks=[str(item) for item in snapshot.get("recommended_checks", [])],
+            original_run=dict(original_run),
         )
     except (TypeError, ValueError):
         return None
+
+
+def _snapshot_matches_model(snapshot: dict, config: Config) -> bool:
+    """Only reuse an automatic snapshot produced by the requested LLM model.
+
+    Incident identity is intentionally model-independent, but an RCA snapshot
+    is not: reusing a Gemini answer after the operator selected GPT makes the
+    active Settings disagree with report provenance.
+    """
+    if not config.llm_enabled:
+        return snapshot.get("model") in {None, ""}
+    try:
+        requested_model = resolve_model_name(config.provider, config.model, base_url=config.base_url)
+    except (KeyError, TypeError, ValueError):
+        requested_model = config.model
+    requested = f"{config.provider}:{requested_model}"
+    return snapshot.get("model") == requested
 
 
 def _analyze_with_reuse(
@@ -105,6 +139,8 @@ def _analyze_with_reuse(
     state_path: str | None,
     feedback_store_path: str | Path | None = None,
     feedback_output_root: str | Path | None = None,
+    project_scope: str | None = None,
+    context_key: str = "",
 ) -> tuple[RootCause, str | None]:
     """Dedup-first analysis: reuse a stored root cause for a well-established
     recurring incident instead of spending another LLM call. Returns
@@ -112,34 +148,114 @@ def _analyze_with_reuse(
 
     Logs without a recognized failure kind never touch the store: they are
     not recorded as occurrences and therefore cannot be "reused" either."""
-    if config.reuse and artifacts.kind != "unknown":
-        key = fingerprint(artifacts)
+    if config.reuse and context_key and artifacts.kind != "unknown":
+        key = fingerprint(artifacts, project_scope=project_scope)
+        entry = lookup_incident(state_path, key) if state_path else None
+        eligible = reusable_root_cause(entry, context_key)
         known = (
             find_known_issue(feedback_store_path, feedback_output_root, key)
             if feedback_store_path and feedback_output_root else None
         )
-        if known is not None:
-            snapshot = known["report"].get("root_cause")
-            if isinstance(snapshot, dict):
-                reused = _root_cause_from_snapshot(snapshot)
+        if known is not None and eligible is not None:
+            reviewed = known["report"].get("root_cause")
+            if isinstance(reviewed, dict) and all(
+                reviewed.get(field) == eligible.get(field)
+                for field in ("hypothesis", "confidence", "evidence", "fix_suggestion")
+            ):
+                reused = _root_cause_from_snapshot(eligible)
                 if reused is not None:
                     reused.missing_information = list(dict.fromkeys([
                         *reused.missing_information,
                         "Known issue matched reviewed feedback; verify the recorded resolution still applies.",
                     ]))
                     return reused, key
-        entry = lookup_incident(state_path, key) if state_path else None
         if entry is not None:
             try:
                 count = int(entry.get("count", 0))
             except (TypeError, ValueError):
                 count = 0
-            snapshot = entry.get("root_cause")
-            if count >= config.reuse_after_occurrences and isinstance(snapshot, dict):
+            snapshot = eligible
+            if (
+                count >= config.reuse_after_occurrences
+                and isinstance(snapshot, dict)
+                and _snapshot_matches_model(snapshot, config)
+            ):
                 reused = _root_cause_from_snapshot(snapshot)
                 if reused is not None:
                     return reused, key
     return run_analysis(artifacts, config), None
+
+
+def _source_digest(artifacts: Artifacts, repo_dir: str | Path | None) -> str:
+    """Hash relevant working-tree bytes; incomplete collection disables reuse."""
+    if repo_dir is None:
+        # Artifact-only analysis has no repository input to invalidate. Its full
+        # bounded evidence still participates in the independent context hash.
+        return "artifact-only-v1" if not artifacts.source_evidence and not any(frame.code for frame in artifacts.frames) else ""
+    repo = Path(repo_dir).resolve()
+    if not repo.is_dir():
+        return ""
+    names = set(artifacts.git.changed_files)
+    names.update(frame.file for frame in artifacts.frames if frame.file)
+    names.update(test.file for test in artifacts.failed_tests if test.file)
+    for item in artifacts.source_evidence:
+        names.add(item.get("file", ""))
+        names.update(item.get("related_tests", []))
+    names.discard("")
+    if len(names) > 256:
+        return ""
+    contents: list[tuple[str, str | None]] = []
+    total = 0
+    try:
+        for name in sorted(names):
+            path = (repo / name.replace("\\", "/")).resolve()
+            relative = path.relative_to(repo).as_posix()
+            if not path.exists():
+                contents.append((relative, None))
+                continue
+            if not path.is_file():
+                return ""
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                while chunk := stream.read(65536):
+                    total += len(chunk)
+                    if total > 16 * 1024 * 1024:
+                        return ""
+                    digest.update(chunk)
+            contents.append((relative, digest.hexdigest()))
+    except (OSError, ValueError):
+        return ""
+    return hashlib.sha256(json.dumps([artifacts.git.head, contents], sort_keys=True).encode()).hexdigest()
+
+
+def _analysis_context_key(artifacts: Artifacts, config: Config, project_scope: str, source_digest: str) -> str:
+    try:
+        if config.llm_enabled:
+            try:
+                resolved_model = resolve_model_name(config.provider, config.model, base_url=config.base_url)
+            except (KeyError, TypeError, ValueError):
+                resolved_model = config.model
+            model = f"{config.provider}:{resolved_model}"
+        else:
+            model = "deterministic"
+        prompt_version = hashlib.sha256(json.dumps([
+            inspect.getsource(prompts), prompts.SYSTEM_PROMPT,
+            prompts.LOG_TEXT_LIMIT, prompts.ENRICHMENT_LIMIT, prompts.PROMPT_LIMIT,
+        ]).encode()).hexdigest()
+    except (OSError, TypeError, ValueError, KeyError):
+        return ""
+    policy = {
+        "version": "grounded-rca-v2", "redact": config.redact, "source_class": config.source_class,
+        "source_context": config.allow_source_context, "source_send_to_llm": config.source_send_to_llm,
+        "enrichment": config.allow_enrichment, "llm": config.allow_llm,
+        "routing": config.routing, "skip_kinds": config.skip_kinds,
+        "temperature": config.temperature, "max_tokens": config.max_tokens,
+        "base_url": config.base_url, "require_llm": config.require_llm,
+    }
+    return context_fingerprint(
+        artifacts, project_scope=project_scope, source_fingerprint=source_digest, model=model,
+        prompt_version=prompt_version, policy_version=json.dumps(policy, sort_keys=True),
+    )
 
 
 def analyze(
@@ -193,7 +309,6 @@ def analyze(
     run, deployment = load_context(log_path, text, context_path)
     unique_id = run.run_id if run and getattr(run, "run_id", None) else None
     if not unique_id:
-        import hashlib
         # if out_dir is an instance of Path, it's safe to use / with it
         # but in test_cli_run_analyze_namespace out_dir is just out
         unique_id = hashlib.sha256(str(log_path.resolve()).encode()).hexdigest()[:12]
@@ -295,9 +410,14 @@ def analyze(
         artifacts.metric_samples = observability.metric_samples
         artifacts.trace_spans = observability.trace_spans
         artifacts.connector_audits.extend(asdict(audit) for audit in observability.audits)
+    source_digest = _source_digest(artifacts, trusted_repo)
+    project_scope = os.path.normcase(str(Path(repo_dir or Path.cwd()).resolve()))
     if config.redact:
         artifact_hits = _redact_artifacts(artifacts)
         artifacts.redacted = artifacts.redacted or artifact_hits > 0
+
+    context_key = _analysis_context_key(artifacts, config, project_scope, source_digest)
+    generated_at = datetime.now(timezone.utc).isoformat()
 
     if feedback_output_root is None:
         feedback_output_root = out
@@ -314,7 +434,19 @@ def analyze(
             state_path,
             feedback_store_path,
             feedback_output_root,
+            project_scope,
+            context_key,
         )
+    if not root_cause.original_run:
+        root_cause.original_run = {
+            "run_id": artifacts.run.run_id, "run_url": artifacts.run.run_url,
+            "log_file": artifacts.log_path, "generated_at": generated_at,
+            "model": root_cause.model,
+        }
+    if config.redact:
+        scrubbed_root_cause, root_cause_hits = _redact_document(asdict(root_cause))
+        root_cause = RootCause(**scrubbed_root_cause)
+        artifacts.redacted = artifacts.redacted or root_cause_hits > 0
 
     severity, priority = classify(artifacts)
     environment_overrides = config.severity_overrides.get(artifacts.deployment.environment, {})
@@ -329,9 +461,9 @@ def analyze(
     # Healthy/unrecognized logs must not consume dedup slots: recording them
     # would evict real incidents under MAX_STATE_ENTRIES pressure (rev-6 G3).
     if artifacts.kind == "unknown":
-        triage = Triage(dedup_key=fingerprint(artifacts))
+        triage = Triage(dedup_key=fingerprint(artifacts, project_scope=project_scope))
     else:
-        triage = check_duplicate(artifacts, state_path, config.recurrence_threshold)
+        triage = check_duplicate(artifacts, state_path, config.recurrence_threshold, project_scope=project_scope)
     triage.severity = severity
     triage.priority = priority
     triage.component = component
@@ -341,6 +473,12 @@ def analyze(
         triage.priority = 5
 
     ticket = build_ticket(artifacts, root_cause, triage)
+    if config.redact:
+        scrubbed_ticket, ticket_hits = _redact_document(asdict(ticket))
+        ticket = _ticket_from_doc({"ticket": scrubbed_ticket})
+        component, component_hits = redact_text(component)
+        triage.component = component
+        artifacts.redacted = artifacts.redacted or ticket_hits > 0 or component_hits > 0
     if artifacts.kind != "unknown":
         persisted = record_triage(
             state_path,
@@ -349,6 +487,7 @@ def analyze(
             ticket.title,
             root_cause=_root_cause_snapshot(root_cause),
             artifacts=artifacts,
+            context_key=context_key if root_cause.llm_status != "failed" and not llm_preview else "",
         )
         if state_path and not persisted:
             sys.stderr.write(
@@ -363,7 +502,7 @@ def analyze(
         root_cause,
         triage,
         ticket,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=generated_at,
         reused=bool(reused_from_key),
         reused_from_key=reused_from_key,
         trust_context={

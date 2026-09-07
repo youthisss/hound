@@ -1,0 +1,5 @@
+go test -v ./...
+=== RUN   TestFailureMessage
+--- PASS: TestFailureMessage (0.00s)
+PASS
+ok example.test/parser 0.003s

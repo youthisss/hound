@@ -1,6 +1,6 @@
 # GitHub Action Usage and Upgrade Guide
 
-`hound` can run directly inside GitHub Actions as a container action.
+`hound-tracer` can run directly inside GitHub Actions as a container action.
 
 ## Recommended workflow
 
@@ -32,9 +32,9 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ github.event.workflow_run.id }}
 
-      - name: Run Hound
+      - name: Run Hound Tracer
         id: hound
-        uses: youthisss/hound@e0a640effda889427598b0cdb5bdd41d9749045c
+        uses: youthisss/hound-tracer@e0a640effda889427598b0cdb5bdd41d9749045c
         with:
           log: ./ci-logs/failure.log
           out: ./hound-output
@@ -73,7 +73,7 @@ run, pass credentials through GitHub Secrets, never Action inputs or committed
 configuration:
 
 ```yaml
-- uses: youthisss/hound@e0a640effda889427598b0cdb5bdd41d9749045c
+- uses: youthisss/hound-tracer@e0a640effda889427598b0cdb5bdd41d9749045c
   env:
     HOUND_API_PROVIDER: openai
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

@@ -1,0 +1,3 @@
+kubectl describe pod catalog-preview
+Warning FailedMount configmap "catalog-settings" not found
+Container cannot start.

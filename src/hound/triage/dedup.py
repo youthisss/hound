@@ -11,6 +11,7 @@ Two backends are supported:
 from __future__ import annotations
 
 import contextlib
+import ast
 import errno
 import hashlib
 import json
@@ -20,6 +21,7 @@ import sqlite3
 import sys
 import time
 import tempfile
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -27,15 +29,17 @@ from uuid import uuid4
 from hound.models import Artifacts, Triage
 
 _REMOVE_RE = re.compile(
-    r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?|"
-    r"\b0x[0-9a-fA-F]+\b|"
+    r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\b|"
+    r"(?<=object at )0x[0-9a-fA-F]+(?=>)|"
     r"/tmp/[A-Za-z0-9_./-]+|"
-    r"\[[^\]]*\]|"
-    r":\d+[:,]?",
+    r"(?<=\.[a-zA-Z]{2}):\d+(?::\d+)?|"
+    r"(?<=\.[a-zA-Z]{3}):\d+(?::\d+)?",
     re.IGNORECASE,
 )
 
 MAX_STATE_ENTRIES = 1000
+IDENTITY_VERSION = "incident-v2"
+CACHE_VERSION = "rca-context-v1"
 DELIVERY_CLAIM_TTL_SECONDS = 300
 _LOCK_RETRIES = 100
 _LOCK_RETRY_DELAY = 0.05
@@ -124,27 +128,98 @@ def _http_put(entries: list[dict]) -> None:
 # ---------------------------------------------------------------- shared helpers
 
 
-def normalize(text: str) -> str:
-    t = text.lower()
+def normalize(text: str, *, preserve_case: bool = False) -> str:
+    t = text if preserve_case else text.lower()
     t = _REMOVE_RE.sub(" ", t)
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
 
-def fingerprint(artifacts: Artifacts) -> str:
-    parts: list[str] = [artifacts.kind]
-    if artifacts.message:
-        parts.append(normalize(artifacts.message))
-    parts.extend(normalize(t.name) for t in artifacts.failed_tests[:5])
-    parts.extend(f.function or "" for f in artifacts.frames[:3] if f.function)
+def _digest(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
+                                      separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _literal_identity(node: ast.AST) -> str:
+    # literal_eval rejects calls, names, and comparisons; never execute diagnostics.
+    ast.literal_eval(node)
+    return ast.dump(node, include_attributes=False)
+
+
+def _assertion_identity(text: str) -> object:
+    """Canonicalize only recognized literal equalities, preserving operand order.
+
+    Pytest renders actual == expected; summary adapters render expected X, got Y.
+    Unknown diagnostics stay verbatim so normalization cannot erase their values.
+    """
+    diagnostic = re.sub(r"^E\s+", "", text.strip())
+    diagnostic = re.sub(r"^AssertionError:\s*", "", diagnostic)
+    try:
+        if diagnostic.startswith("assert "):
+            statement = ast.parse(diagnostic).body
+            if len(statement) == 1 and isinstance(statement[0], ast.Assert) and statement[0].msg is None:
+                comparison = statement[0].test
+                if isinstance(comparison, ast.Compare) and len(comparison.ops) == 1 and isinstance(comparison.ops[0], ast.Eq):
+                    return ["literal-equality", _literal_identity(comparison.left),
+                            _literal_identity(comparison.comparators[0])]
+        match = re.fullmatch(r"expected (.+), got (.+)", diagnostic, re.DOTALL)
+        if match:
+            expected = ast.parse(match[1], mode="eval").body
+            actual = ast.parse(match[2], mode="eval").body
+            return ["literal-equality", _literal_identity(actual), _literal_identity(expected)]
+    except (SyntaxError, ValueError, TypeError, RecursionError):
+        pass
+    return ["diagnostic", text.strip()]
+
+
+def fingerprint(artifacts: Artifacts, *, project_scope: str | None = None) -> str:
+    """Versioned incident identity; pass a canonical repository ID across workers.
+
+    Without an explicit scope, the resolved working directory isolates local
+    projects. Legacy unscoped hashes are deliberately never matched.
+    """
+    scope = project_scope or str(Path.cwd().resolve())
+    parts: list = [IDENTITY_VERSION, scope, artifacts.stage, artifacts.kind]
+    named_tests = bool(artifacts.failed_tests) and all(t.name and t.assertion for t in artifacts.failed_tests)
+    tests = [(t.file.replace("\\", "/"), t.name, _assertion_identity(t.assertion))
+             for t in artifacts.failed_tests]
+    parts.append(sorted(tests, key=lambda test: json.dumps(test, ensure_ascii=False)))
+    if not named_tests:
+        parts.append(normalize(artifacts.message, preserve_case=True))
+        parts.append([(f.file.replace("\\", "/"), f.function or "")
+                      for f in artifacts.frames])
     # A release failure in production must not suppress an independent staging
     # incident that happens to have the same tool message.
     if artifacts.stage == "deploy":
         deployment = artifacts.deployment
-        parts.extend((deployment.platform, deployment.environment, deployment.namespace,
+        parts.extend((deployment.platform, deployment.environment, deployment.cluster, deployment.namespace,
                       deployment.target, deployment.release, deployment.revision, deployment.artifact))
-    key = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
-    return key
+    return f"{IDENTITY_VERSION}:{_digest(parts)}"
+
+
+def context_fingerprint(
+    artifacts: Artifacts, *, project_scope: str | None = None,
+    source_fingerprint: str, model: str, prompt_version: str,
+    policy_version: str = "",
+) -> str:
+    """Hash the exact analysis inputs, independently of incident recurrence.
+
+    source_fingerprint must cover relevant source content (including dirty files),
+    model should include provider, and prompt_version must change with prompts.
+    Empty required inputs disable reuse. Evidence is deliberately not normalized.
+    """
+    if not source_fingerprint or not model or not prompt_version:
+        return ""
+    evidence = asdict(artifacts)
+    return f"{CACHE_VERSION}:{_digest([fingerprint(artifacts, project_scope=project_scope), evidence, source_fingerprint, model, prompt_version, policy_version])}"
+
+
+def reusable_root_cause(entry: dict | None, context_key: str) -> dict | None:
+    """Fail closed for legacy, invalidated, or context-mismatched snapshots."""
+    if not entry or not context_key or entry.get("context_fingerprint") != context_key:
+        return None
+    snapshot = entry.get("root_cause")
+    return snapshot if isinstance(snapshot, dict) and snapshot else None
 
 
 def _now() -> str:
@@ -226,6 +301,9 @@ def _sqlite_init(conn: sqlite3.Connection) -> None:
     if "root_cause" not in columns:
         conn.execute("ALTER TABLE incidents ADD COLUMN root_cause TEXT NOT NULL DEFAULT ''")
         conn.commit()
+    if "context_fingerprint" not in columns:
+        conn.execute("ALTER TABLE incidents ADD COLUMN context_fingerprint TEXT NOT NULL DEFAULT ''")
+        conn.commit()
 
 
 def _sqlite_row_to_entry(row: sqlite3.Row) -> dict:
@@ -277,8 +355,8 @@ def _sqlite_prune(state_path: str | os.PathLike) -> None:
         sys.stderr.write(f"Warning: dedup SQLite prune failed: {exc}\n")
 
 
-def _sqlite_check_duplicate(artifacts: Artifacts, state_path: str, recurrence_threshold: int) -> Triage:
-    key = fingerprint(artifacts)
+def _sqlite_check_duplicate(artifacts: Artifacts, state_path: str, recurrence_threshold: int, project_scope: str | None = None) -> Triage:
+    key = fingerprint(artifacts, project_scope=project_scope)
     triage = Triage(dedup_key=key, flaky_suspect=artifacts.kind == "flaky")
     now = _now()
     try:
@@ -393,18 +471,20 @@ def _sqlite_record_triage(
     title: str,
     root_cause: str = "",
     artifacts: Artifacts | None = None,
+    context_key: str = "",
 ) -> bool:
     if not triage.dedup_key:
         return False
     with _sqlite_session(state_path) as conn:
         conn.execute(
             """INSERT INTO incidents(
-                   key, kind, message, component, title, count, last_seen, created_at, root_cause
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   key, kind, message, component, title, count, last_seen, created_at, root_cause, context_fingerprint
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(key) DO UPDATE SET
                    component = excluded.component,
                    title = excluded.title,
-                   root_cause = excluded.root_cause""",
+                    root_cause = excluded.root_cause,
+                    context_fingerprint = excluded.context_fingerprint""",
             (
                 triage.dedup_key,
                 artifacts.kind if artifacts is not None else "",
@@ -415,6 +495,7 @@ def _sqlite_record_triage(
                 _now(),
                 _now(),
                 root_cause,
+                context_key,
             ),
         )
         conn.commit()
@@ -644,13 +725,13 @@ def save_state(path: str | os.PathLike, entries: list[dict], keep_key: str | Non
 FLAKY_THRESHOLD = 3
 
 
-def check_duplicate(artifacts: Artifacts, state_path: str | None, recurrence_threshold: int = FLAKY_THRESHOLD) -> Triage:
-    key = fingerprint(artifacts)
+def check_duplicate(artifacts: Artifacts, state_path: str | None, recurrence_threshold: int = FLAKY_THRESHOLD, *, project_scope: str | None = None) -> Triage:
+    key = fingerprint(artifacts, project_scope=project_scope)
     triage = Triage(dedup_key=key, flaky_suspect=artifacts.kind == "flaky")
     if not state_path:
         return triage
     if _is_sqlite():
-        return _sqlite_check_duplicate(artifacts, state_path, recurrence_threshold)
+        return _sqlite_check_duplicate(artifacts, state_path, recurrence_threshold, project_scope)
 
     with _state_lock(state_path):
         entries = load_state(state_path)
@@ -771,6 +852,8 @@ def release_delivery_claim(state_path: str | None, key: str, destination: str) -
         entries = load_state(state_path)
         for entry in entries:
             if entry.get("key") == key and isinstance(entry.get("delivery_claims"), dict):
+                if destination not in entry["delivery_claims"]:
+                    return False
                 entry["delivery_claims"].pop(destination, None)
                 return save_state(state_path, entries)
         return False
@@ -787,6 +870,8 @@ def record_triage(
     title: str,
     root_cause: dict | None = None,
     artifacts: Artifacts | None = None,
+    *,
+    context_key: str = "",
 ) -> bool:
     """Persist triage metadata and its optional root-cause snapshot.
 
@@ -798,7 +883,7 @@ def record_triage(
         return False
     snapshot = _json_dumps(root_cause) if root_cause else ""
     if _is_sqlite():
-        return _sqlite_record_triage(state_path, triage, component, title, snapshot, artifacts)
+        return _sqlite_record_triage(state_path, triage, component, title, snapshot, artifacts, context_key)
     with _state_lock(state_path):
         entries = load_state(state_path)
         updated = False
@@ -806,6 +891,7 @@ def record_triage(
             if entry.get("key") == triage.dedup_key:
                 entry["component"] = component
                 entry["title"] = title
+                entry["context_fingerprint"] = context_key if root_cause else ""
                 if root_cause is not None:
                     entry["root_cause"] = root_cause
                 updated = True
@@ -820,6 +906,7 @@ def record_triage(
                     "count": max(triage.occurrence_count, 1),
                     "last_seen": _now(),
                     "filed": False,
+                    "context_fingerprint": context_key if root_cause else "",
                     **({"root_cause": root_cause} if root_cause is not None else {}),
                 }
             )
@@ -840,3 +927,23 @@ def lookup_incident(state_path: str | None, key: str) -> dict | None:
             if entry.get("key") == key:
                 return entry
     return None
+
+
+def invalidate_root_cause(state_path: str | None, key: str) -> bool:
+    """Clear cached analysis without resetting recurrence or delivery history."""
+    if not state_path or not key:
+        return False
+    if _is_sqlite():
+        with _sqlite_session(state_path) as conn:
+            result = conn.execute(
+                "UPDATE incidents SET root_cause = '', context_fingerprint = '' WHERE key = ?", (key,)
+            )
+            return result.rowcount > 0
+    with _state_lock(state_path):
+        entries = load_state(state_path)
+        for entry in entries:
+            if entry.get("key") == key:
+                entry["root_cause"] = None
+                entry["context_fingerprint"] = ""
+                return save_state(state_path, entries, keep_key=key)
+    return False

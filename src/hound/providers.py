@@ -100,6 +100,7 @@ def discover_models(base_url: str, api_key: str = "", timeout: float = 10.0) -> 
 
 
 def cache_models(provider_id: str, base_url: str, models: list[str], path: Path = CACHE_PATH) -> None:
+    base_url = validate_base_url(base_url)
     data = {}
     if path.exists():
         try:
@@ -111,8 +112,17 @@ def cache_models(provider_id: str, base_url: str, models: list[str], path: Path 
     atomic_write(path, json.dumps(data, indent=2))
 
 
-def cached_models(provider_id: str, path: Path = CACHE_PATH) -> list[str]:
+def cached_models(provider_id: str, path: Path = CACHE_PATH, base_url: str | None = None) -> list[str]:
+    """Return cached catalog entries for a provider and, optionally, its URL.
+
+    A provider ID can be reused with a different gateway. In that case its old
+    catalog must not silently select a model from the previous gateway.
+    """
     try:
-        return list(json.loads(path.read_text(encoding="utf-8")).get(provider_id, {}).get("models", []))
+        entry = json.loads(path.read_text(encoding="utf-8")).get(provider_id, {})
+        if base_url is not None and entry.get("base_url") != base_url.rstrip("/"):
+            return []
+        models = entry.get("models", [])
+        return [str(model) for model in models if str(model).strip()]
     except (OSError, ValueError, TypeError):
         return []

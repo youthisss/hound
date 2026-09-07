@@ -26,6 +26,9 @@ jobs:
       - run: uv run ruff check .
       - run: uv run mypy src/hound
       - run: uv run pytest -m integration -q
+      - name: Check diagnostic regressions before merge
+        run: uv run pytest tests/e2e/test_eval.py -q
+      - run: uv run python -m hound.eval --offline --check --format json
 
   compatibility:
     runs-on: ubuntu-latest
@@ -98,7 +101,7 @@ jobs:
       - uses: astral-sh/setup-uv@2af22b5b2dcfc0729ee842c635f300f1fc5a9e9a # v5.0.0
       - run: uv sync --frozen --extra dev
       - run: uv run pytest --cov=hound --cov-report=term --cov-fail-under=80 -q
-      - run: uv run python -m hound.eval --offline --format json
+      - run: uv run python -m hound.eval --offline --check --format json
       - run: uv run python examples/demo/run_demo.py --profile smoke
       - run: docker build -t hound:test .
       - run: docker build -f Dockerfile.action -t hound-action:test .

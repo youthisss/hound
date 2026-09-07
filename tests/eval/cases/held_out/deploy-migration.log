@@ -1,0 +1,3 @@
+Deploying release catalog-preview
+migration failed: duplicate column name inventory_count
+Rollback completed successfully; previous version retained.

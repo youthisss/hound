@@ -8,6 +8,7 @@ report.json, and filed tickets. The default is to redact; disable with
 from __future__ import annotations
 
 import re
+from ipaddress import IPv6Address
 
 _PRIVATE_KEY_HEADER = r"-----BEGIN (?:ENCRYPTED |RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"
 _PRIVATE_KEY_FOOTER = r"-----END (?:ENCRYPTED |RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"
@@ -54,6 +55,7 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         ),
     ),
     ("email", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
+    ("ipv6_address", re.compile(r"(?<![\w:])(?:[0-9A-Fa-f]{0,4}:){2,}[0-9A-Fa-f:.]*(?:%[0-9A-Za-z_.-]+)?(?![\w:])")),
     ("ip_address", re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")),
 ]
 
@@ -68,6 +70,19 @@ def redact_text(text: str) -> tuple[str, int]:
     hits = 0
     result = text
     for kind, pattern in PATTERNS:
+        if kind == "ipv6_address":
+            def redact_ipv6(match: re.Match[str]) -> str:
+                nonlocal hits
+                candidate = match.group().rstrip(".")
+                try:
+                    IPv6Address(candidate)
+                except ValueError:
+                    return match.group()
+                hits += 1
+                return "[REDACTED:ipv6_address]" + match.group()[len(candidate):]
+
+            result = pattern.sub(redact_ipv6, result)
+            continue
         result, n = pattern.subn(f"[REDACTED:{kind}]", result)
         hits += n
     return result, hits

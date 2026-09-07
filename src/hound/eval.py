@@ -24,12 +24,14 @@ from hound.triage.severity import classify
 CASE_VERSION = "1.0"
 DEFAULT_CORPUS = Path("tests/eval/cases")
 BASELINE_PATH = Path("tests/eval/baseline-v1.0.json")
+GATE_POLICY_PATH = Path("tests/eval/gates-v1.0.json")
 DEFAULT_TEST_IMPACT_CORPUS = Path("tests/eval/test-impact-v1.0.json")
 _TOP_LEVEL_FIELDS = {"eval_case_version", "id", "artifact", "expected"}
 _EXPECTED_FIELDS = {
     "stage", "kind", "primary_event", "failed_tests", "stack_frames",
     "severity_range", "duplicate_group", "redactions",
 }
+_OPTIONAL_EXPECTED_FIELDS = {"is_failure"}
 
 
 @dataclass
@@ -45,6 +47,7 @@ class EvaluationCase:
     severity_range: list[str]
     duplicate_group: str | None
     expected_redactions: list[str]
+    is_failure: bool | None = None
 
 
 def _strings(value: Any, field: str) -> list[str]:
@@ -74,8 +77,11 @@ def load_case(path: Path, corpus: Path) -> EvaluationCase:
         raise ValueError(f"{path}: id and artifact must be non-empty strings")
     if not isinstance(expected, dict):
         raise ValueError(f"{path}: expected must be an object")
-    if set(expected) != _EXPECTED_FIELDS:
+    if not _EXPECTED_FIELDS.issubset(expected) or set(expected) - _EXPECTED_FIELDS - _OPTIONAL_EXPECTED_FIELDS:
         raise ValueError(f"{path}: expected fields must be exactly {sorted(_EXPECTED_FIELDS)}")
+    is_failure = expected.get("is_failure")
+    if "is_failure" in expected and not isinstance(is_failure, bool):
+        raise ValueError(f"{path}: is_failure must be a boolean")
     artifact = (path.parent / artifact_name).resolve()
     if path.parent.resolve() not in artifact.parents or not artifact.is_file() or artifact.is_symlink():
         raise ValueError(f"{path}: artifact must be a contained regular file")
@@ -113,7 +119,7 @@ def load_case(path: Path, corpus: Path) -> EvaluationCase:
     return EvaluationCase(
         case_id, split, artifact, stage, kind, primary,
         _strings(expected.get("failed_tests", []), f"{path}: failed_tests"),
-        frames, severity_range, duplicate_group, redactions,
+        frames, severity_range, duplicate_group, redactions, is_failure,
     )
 
 
@@ -237,18 +243,20 @@ def _confidence_calibration(results: list[dict[str, Any]]) -> dict[str, Any]:
         bands[band] = {
             "support": support,
             "empirical_accuracy": accuracy if support else None,
-            "mean_deterministic_score": mean_score if support else None,
-            "absolute_gap": round(abs(accuracy - mean_score), 6) if support else None,
+            "mean_evidence_completeness": mean_score if support else None,
         }
     unsupported = [band for band, values in bands.items() if values["support"] == 0]
     limitations = [
         "The corpus is small; confidence bands with zero support are provisional.",
         "Classification correctness is a proxy until reviewed root-cause outcomes are available.",
+        "Evidence completeness is not a probability; no calibration error is computed against it.",
+        "The synthetic held_out split is a regression partition, not an independently blinded production sample.",
     ]
     if unsupported:
         limitations.append(f"No evaluation support for: {', '.join(unsupported)}.")
     return {
         "target": "exact stage-and-kind classification correctness proxy",
+        "score_semantics": "evidence_completeness_not_probability",
         "bands": bands,
         "limitations": limitations,
     }
@@ -321,6 +329,10 @@ def evaluate(corpus: Path = DEFAULT_CORPUS, suite: str = "all") -> dict[str, Any
     predicted_kinds = [result["predicted"]["kind"] for result in results]
     redaction_expected = sum(result["redactions_expected"] for result in results)
     redaction_leaked = sum(result["redactions_leaked"] for result in results)
+    healthy = [index for index, case in enumerate(cases) if case.is_failure is False]
+    failures = [index for index, case in enumerate(cases) if case.is_failure is True or (case.is_failure is None and case.expected_kind != "unknown")]
+    false_positives = sum(predicted_kinds[index] != "unknown" for index in healthy)
+    missed_failures = sum(predicted_kinds[index] == "unknown" for index in failures)
     report = {
         "evaluation_version": CASE_VERSION,
         "suite": suite,
@@ -336,6 +348,14 @@ def evaluate(corpus: Path = DEFAULT_CORPUS, suite: str = "all") -> dict[str, Any
             "dedup": {"precision": _ratio(dedup_tp, dedup_tp + dedup_fp), "recall": _ratio(dedup_tp, dedup_tp + dedup_fn)},
             "redaction_recall": _ratio(redaction_expected - redaction_leaked, redaction_expected) if redaction_expected else 1.0,
             "unknown_rate": _ratio(predicted_kinds.count("unknown"), len(predicted_kinds)),
+            "failure_detection": {
+                "healthy_support": len(healthy),
+                "failure_support": len(failures),
+                "false_positives": false_positives,
+                "missed_failures": missed_failures,
+                "false_positive_rate": _ratio(false_positives, len(healthy)) if healthy else None,
+                "recall": _ratio(len(failures) - missed_failures, len(failures)) if failures else None,
+            },
             "throughput_cases_per_second": round(len(cases) / elapsed, 3) if elapsed else 0.0,
             "peak_memory_bytes": peak,
         },
@@ -348,6 +368,37 @@ def evaluate(corpus: Path = DEFAULT_CORPUS, suite: str = "all") -> dict[str, Any
     if redaction_leaked:
         raise RuntimeError(f"{redaction_leaked} expected secret value(s) were not redacted")
     return report
+
+
+def check_quality_gate(report: dict[str, Any], policy_path: Path = GATE_POLICY_PATH) -> dict[str, Any]:
+    """Apply explicit regression thresholds; missing measurements cannot pass."""
+    import math
+
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    if not isinstance(policy, dict) or policy.get("version") != "1.0":
+        raise ValueError("evaluation gate policy version must be 1.0")
+    if set(policy) != {"version", "minimum", "maximum"}:
+        raise ValueError("evaluation gate policy requires version, minimum, and maximum")
+    failures = []
+    checked = 0
+    for direction in ("minimum", "maximum"):
+        thresholds = policy[direction]
+        if not isinstance(thresholds, dict):
+            raise ValueError(f"evaluation gate {direction} must be an object")
+        for path, threshold in thresholds.items():
+            if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not math.isfinite(threshold):
+                raise ValueError(f"evaluation gate threshold {path} must be finite")
+            measured: Any = report
+            for key in path.split("."):
+                measured = measured.get(key) if isinstance(measured, dict) else None
+            checked += 1
+            if not isinstance(measured, (int, float)) or isinstance(measured, bool) or not math.isfinite(measured):
+                failures.append(f"{path}: no supported measurement")
+            elif (direction == "minimum" and measured < threshold) or (direction == "maximum" and measured > threshold):
+                failures.append(f"{path}: {measured} violates {direction} {threshold}")
+    if not checked:
+        raise ValueError("evaluation gate must contain at least one threshold")
+    return {"passed": not failures, "checked": checked, "failures": failures}
 
 
 def evaluate_test_impact(corpus: Path = DEFAULT_TEST_IMPACT_CORPUS) -> dict[str, Any]:
@@ -403,15 +454,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--format", choices=("json",), default="json")
     parser.add_argument("--suite", choices=("all", "dev", "held_out", "qa-history", "test-impact"), default="all")
     parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
+    parser.add_argument("--check", action="store_true", help="fail when explicit evaluation quality thresholds are not met")
+    parser.add_argument("--gate-policy", type=Path, default=GATE_POLICY_PATH)
     args = parser.parse_args(argv)
     if not args.offline:
         parser.error("--offline is required")
     try:
         report = evaluate(args.corpus, args.suite)
+        if args.check:
+            report["quality_gate"] = check_quality_gate(report, args.gate_policy)
     except (OSError, RuntimeError, ValueError) as exc:
         sys.stderr.write(f"evaluation failed: {exc}\n")
         return 2
     print(json.dumps(report, indent=2, sort_keys=True))
+    if args.check and not report["quality_gate"]["passed"]:
+        return 1
     return 0
 
 

@@ -1,0 +1,1 @@
+<testsuite tests="2" failures="1"><testcase name="test_available_stock"/><testcase name="test_reserved_stock" file="tests/test_stock.py"><failure message="expected reserved stock 2, got 0"/></testcase><system-out>Upload completed successfully.</system-out></testsuite>

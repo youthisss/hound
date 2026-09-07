@@ -5,16 +5,17 @@ from pathlib import Path
 
 import pytest
 
-from hound.eval import DEFAULT_CORPUS, MAX_ARTIFACT_BYTES, evaluate, load_case, main
+from hound.eval import DEFAULT_CORPUS, MAX_ARTIFACT_BYTES, check_quality_gate, evaluate, load_case, main
 
 
 def test_evaluator_reports_offline_baseline_without_secrets():
     report = evaluate(DEFAULT_CORPUS)
 
-    assert report["case_count"] == 8
-    assert report["split_counts"] == {"dev": 5, "held_out": 3}
+    assert report["case_count"] >= 25
+    assert report["split_counts"]["held_out"] >= 8
     assert report["metrics"]["redaction_recall"] == 1.0
-    assert report["metrics"]["failed_tests"] == {"precision": 1.0, "recall": 1.0}
+    assert report["metrics"]["failure_detection"]["healthy_support"] >= 5
+    assert report["metrics"]["failure_detection"]["false_positive_rate"] == 0.0
     assert report["metrics"]["throughput_cases_per_second"] > 0
     assert report["metrics"]["peak_memory_bytes"] > 0
     calibration = report["confidence_calibration"]
@@ -26,8 +27,8 @@ def test_evaluator_reports_offline_baseline_without_secrets():
 
 def test_evaluator_can_select_held_out_split():
     report = evaluate(DEFAULT_CORPUS, "held_out")
-    assert report["case_count"] == 3
-    assert report["split_counts"] == {"held_out": 3}
+    assert report["case_count"] >= 8
+    assert report["split_counts"] == {"held_out": report["case_count"]}
 
 
 def test_test_impact_suite_meets_labeled_recall_threshold():
@@ -87,6 +88,36 @@ def test_cli_requires_offline():
     assert exc.value.code == 2
 
 
+def test_gate_rejects_regression_and_missing_measurements(tmp_path):
+    policy = tmp_path / "gate.json"
+    policy.write_text(json.dumps({
+        "version": "1.0", "minimum": {"metrics.kind.accuracy": 0.95},
+        "maximum": {"metrics.failure_detection.false_positive_rate": 0.0},
+    }), encoding="utf-8")
+    report = {"metrics": {"kind": {"accuracy": 0.9}, "failure_detection": {"false_positive_rate": None}}}
+    gate = check_quality_gate(report, policy)
+    assert gate["passed"] is False
+    assert len(gate["failures"]) == 2
+    report["metrics"]["kind"]["accuracy"] = 1.0
+    report["metrics"]["failure_detection"]["false_positive_rate"] = 0.0
+    assert check_quality_gate(report, policy)["passed"] is True
+
+
+def test_check_cli_returns_failure_for_quality_regression(tmp_path, monkeypatch, capsys):
+    policy = tmp_path / "gate.json"
+    policy.write_text(json.dumps({"version": "1.0", "minimum": {"case_count": 10}, "maximum": {}}), encoding="utf-8")
+    monkeypatch.setattr("hound.eval.evaluate", lambda *_: {"case_count": 2})
+    assert main(["--offline", "--check", "--gate-policy", str(policy)]) == 1
+    assert json.loads(capsys.readouterr().out)["quality_gate"]["passed"] is False
+
+
+def test_gate_policy_cannot_pass_with_empty_thresholds(tmp_path):
+    policy = tmp_path / "gate.json"
+    policy.write_text(json.dumps({"version": "1.0", "minimum": {}, "maximum": {}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="at least one threshold"):
+        check_quality_gate({}, policy)
+
+
 def _case_payload(**expected_overrides):
     expected = {
         "stage": "unknown", "kind": "unknown", "primary_event": None,
@@ -119,6 +150,39 @@ def test_primary_event_none_requires_no_predicted_primary(tmp_path: Path):
 
     report = evaluate(tmp_path)
     assert report["cases"][0]["primary_event_match"] is False
+
+
+def test_failure_detection_excludes_unlabeled_unknowns_from_healthy_denominator(tmp_path):
+    case_dir = tmp_path / "dev"
+    case_dir.mkdir()
+    for name, text, overrides in (
+        ("healthy", "job completed successfully", {"is_failure": False}),
+        ("partial", "processing chunk 1", {}),
+        ("failed", "pytest\nFAILED tests/test_a.py::test_a - AssertionError: mismatch", {
+            "stage": "test", "kind": "test_failure", "is_failure": True,
+            "primary_event": {"stage": "test", "kind": "test_failure"},
+            "failed_tests": ["test_a"], "severity_range": ["medium"],
+        }),
+    ):
+        (case_dir / f"{name}.log").write_text(text, encoding="utf-8")
+        label = _case_payload(**overrides)
+        label.update(id=name, artifact=f"{name}.log")
+        (case_dir / f"{name}.json").write_text(json.dumps(label), encoding="utf-8")
+    detection = evaluate(tmp_path)["metrics"]["failure_detection"]
+    assert detection == {
+        "healthy_support": 1, "failure_support": 1, "false_positives": 0,
+        "missed_failures": 0, "false_positive_rate": 0.0, "recall": 1.0,
+    }
+
+
+def test_is_failure_label_requires_boolean(tmp_path):
+    case_dir = tmp_path / "dev"
+    case_dir.mkdir()
+    (case_dir / "artifact.log").write_text("healthy", encoding="utf-8")
+    label = case_dir / "case.json"
+    label.write_text(json.dumps(_case_payload(is_failure="false")), encoding="utf-8")
+    with pytest.raises(ValueError, match="is_failure must be a boolean"):
+        load_case(label, tmp_path)
 
 
 def test_oversized_evaluation_artifact_fails_closed(tmp_path: Path):

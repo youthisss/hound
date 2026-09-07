@@ -29,13 +29,14 @@ TEST_MARKERS = re.compile(
 # (e.g. npm/cargo error trailers) as a test-stage event.
 PYTEST_FAILED = re.compile(r"\bFAILED\b")
 BUILD_MARKERS = re.compile(
-    r"compil|gcc |make[:\s]|error:\s|undefined reference|cannot find|go build|"
+    r"compil|gcc |make[:\s]|undefined reference|cannot find|go build|"
     r"npm run build|tsc |cargo build|ImportError|ModuleNotFoundError|"
-    r"error TS\d+|::error::|\bat\s+[\w.$]+\([^)]*\.java:\d+\)",
+    r"error TS\d+|::error::|could not install packages|\bat\s+[\w.$]+\([^)]*\.java:\d+\)",
     re.IGNORECASE,
 )
 CI_MARKERS = re.compile(
-    r"build started|running job|job .* (?:start|fail)|ci/circleci|gitlab-ci|stage:|pipeline|workflow .* fail",
+    r"build started|running job|job .* (?:start|fail)|ci/circleci|gitlab-ci|stage:|pipeline|workflow .* fail|"
+    r"\b(?:checkout|artifact (?:upload|download)|cache (?:restore|save))\s+(?:step\s+)?failed\b",
     re.IGNORECASE,
 )
 DEPLOY_MARKERS = re.compile(
@@ -67,9 +68,21 @@ _TEST_RESULT = re.compile(
 _GO_COUNT_RE = re.compile(r"\bgo test\b[^\n]*\s-count=(?:[2-9]|[1-9]\d+)\b", re.IGNORECASE)
 _GO_RESULT = re.compile(r"^--- (?P<result>PASS|FAIL):\s+(?P<name>\S+)(?:\s+\(|$)", re.MULTILINE)
 TEST_FAIL_RE = re.compile(
-    r"(?-i:\bFAILED\b)|AssertionError|assert |===== FAILURES|\bERRORS\b|--- FAIL:|Failure/Error:|"
-    r"\b(?:Value|Type|Runtime|Key|Index)Error\b|\bException:\s|"
-    r"(?m:^\s*[✕●×]\s+\S)|panicked at|Assert\.\w+\(\)\s+Failure",
+    # Match runner records and diagnostic lines, not mentions in prose/source.
+    # A passing summary never vetoes independent failure evidence in the log.
+    r"(?m:^\s*(?:FAILED\s+\S+::\S+|\S+::\S+\s+FAILED\b)|"
+    r"^\s*FAIL\s+\S+\.(?:test|spec)\.[jt]sx?\b|"
+    r"^\s*=+\s*(?:FAILURES|ERRORS)\s*=+|^\s*--- FAIL:|"
+    r"^\s*(?:E\s+)?(?:[\w.]+\.)?(?:AssertionError|ValueError|TypeError|RuntimeError|KeyError|IndexError|\w*Exception)(?::|\s*$)|"
+    r"^\s*E\s+assert\b|^\s*Failure/Error:|^\s*[✕●×]\s+\S|"
+    r"^\s*Assert\.\w+\(\)\s+Failure|^\s*thread .+ panicked at|"
+    r"^\s*test result:\s*FAILED\b|"
+    r"^\s*(?:=+\s*)?(?:\d+\s+(?:passed|skipped|deselected|xfailed|xpassed|warnings?)[,; ]+)*"
+    r"[1-9]\d*\s+(?:failed|errors?|failures?)\b|"
+    r"^\s*(?:\[(?:INFO|ERROR)\]\s*)?(?:Tests?(?: Suites?| Files)?|Tests run):[^\n]*"
+    r"(?:\b[1-9]\d*\s+failed\b|\b(?:Failures|Errors|Failed):\s*[1-9]\d*\b)|"
+    r"^\s*Failed!\s*-\s*Failed:\s*[1-9]\d*\b|"
+    r"^\s*FAILED\s*\((?:failures|errors)=[1-9]\d*\b)",
     re.IGNORECASE,
 )
 CRASH_RE = re.compile(r"segmentation fault|segfault|SIGSEGV|SIGABRT|panic:", re.IGNORECASE)
@@ -137,7 +150,7 @@ _ISO_TS_RE = re.compile(
 
 ERROR_LINE_RE = re.compile(r"error|failed|fail|exception|traceback|crash|panic", re.IGNORECASE)
 STRONG_ERROR_RE = re.compile(
-    r"error:|\bAssertionError\b|E\s+assert|ModuleNotFoundError|ImportError|"
+    r"error:|(?m:^\s*(?:E\s+)?(?:[\w.]+\.)?AssertionError\b)|E\s+assert|ModuleNotFoundError|ImportError|"
     r"undefined reference|segmentation fault|panic:|No module named|npm ERR! code",
     re.IGNORECASE,
 )
@@ -167,6 +180,8 @@ def detect_stage(text: str) -> str:
         return "build"
     if TEST_MARKERS.search(text) or PYTEST_FAILED.search(text):
         return "test"
+    if COMPILE_RE.search(text):
+        return "build"
     if CI_FOOTER_RE.search(text):
         return "ci"
     if BUILD_MARKERS.search(text):
@@ -175,6 +190,9 @@ def detect_stage(text: str) -> str:
         return "build"
     if CI_MARKERS.search(text):
         return "ci"
+    # Generic error trailers do not identify a build when a CI scope exists.
+    if re.search(r"error:\s", text, re.IGNORECASE):
+        return "build"
     return "unknown"
 
 
@@ -262,6 +280,9 @@ def extract_message(text: str) -> str:
         if STRONG_ERROR_RE.search(ln):
             return ln.strip()
     for ln in lines:
+        if TEST_FAIL_RE.search(ln):
+            return ln.strip()
+    for ln in lines:
         if ERROR_LINE_RE.search(ln):
             return ln.strip()
     return lines[-1].strip() if lines else ""
@@ -314,6 +335,8 @@ def parse_log(text: str) -> tuple[str, str, str, str]:
     else:
         stage = detect_stage(text)
     kind = detect_kind(text, stage)
+    if kind == "unknown":
+        stage = "unknown"
     message = extract_message(text)
     summary = extract_summary(text, kind, message)
     return stage, kind, summary, message

@@ -147,7 +147,7 @@ Hound GitHub repository. Distribution work already calls for a dedicated clone.
 
 **Tasks:**
 
-1. Use a fresh dedicated clone of `https://github.com/youthisss/hound.git`
+1. Use a fresh dedicated clone of `https://github.com/youthisss/hound-tracer.git`
    outside the `D:\Project` parent repository.
 2. Confirm the new checkout's Git root and `origin` before staging anything.
 3. Inventory and intentionally migrate only Hound changes from the old
@@ -166,7 +166,7 @@ git status --short
 ```
 
 **Exit criteria:** The top-level path is the dedicated Hound checkout, `origin`
-points only to `youthisss/hound`, and no sibling project can be included by
+points only to `youthisss/hound-tracer`, and no sibling project can be included by
 an ordinary `git add .`.
 
 **Rollback:** Remove only the new clone if migration validation fails. Do not use

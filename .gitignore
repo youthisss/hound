@@ -23,3 +23,9 @@ examples/demo/**/work/
 .audit-9router/
 ui-audit-out/
 zzout/
+.vscode/
+demo-output/
+portfolio-capture-output/
+portfolio-redaction-output/
+portfolio-screenshots/
+tmp_out/

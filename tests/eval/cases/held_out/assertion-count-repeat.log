@@ -1,0 +1,4 @@
+pytest
+Run identifier: synthetic-repeat-b
+FAILED tests/test_inventory.py::test_inventory - AssertionError: expected count 4, got 3
+8 passed, 1 failed in 0.52s

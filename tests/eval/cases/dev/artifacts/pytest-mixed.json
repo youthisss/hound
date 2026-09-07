@@ -1,0 +1,1 @@
+{"summary":{"passed":1,"failed":1},"tests":[{"nodeid":"tests/test_pricing.py::test_base_price","outcome":"passed"},{"nodeid":"tests/test_pricing.py::test_discount","outcome":"failed","longrepr":"AssertionError: expected discount 10, got 0"}]}

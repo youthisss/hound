@@ -22,7 +22,7 @@ hound doctor
 Until PyPI publishing is ready, the supported command should be:
 
 ```powershell
-uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 ```
 
 An unpinned install from `main` is a development channel, not a supported
@@ -52,7 +52,7 @@ assumptions:
 - Release and runtime images use multi-stage builds and do not ship `uv`, its
   build cache, pip, setuptools, or wheel.
 - Work occurs in the dedicated checkout rooted at `D:\Project\hound`, whose
-  `origin` is `https://github.com/youthisss/hound.git`.
+  `origin` is `https://github.com/youthisss/hound-tracer.git`.
 - GitHub release controls were configured on 2026-09-03: protected `main`
   requires strict `ci-result` and one review, release environments require a
   reviewer and protected branch, and active ruleset `22195421` restricts `v*`
@@ -144,7 +144,7 @@ whose Git root is exactly the Hound directory.
 2. Copy untracked Hound-only files to a temporary archive after reviewing the
    status output. Do not archive secrets, caches, virtual environments, or build
    output.
-3. Clone `https://github.com/youthisss/hound.git` into a new dedicated
+3. Clone `https://github.com/youthisss/hound-tracer.git` into a new dedicated
    directory outside the `D:\Project` repository, or move the parent `.git`
    only after separately auditing all projects. A fresh clone is preferred.
 4. Apply the Hound-only patch in the fresh clone and intentionally copy reviewed
@@ -166,7 +166,7 @@ git status --short
 ```
 
 Expected: the top-level path is the dedicated Hound checkout, `origin`
-points only to `youthisss/hound`, and `git status` contains only intentionally
+points only to `youthisss/hound-tracer`, and `git status` contains only intentionally
 migrated Hound changes. Compare `git diff --stat` and the reviewed file manifest
 before proceeding.
 
@@ -206,7 +206,7 @@ still needs a clone and development dependencies.
 **Verification:**
 
 ```powershell
-uv tool install "hound-tracer @ git+https://github.com/youthisss/hound.git@e0a640effda889427598b0cdb5bdd41d9749045c"
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 hound --version
 hound doctor --output-dir hound-doctor-output --json
 uv tool uninstall hound

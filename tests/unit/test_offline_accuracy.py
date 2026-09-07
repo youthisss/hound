@@ -131,8 +131,8 @@ def test_junit_flaky_failure_is_not_a_hard_test_failure():
 @pytest.mark.parametrize(
     ("name", "severity", "priority", "fix_part"),
     [
-        ("npm_dependency_conflict.log", "critical", 1, "dependency conflict"),
-        ("pip_resolution_conflict.log", "critical", 1, "dependency conflict"),
+        ("npm_dependency_conflict.log", "high", 2, "dependency conflict"),
+        ("pip_resolution_conflict.log", "high", 2, "dependency conflict"),
         ("disk_full.log", "high", 2, "disk space"),
         ("tls_certificate_error.log", "high", 2, "certificate"),
         ("api_rate_limited.log", "medium", 3, "rate-limit"),

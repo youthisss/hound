@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from hound.devops.timeline import classify_customer_impact
 from hound.models import Artifacts, SEVERITIES
+from hound.triage.severity import apply_customer_impact
 
 _RELEASE_FIELDS = (
     ("revision", "revision", "previous_revision"),
@@ -41,7 +42,7 @@ def build_investigation(artifacts: Artifacts, static_severity: str, runbook_url:
     }
     impact = classify_customer_impact(artifacts)
     budget = _number(deployment.error_budget_remaining)
-    effective_severity, reasons = _effective_severity(static_severity, impact, budget)
+    effective_severity, reasons = _effective_severity(artifacts, static_severity, budget)
     return {
         "release_changes": release_changes,
         "metric_samples": artifacts.metric_samples,
@@ -66,15 +67,15 @@ def build_investigation(artifacts: Artifacts, static_severity: str, runbook_url:
     }
 
 
-def _effective_severity(static: str, impact: str, budget: float | None) -> tuple[str, list[str]]:
+def _effective_severity(artifacts: Artifacts, static: str, budget: float | None) -> tuple[str, list[str]]:
     desired = static if static in SEVERITIES else "medium"
     reasons = [f"static severity: {desired}"]
-    if impact == "outage" or (budget is not None and budget <= 0):
-        desired = _max_severity(desired, "critical")
-        reasons.append("observed outage or exhausted error budget")
-    elif impact == "degraded" or (budget is not None and budget < 10):
+    desired, impact_reasons = apply_customer_impact(artifacts, desired)
+    reasons.extend(impact_reasons)
+    environment = (artifacts.deployment.environment or "").strip().lower()
+    if environment in {"production", "prod", "live"} and budget is not None and budget < 10:
         desired = _max_severity(desired, "high")
-        reasons.append("degraded impact or error budget below 10 percent")
+        reasons.append("production error budget below 10 percent; budget alone does not establish an outage")
     return desired, reasons
 
 

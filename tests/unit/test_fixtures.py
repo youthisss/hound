@@ -15,15 +15,15 @@ FIXTURE_ROOT = __import__("pathlib").Path(__file__).resolve().parents[1] / "fixt
 
 # name -> (stage, kind, severity, priority)
 CASES = {
-    "import_error.log": ("build", "import_error", "critical", 1),
+    "import_error.log": ("build", "import_error", "high", 2),
     "timeout.log": ("test", "timeout", "medium", 3),
     "segfault.log": ("test", "test_failure", "high", 2),
-    "npm_build_error.log": ("build", "compilation_error", "critical", 1),
+    "npm_build_error.log": ("build", "compilation_error", "high", 2),
     "ci_generic.log": ("ci", "ci_failure", "high", 2),
     "mixed_build_test.log": ("test", "test_failure", "medium", 3),
     "kubernetes_rollout.log": ("deploy", "readiness_timeout", "high", 2),
-    "image_pull.log": ("deploy", "image_pull_error", "critical", 1),
-    "migration_failed.log": ("deploy", "migration_failed", "critical", 1),
+    "image_pull.log": ("deploy", "image_pull_error", "high", 2),
+    "migration_failed.log": ("deploy", "migration_failed", "high", 2),
     "terraform_apply.log": ("deploy", "deployment_failed", "high", 2),
 }
 

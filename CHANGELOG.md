@@ -8,11 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Diagnostic regression quality gates for PR CI, including healthy-log false-positive
+  rate, failure detection recall, and explicit sample-support thresholds.
+- Synthetic adversarial corpus cases and IPv6 redaction coverage.
 - Standard Open Source documentation: `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`.
 - Issue and PR templates for GitHub.
 - Comprehensive distribution and production maturity roadmap.
 
 ### Changed
+- Clarified the advisory scope of root-cause hypotheses, pattern-based privacy
+  limits, and the distinction between synthetic regression metrics and pilot evidence.
 - Reorganized the package into `src/hound`, grouped tests by runtime boundary,
   and grouped documentation under purpose-specific directories.
 - Refreshed README navigation and added a documentation hub plus a runnable demo

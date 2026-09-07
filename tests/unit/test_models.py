@@ -23,8 +23,8 @@ GOLDEN = Path(__file__).resolve().parents[1] / "golden"
 def test_golden_documents_are_readable(name):
     doc = json.loads((GOLDEN / name).read_text(encoding="utf-8"))
     validate(doc)
-    assert format_document(doc, "markdown").startswith("# Hound report")
-    assert render_md(doc).startswith("# RCA Report")
+    assert format_document(doc, "markdown").startswith("# Hound Tracer report")
+    assert render_md(doc).startswith("# Root Cause Analysis Report")
 
 
 def test_current_writer_emits_resolved_structured_evidence():
@@ -45,6 +45,18 @@ def test_current_writer_emits_resolved_structured_evidence():
     assert "`ev-001`" in render_md(doc)
     assert "`ev-001`" in ticket.body_md
     assert "ev-001" in _overview_text(doc)
+
+
+def test_overview_identifies_the_viewed_artifact():
+    overview = _overview_text({
+        "meta": {"log_file": "C:/ci/logs/vitest_fail.log"},
+        "failure": {},
+        "root_cause": {},
+        "triage": {},
+    })
+
+    assert "artifact" in overview
+    assert "vitest_fail.log" in overview
 
 
 def test_evidence_ids_do_not_derive_from_sensitive_values():

@@ -34,7 +34,7 @@ request_id={request_id} trace_id={trace_id} method=POST path=/deploy/api
 Migration failed: relation "orders" does not exist
 request_id={request_id} trace_id={trace_id} method=POST path=/deploy/migrate
 """),
-    ("healthy", "test", "unknown", """pytest
+    ("healthy", "unknown", "unknown", """pytest
 100 passed in 1.2s
 Build completed successfully
 request_id={request_id} trace_id={trace_id} method=GET path=/health
