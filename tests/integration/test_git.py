@@ -23,6 +23,19 @@ def test_gather_context(fake_repo):
     assert "new.txt" in info.changed_files
 
 
+def test_gather_context_falls_back_from_unavailable_ci_revisions(fake_repo):
+    _, path = fake_repo
+    (path / "app" / "cart.py").write_text(
+        "class Cart:\n    total = 6.0\n",
+        encoding="utf-8",
+    )
+
+    info = gather(str(path), base_sha="a" * 40, head_sha="b" * 40)
+
+    assert info.head
+    assert "app/cart.py" in info.changed_files
+
+
 def test_gather_bad_dir(tmp_path):
     info = gather(str(tmp_path / "missing"))
     assert info.changed_files == []
