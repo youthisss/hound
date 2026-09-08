@@ -25,6 +25,7 @@ from textual.screen import ModalScreen
 from textual import events, work
 from textual.widgets import (
     Button,
+    Collapsible,
     Input,
     ListItem,
     ListView,
@@ -146,6 +147,7 @@ def _choose_directory(initial_directory: Path) -> str:
         root.destroy()
 
 CSS = """
+/* Editorial monochrome: boxes mark controls and selectable collections, not static content. */
 Screen { background: #000000; color: #ffffff; }
 * {
     scrollbar-color: #ffffff;
@@ -205,11 +207,14 @@ Screen { background: #000000; color: #ffffff; }
 #back-button {
     display: none;
     width: 14;
+    min-width: 14;
     height: 3;
-    margin: 0 1 0 1;
+    margin: 0 1 0 0;
     background: #000000;
     color: #ffffff;
     border: tall #ffffff;
+    content-align: center middle;
+    text-align: center;
 }
 #back-button:hover {
     background: #000000;
@@ -222,7 +227,7 @@ Screen { background: #000000; color: #ffffff; }
 .has-back-nav #back-button {
     display: block;
 }
-#show-sidebar { display: none; width: 18; height: 3; margin: 0 0 0 1; }
+#show-sidebar { display: none; width: 18; min-width: 18; height: 3; margin: 0; }
 .sidebar-collapsed #sidebar { display: none; }
 .sidebar-collapsed #show-sidebar { display: block; }
 #workflow-title {
@@ -236,7 +241,7 @@ Screen { background: #000000; color: #ffffff; }
 .field-label { height: 2; color: #ffffff; margin: 1 0 0 0; text-style: bold; }
 Input { border: tall #ffffff; background: #000000; color: #ffffff; padding: 0 1; }
 Input:focus { border: tall #ffffff; color: #ffffff; }
-Input .input--placeholder { color: #ffffff; }
+Input .input--placeholder { color: #a6a6a6; }
 Select { border: none; background: transparent; height: 3; }
 Select:focus { border: none; }
 SelectCurrent { border: tall #ffffff; background: #000000; color: #ffffff; height: 3; }
@@ -260,12 +265,27 @@ Button.-warning { background: #000000; border: tall #ffffff; color: #ffffff; }
 #directory-actions Button { width: 1fr; min-width: 0; height: 3; margin: 0; }
 #directory-actions Button:last-of-type { margin-right: 0; }
 .sidebar-input { margin: 0; }
-#dir-meta { height: auto; color: #ffffff; margin: 1 0 0 0; }
+#dir-meta {
+    height: auto;
+    min-height: 2;
+    color: #d6d6d6;
+    margin: 1 0 0 0;
+    padding: 0;
+    background: #000000;
+    border: none;
+}
 #log-list { margin: 1 0 0 0; }
 #workflow-status { margin: 1 0 0 0; }
 #analyze:focus, #browse-dir:focus, #load-dir:focus, #retry:focus { border: tall #ffffff; text-style: bold; }
 #stop-analysis { display: none; }
-#workflow-status { height: 2; color: #ffffff; padding: 0 1; background: #000000; border-left: tall #ffffff; }
+#workflow-status {
+    height: auto;
+    min-height: 2;
+    color: #d6d6d6;
+    padding: 0;
+    background: #000000;
+    border: none;
+}
 #log-list, #run-list {
     height: 1fr;
     min-height: 10;
@@ -279,7 +299,7 @@ Button.-warning { background: #000000; border: tall #ffffff; color: #ffffff; }
 #run-controls { width: 100%; height: 6; margin: 0; }
 #run-controls Select { width: 100%; height: 3; margin: 0; }
 ListView:focus { border: solid #ffffff; }
-ListItem { padding: 0 1; color: #ffffff; border: solid #ffffff; }
+ListItem { padding: 0 1; color: #ffffff; border: none; }
 ListItem:disabled { color: #ffffff; }
 ListItem:hover { background: #000000; }
 ListItem.-highlight { background: #ffffff; color: #000000; text-style: bold; }
@@ -350,7 +370,7 @@ Markdown { background: #000000; color: #ffffff; }
 MarkdownH1 { color: #ffffff; text-style: bold; }
 MarkdownH2 { color: #ffffff; text-style: bold; }
 MarkdownH3 { color: #ffffff; text-style: bold; }
-MarkdownBlockQuote { color: #ffffff; background: #000000; border-left: tall #ffffff; }
+MarkdownBlockQuote { color: #ffffff; background: #000000; }
 MarkdownFence { background: #000000; color: #ffffff; }
 #overview-shell { height: 1fr; }
 #overview-scroll { height: 1fr; }
@@ -361,8 +381,21 @@ MarkdownFence { background: #000000; color: #ffffff; }
 #result-position { width: 1fr; height: 3; color: #ffffff; content-align: center middle; }
 #artifact-workspace, #results-workspace { height: 1fr; padding: 1 2; display: none; }
 #qa-workspace, #investigation-workspace { height: 1fr; padding: 1 2; display: none; }
+#qa-workspace {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-size-vertical: 0;
+}
 .workspace-title { height: auto; color: #ffffff; text-style: bold; padding-bottom: 1; border-bottom: tall #ffffff; }
-.workspace-meta { height: auto; color: #ffffff; margin: 1 0; }
+.workspace-meta {
+    height: auto;
+    min-height: 3;
+    color: #d6d6d6;
+    background: #000000;
+    border: none;
+    padding: 0;
+    margin: 1 0;
+}
 .workspace-filter-bar { width: 100%; height: 3; margin-bottom: 1; }
 .workspace-filter-input { width: 2fr; height: 3; margin-right: 1; }
 .workspace-filter-select { width: 1fr; height: 3; margin-right: 1; }
@@ -401,8 +434,17 @@ MarkdownFence { background: #000000; color: #ffffff; }
     margin: 0 1;
 }
 #clear-selected, #clear-all { background: #000000; border: tall #ffffff; color: #ffffff; }
-#qa-scroll, #investigation-scroll { height: 1fr; }
-.qa-status-row, .context-status-row {
+#qa-scroll, #investigation-scroll { height: 1fr; margin-top: 1; }
+.workspace-summary {
+    height: auto;
+    width: 100%;
+    color: #e6e6e6;
+    padding: 1 0;
+    background: #000000;
+    border: none;
+    margin-bottom: 1;
+}
+.metadata-grid {
     width: 100%;
     height: auto;
     margin-bottom: 1;
@@ -410,42 +452,55 @@ MarkdownFence { background: #000000; color: #ffffff; }
     grid-columns: 1fr 1fr 1fr;
     grid-gutter: 0 1;
 }
-.qa-card, .context-card {
+.metadata-card {
     width: 100%;
     height: auto;
-    min-height: 5;
+    min-height: 6;
     padding: 1 2;
+    color: #e6e6e6;
     background: #000000;
     border: solid #ffffff;
 }
 #context-validation-summary {
     width: 100%;
     height: auto;
-    padding: 1 2;
+    padding: 1 0;
     background: #000000;
-    border: solid #ffffff;
+    border: none;
     margin-bottom: 1;
 }
 .qa-section-title { height: auto; color: #ffffff; text-style: bold; margin: 0 0 1 0; padding: 0 0 1 0; border-bottom: solid #ffffff; }
 .qa-description { height: auto; color: #ffffff; margin-bottom: 1; padding: 0; }
-.qa-policy-preview { height: auto; color: #ffffff; padding: 1; background: #000000; border: solid #ffffff; margin-bottom: 1; }
+.qa-policy-preview { height: auto; color: #ffffff; padding: 1 0; background: #000000; border: none; margin-bottom: 1; }
 .qa-form-row { width: 100%; height: auto; }
 .qa-field { width: 1fr; height: auto; margin: 0 1 1 0; }
 .qa-field:last-of-type { margin-right: 0; }
 .qa-field .field-label { height: 2; margin: 0; }
 .qa-field Input { width: 100%; height: 3; }
 .qa-field Select { width: 100%; height: 3; }
-#qa-actions { width: 100%; height: 7; margin-top: 1; }
-#qa-actions Button { width: 1fr; margin-right: 1; }
-#qa-actions Button:last-of-type { margin-right: 0; }
-#qa-status { height: auto; color: #ffffff; padding: 1; background: #000000; border-left: tall #ffffff; margin-bottom: 1; }
-#qa-result { height: auto; padding: 1; color: #ffffff; background: #000000; border: solid #ffffff; margin-bottom: 1; }
+#qa-actions { width: 100%; height: 3; margin-top: 1; }
+#qa-actions Button, #context-actions Button { width: 1fr; min-width: 0; height: 3; margin-right: 1; }
+#qa-actions Button:last-of-type, #context-actions Button:last-of-type { margin-right: 0; }
+#qa-status { height: auto; color: #ffffff; padding: 0; background: #000000; margin-top: 1; }
+#qa-scroll {
+    height: auto;
+    padding: 1 0 0 0;
+    border: none;
+    overflow-y: hidden;
+    overflow-x: hidden;
+}
+#qa-result { height: auto; padding: 1 0; color: #ffffff; background: #000000; border: none; margin-bottom: 1; }
 #qa-history-list { height: 10; min-height: 4; border: solid #ffffff; background: #000000; margin: 0 0 1 0; }
-#context-actions { height: auto; min-height: 3; margin: 1 0 0 0; }
-#context-validate { width: 24; min-width: 24; margin-right: 1; }
-#context-feedback { min-width: 20; margin-right: 1; }
-#context-copy-summary { min-width: 18; margin-right: 1; }
-#context-status { height: auto; min-height: 3; width: 1fr; color: #ffffff; padding: 1; background: #000000; border-left: tall #ffffff; }
+#qa-advanced { height: auto; margin-bottom: 1; border: tall #ffffff; background: #000000; }
+#qa-advanced > CollapsibleTitle {
+    width: 100%;
+    color: #ffffff;
+    text-style: bold;
+    content-align: center middle;
+    text-align: center;
+}
+#context-actions { height: 3; min-height: 3; margin: 1 0 0 0; }
+#context-status { height: auto; width: 100%; color: #ffffff; padding: 0; background: #000000; margin-top: 1; }
 #investigation { height: auto; color: #ffffff; padding: 0; background: #000000; border: none; }
 ClearResultsScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
 #clear-dialog { width: 70; max-width: 100%; height: auto; border: solid #ffffff; background: #000000; padding: 1 2; }
@@ -456,10 +511,11 @@ ClearResultsScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
 #clear-cancel { min-width: 14; margin-right: 1; }
 #clear-confirm { min-width: 18; }
 FeedbackScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
-#feedback-dialog { width: 76; max-width: 100%; height: auto; max-height: 100%; border: solid #ffffff; background: #000000; padding: 1 2; overflow-y: auto; scrollbar-size-vertical: 0; }
+#feedback-dialog { width: 96; max-width: 100%; height: auto; max-height: 100%; border: solid #ffffff; background: #000000; padding: 1 2; overflow-y: auto; scrollbar-size-vertical: 0; }
 #feedback-title { height: auto; color: #ffffff; text-style: bold; }
-#feedback-validation-banner { width: 100%; height: auto; padding: 1; background: #000000; border: solid #ffffff; margin-bottom: 1; }
-#feedback-description { height: auto; color: #ffffff; margin: 1 0; }
+#feedback-validation-banner { width: 100%; height: auto; padding: 0; background: #000000; border: none; margin-bottom: 1; }
+#feedback-description { height: auto; color: #ffffff; margin: 0 0 1 0; }
+#feedback-form { width: 100%; height: auto; }
 .feedback-form-row { width: 100%; height: auto; margin-bottom: 1; }
 .feedback-form-row.feedback-last-row { margin-bottom: 0; }
 .feedback-field { width: 1fr; height: auto; margin: 0 1 1 0; }
@@ -468,9 +524,9 @@ FeedbackScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
 .feedback-field .field-label { height: 1; margin: 0; }
 .feedback-field Input { width: 100%; height: 3; }
 .feedback-field Select { width: 100%; height: 3; }
-#feedback-actions { height: 4; align-horizontal: right; margin-top: 1; padding-top: 1; border-top: solid #ffffff; }
-#feedback-cancel { width: 20; margin-right: 1; }
-#feedback-save { width: 20; }
+#feedback-actions { width: 100%; height: 4; margin-top: 1; padding: 0; border-top: solid #ffffff; }
+#feedback-actions Button { width: 1fr; min-width: 0; }
+#feedback-cancel { margin-right: 1; }
 #shortcutbar { height: 1; background: #000000; color: #ffffff; padding: 0 1; }
 #statusbar { height: 1; background: #000000; color: #ffffff; padding: 0 1; }
 HelpScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
@@ -486,18 +542,37 @@ SettingsScreen { background: #000000; }
     scrollbar-size-vertical: 0;
 }
 #settings-panel {
-    width: 76;
+    width: 92;
     max-width: 100%;
     height: auto;
     max-height: 100%;
-    padding: 1 2;
+    padding: 1 2 0 2;
     border: solid #ffffff;
     background: #000000;
     overflow-y: auto;
     scrollbar-size-vertical: 0;
 }
-#settings-title { height: 2; color: #ffffff; text-style: bold; }
-#settings-description { color: #ffffff; margin-bottom: 1; }
+#settings-title { height: 2; color: #ffffff; text-style: bold; content-align: left middle; }
+#settings-description { height: auto; color: #b8b8b8; margin-bottom: 1; }
+#settings-session-summary {
+    height: auto;
+    color: #ffffff;
+    padding: 1 2;
+    margin: 0 0 1 0;
+    background: #000000;
+    border: solid #ffffff;
+}
+.settings-section {
+    width: 100%;
+    height: auto;
+    padding: 1;
+    margin: 0 0 1 0;
+    background: #000000;
+    border: solid #ffffff;
+}
+.settings-pair { width: 100%; height: auto; }
+.settings-pair > .settings-field { width: 1fr; margin-right: 1; }
+.settings-pair > .settings-field:last-of-type { margin-right: 0; }
 #settings-session-summary, #settings-session-paths {
     height: auto;
     color: #ffffff;
@@ -507,35 +582,34 @@ SettingsScreen { background: #000000; }
     border: solid #ffffff;
 }
 #settings-provider-title, #settings-context-title, #settings-execution-title, #custom-provider-title {
-    height: 3;
+    height: 2;
     color: #ffffff;
     text-style: bold;
-    margin: 1 0 1 0;
-    padding-top: 1;
-    border-top: solid #ffffff;
+    margin: 0 0 1 0;
+    padding-top: 0;
+    border-top: none;
 }
 #settings-execution-hint {
     height: auto;
     color: #ffffff;
-    padding: 0 1;
+    padding: 0;
     margin: 0 0 1 0;
-    border-left: tall #ffffff;
 }
 #provider-hint, #settings-context-hint, #auth-status, #settings-trust {
     height: auto;
     color: #ffffff;
-    padding: 1;
+    padding: 0;
     margin: 0 0 1 0;
     background: #000000;
-    border: solid #ffffff;
+    border: none;
 }
 #settings-offline { width: 100%; margin: 0 0 1 0; background: #000000; border: tall #ffffff; color: #ffffff; }
 #settings-offline.is-llm { background: #ffffff; border: tall #ffffff; color: #000000; text-style: bold; }
 #settings-page Input { width: 100%; height: 3; }
-#settings-page Select { width: 100%; height: 5; }
+#settings-page Select { width: 100%; height: 3; }
 #settings-page .settings-field { height: auto; margin: 0 0 1 0; }
 #settings-page .settings-label { height: 1; color: #ffffff; margin-bottom: 1; }
-#settings-context-title { height: 3; color: #ffffff; text-style: bold; margin-top: 1; padding-top: 1; border-top: solid #ffffff; }
+#settings-context-title { color: #ffffff; text-style: bold; }
 .settings-toggle-row { width: 100%; height: 3; margin: 0 0 1 0; }
 .settings-toggle-row Button {
     width: 1fr;
@@ -550,7 +624,15 @@ SettingsScreen { background: #000000; }
 #connection-actions { width: 100%; height: 3; margin: 1 0 1 0; }
 #connection-actions Button { width: 1fr; margin-right: 1; }
 #connection-actions Button:last-of-type { margin-right: 0; }
-#custom-provider-title { height: 3; color: #ffffff; text-style: bold; margin: 1 0 1 0; padding-top: 1; border-top: solid #ffffff; }
+#custom-provider-title { color: #ffffff; text-style: bold; }
+#settings-custom-provider { height: auto; margin: 0 0 1 0; background: #000000; border: tall #ffffff; }
+#settings-custom-provider > CollapsibleTitle {
+    width: 100%;
+    color: #ffffff;
+    text-style: bold;
+    content-align: center middle;
+    text-align: center;
+}
 #settings-actions { width: 100%; height: 5; align-horizontal: right; margin-top: 1; padding-top: 1; border-top: solid #ffffff; }
 #settings-add-provider { width: 100%; margin: 0 0 1 0; }
 .custom-field { margin: 0 0 1 0; }
@@ -560,8 +642,8 @@ SettingsScreen { background: #000000; }
 .compact #tabs { padding: 0; }
 .compact #home { padding: 1 1 0 1; }
 .compact #home-body { padding: 0; }
-.compact #home-status, .compact .home-status-row, .compact .qa-status-row, .compact .context-status-row { layout: vertical; }
-.compact .home-card, .compact .qa-card, .compact .context-card { width: 100%; height: auto; min-height: 3; margin: 0 0 1 0; padding: 1; }
+.compact #home-status, .compact .home-status-row { layout: vertical; }
+.compact .home-card { width: 100%; height: auto; min-height: 3; margin: 0 0 1 0; padding: 1; }
 .compact #home-guides { height: auto; layout: vertical; }
 .compact #home-guides .home-guide { width: 100%; height: auto; min-height: 3; margin: 0 0 1 0; padding: 1; }
 .compact #home-formats { padding: 1; margin-bottom: 1; }
@@ -583,7 +665,9 @@ SettingsScreen { background: #000000; }
 .compact #qa-workspace, .compact #investigation-workspace { padding: 1 1; overflow-y: auto; }
 .compact .qa-form-row { layout: vertical; }
 .compact .qa-field { width: 100%; margin: 0 0 1 0; }
-.compact #context-actions { height: auto; }
+.compact #context-actions { height: 3; layout: horizontal; }
+.compact #context-actions Button { width: 1fr; margin: 0 1 0 0; }
+.compact #context-actions Button:last-of-type { margin-right: 0; }
 .compact #context-status { width: 100%; height: auto; margin: 0 0 1 0; }
 .compact .feedback-form-row { layout: vertical; margin-bottom: 0; }
 .compact .feedback-field { width: 100%; margin: 0 0 1 0; }
@@ -595,16 +679,16 @@ SettingsScreen { background: #000000; }
 .compact #clear-dialog { width: 100%; max-width: 100%; padding: 1; }
 .compact #help-dialog { width: 100%; max-width: 100%; padding: 1; }
 .compact #settings-page { padding: 1 0 0 0; }
-.compact #settings-panel { padding: 1; border-left: none; border-right: none; }
+.compact #settings-panel { padding: 1; border-right: none; }
 .compact .settings-toggle-row { layout: vertical; height: auto; }
 .compact .settings-toggle-row Button { width: 100%; margin: 0 0 1 0; }
 .compact #connection-actions { height: auto; layout: vertical; }
 .compact #connection-actions Button { width: 100%; margin: 0 0 1 0; }
-.compact #back-button { width: 12; margin: 0 1 0 0; }
-.compact #show-sidebar { width: 16; margin: 0; }
+.compact #back-button { width: 14; min-width: 14; margin: 0 1 0 0; }
+.compact #show-sidebar { width: 18; min-width: 18; margin: 0; }
 .short #workflow-title { height: 2; margin: 0; }
-.short #workspace-nav { height: 5; margin-top: 0; }
-.short .workspace-nav-row, .short #workspace-nav Button { height: 2; }
+.short #workspace-nav { height: 7; margin-top: 0; }
+.short .workspace-nav-row, .short #workspace-nav Button { height: 3; }
 .short .field-label { height: 1; margin: 0; padding-top: 0; }
 .short #workflow-status { height: 1; }
 .short .sidebar-button { margin-top: 0; }
@@ -615,7 +699,7 @@ SettingsScreen { background: #000000; }
 .short #run-filter, .short #run-controls { display: none; }
 .short #open-settings { margin: 0; }
 .short #content-actions { margin-bottom: 0; }
-.short #back-button, .short #show-sidebar { height: 2; margin-top: 0; margin-bottom: 0; }
+.short #back-button, .short #show-sidebar { height: 3; margin-top: 0; margin-bottom: 0; }
 .short #qa-history-list { height: 6; }
 .short #home-logo { display: block; height: 1; margin: 0; }
 .short #home-subtitle { margin: 0; }
@@ -654,43 +738,75 @@ Screen, SettingsScreen, ClearResultsScreen, FeedbackScreen, HelpScreen {
 #workspace-nav Button { background: #000000; color: #ffffff; border: tall #ffffff; }
 #workspace-nav Button, #back-button, Input, SelectCurrent, Button,
 #settings-offline, #clear-selected, #clear-all { border: tall #ffffff; }
+Input, SelectCurrent { background: #000000; }
 Input:focus, Select:focus > SelectCurrent, SelectCurrent:focus { border: tall #ffffff; color: #ffffff; }
 Button:hover, Button.-warning, #workspace-nav Button.is-active { background: #ffffff; color: #000000; }
 Button.-primary, #settings-offline.is-llm { background: #ffffff; border: tall #ffffff; color: #000000; }
-Button:disabled, Button.-primary:disabled, Button.-warning:disabled {
+Button:disabled, Button.-primary:disabled, Button.-warning:disabled,
+#workspace-nav Button:disabled {
+    background: #111111;
+    border: tall #ffffff;
+    color: #8f8f8f;
+    opacity: 1;
+    text-opacity: 1;
+    text-style: none;
+}
+#home-next, .home-card, #home-guides .home-guide, #home-formats,
+#clear-dialog, #feedback-dialog, #help-dialog, #settings-panel { border: solid #ffffff; }
+#log-list, #run-list, #artifact-workspace-list, #results-workspace-list,
+#qa-history-list {
+    background: #000000;
+    border: solid #ffffff;
+}
+Tabs, .result-header { border-bottom: solid #ffffff; }
+.workspace-title { border-bottom: tall #ffffff; }
+#feedback-actions, #settings-actions { border-top: solid #ffffff; }
+ListItem.-highlight, #artifact-workspace-list > ListItem.-highlight,
+#results-workspace-list > ListItem.-highlight, Tab:hover, Tab.-active {
+    background: #ffffff;
+    color: #000000;
+}
+Underline > .underline--bar { color: #ffffff; background: #ffffff; }
+#back-button, #show-sidebar {
     background: #000000;
     border: tall #ffffff;
     color: #ffffff;
-    opacity: 1;
-    text-opacity: 1;
+    text-style: bold;
 }
-#home-next, .home-card, #home-guides .home-guide, #home-formats,
-#qa-result, #clear-dialog, #feedback-dialog, #help-dialog,
-#settings-panel { border: solid #ffffff; }
-Tabs, .result-header { border-bottom: solid #ffffff; }
-.workspace-title { border-bottom: tall #ffffff; }
-MarkdownBlockQuote, #qa-status { border-left: tall #ffffff; }
-#provider-hint, #settings-context-hint, #auth-status, #settings-trust { border: solid #ffffff; }
-#feedback-actions, #settings-context-title, #custom-provider-title, #settings-actions { border-top: solid #ffffff; }
-Tab:hover, Tab.-active { background: #ffffff; color: #000000; }
-Underline > .underline--bar { color: #ffffff; background: #ffffff; }
-ClearResultsScreen, FeedbackScreen, HelpScreen { background: rgba(0, 0, 0, 0.82); }
+#back-button:hover, #show-sidebar:hover { background: #ffffff; color: #000000; }
+#back-button:disabled, #clear-selected:disabled, #clear-all:disabled,
+#settings-offline:disabled {
+    background: #111111;
+    border: tall #ffffff;
+    color: #8f8f8f;
+    text-style: none;
+}
+ClearResultsScreen, FeedbackScreen, HelpScreen { background: rgba(0, 0, 0, 0.92); }
+
+.compact .metadata-grid { layout: vertical; }
+.compact .metadata-card { width: 100%; min-height: 4; margin: 0 0 1 0; padding: 1; }
+.compact .settings-pair { layout: vertical; }
+.compact .settings-pair > .settings-field { width: 100%; margin: 0 0 1 0; }
 """
 
+SEMANTIC_SUCCESS = "#5fd787"
+SEMANTIC_WARNING = "#ffd75f"
+SEMANTIC_ERROR = "#ff5f5f"
+
 SEV_COLOR = {
-    "critical": "red",
-    "high": "red",
-    "medium": "yellow",
-    "low": "green",
-    "info": "blue",
+    "critical": SEMANTIC_ERROR,
+    "high": SEMANTIC_ERROR,
+    "medium": SEMANTIC_WARNING,
+    "low": SEMANTIC_SUCCESS,
+    "info": "#ffffff",
 }
 
 STAGE_COLOR = {
-    "ci": "blue",
-    "build": "cyan",
-    "test": "yellow",
-    "deploy": "magenta",
-    "unknown": "#8b949e",
+    "ci": "#e6e6e6",
+    "build": "#d6d6d6",
+    "test": "#c7c7c7",
+    "deploy": "#ffffff",
+    "unknown": "#8f8f8f",
 }
 
 HOUND_LOGO = (
@@ -849,13 +965,17 @@ def _overview_text(
 
 def _outcome_color(outcome: object) -> str:
     return {
-        "pass": "green",
-        "warn": "yellow",
-        "block": "red",
-        "succeeded": "green",
-        "insufficient_evidence": "yellow",
-        "failed": "red",
-        "unknown": "yellow",
+        "pass": SEMANTIC_SUCCESS,
+        "warn": SEMANTIC_WARNING,
+        "block": SEMANTIC_ERROR,
+        "succeeded": SEMANTIC_SUCCESS,
+        "insufficient_evidence": SEMANTIC_WARNING,
+        "failed": SEMANTIC_ERROR,
+        "unknown": SEMANTIC_WARNING,
+        "critical": SEMANTIC_ERROR,
+        "high": SEMANTIC_ERROR,
+        "medium": SEMANTIC_WARNING,
+        "low": SEMANTIC_SUCCESS,
     }.get(str(outcome).lower(), "#d8d8d8")
 
 
@@ -881,18 +1001,18 @@ def _trust_profile_text(
     try:
         policy = policy_for(source_class)
     except ValueError:
-        return "[red]TRUST PROFILE INVALID[/red]\n  Unknown source class"
+        return f"[bold {SEMANTIC_ERROR}]TRUST PROFILE INVALID[/bold {SEMANTIC_ERROR}]\n  Unknown source class"
 
     def state(allowed: bool, enabled: bool, blocked_reason: str, off_reason: str) -> str:
         if not allowed:
-            return f"[red]BLOCKED[/red] ({blocked_reason})"
+            return f"[bold {SEMANTIC_ERROR}]BLOCKED[/bold {SEMANTIC_ERROR}] ({blocked_reason})"
         if not enabled:
             return f"[dim]OFF[/dim] ({off_reason})"
-        return "[green]ACTIVE[/green]"
+        return f"[bold {SEMANTIC_SUCCESS}]ACTIVE[/bold {SEMANTIC_SUCCESS}]"
 
     llm_enabled = policy.allow_llm and not offline
     if llm_ready is False and llm_enabled:
-        llm_state = "[yellow]ALLOWED[/yellow] (provider not ready; fallback available)"
+        llm_state = f"[{SEMANTIC_WARNING}]ALLOWED[/{SEMANTIC_WARNING}] (provider not ready; fallback available)"
     else:
         llm_state = state(
             policy.allow_llm,
@@ -913,41 +1033,41 @@ def _trust_profile_text(
         "not selected",
     )
     delivery_state = (
-        "[green]ALLOWED[/green] (CLI/server only)"
+        f"[bold {SEMANTIC_SUCCESS}]ALLOWED[/bold {SEMANTIC_SUCCESS}] (CLI/server only)"
         if policy.allow_delivery
-        else "[red]BLOCKED[/red] (trust policy)"
+        else f"[bold {SEMANTIC_ERROR}]BLOCKED[/bold {SEMANTIC_ERROR}] (trust policy)"
     )
 
     if compact:
         sc_name = escape(source_class if len(source_class) <= 18 else source_class[:17] + "…")
         if not policy.allow_llm:
-            llm_val = "[red]blocked[/red]"
+            llm_val = f"[bold {SEMANTIC_ERROR}]blocked[/bold {SEMANTIC_ERROR}]"
         elif offline:
             llm_val = "[dim]offline[/dim]"
         elif llm_ready is False:
-            llm_val = "[yellow]fallback[/yellow]"
+            llm_val = f"[{SEMANTIC_WARNING}]fallback[/{SEMANTIC_WARNING}]"
         else:
-            llm_val = "[green]active[/green]"
+            llm_val = f"[{SEMANTIC_SUCCESS}]active[/{SEMANTIC_SUCCESS}]"
 
         ctx_val = (
-            "[red]blocked[/red]"
+            f"[bold {SEMANTIC_ERROR}]blocked[/bold {SEMANTIC_ERROR}]"
             if not policy.allow_source_context
-            else ("[green]active[/green]" if source_context else "[dim]not selected[/dim]")
+            else (f"[{SEMANTIC_SUCCESS}]active[/{SEMANTIC_SUCCESS}]" if source_context else "[dim]not selected[/dim]")
         )
         enrich_val = (
-            "[red]blocked[/red]"
+            f"[bold {SEMANTIC_ERROR}]blocked[/bold {SEMANTIC_ERROR}]"
             if not policy.allow_enrichment
-            else ("[green]active[/green]" if enrich else "[dim]not selected[/dim]")
+            else (f"[{SEMANTIC_SUCCESS}]active[/{SEMANTIC_SUCCESS}]" if enrich else "[dim]not selected[/dim]")
         )
         deliv_val = (
-            "[green]allowed[/green] [dim](cli)[/dim]"
+            f"[{SEMANTIC_SUCCESS}]allowed[/{SEMANTIC_SUCCESS}] [dim](cli)[/dim]"
             if policy.allow_delivery
-            else "[red]blocked[/red]"
+            else f"[bold {SEMANTIC_ERROR}]blocked[/bold {SEMANTIC_ERROR}]"
         )
         policy_val = (
-            "[red]untrusted[/red]"
+            f"[bold {SEMANTIC_ERROR}]untrusted[/bold {SEMANTIC_ERROR}]"
             if source_class == "fork_pr"
-            else "[green]fail-closed[/green]"
+            else f"[{SEMANTIC_SUCCESS}]fail-closed[/{SEMANTIC_SUCCESS}]"
         )
 
         return (
@@ -1151,11 +1271,11 @@ def _context_status_text(doc: dict | None) -> str:
         return "[dim]No report selected. Open a stored run to validate context.[/dim]"
     if readiness["valid"]:
         return (
-            "[green][PASS][/green] report valid  •  "
+            f"[bold {SEMANTIC_SUCCESS}][PASS][/bold {SEMANTIC_SUCCESS}] report valid  •  "
             f"schema {escape(readiness['schema'])}  •  "
             f"trust: {escape(readiness['trust'])}"
         )
-    return f"[red][FAIL][/red] {escape(readiness['validation'])}"
+    return f"[bold {SEMANTIC_ERROR}][FAIL][/bold {SEMANTIC_ERROR}] {escape(readiness['validation'])}"
 
 
 def _investigation_text(
@@ -1241,7 +1361,7 @@ def _investigation_text(
     if release_changes:
         for change in release_changes:
             status = str(change.get("status") or "unknown")
-            color = "yellow" if status == "unknown" else "magenta" if status == "changed" else "green"
+            color = SEMANTIC_WARNING if status == "unknown" else SEMANTIC_WARNING if status == "changed" else SEMANTIC_SUCCESS
             lines.append(
                 f"  [{color}]{escape(status)}[/{color}] {escape(change.get('field') or 'field')}: "
                 f"{escape(change.get('previous') or '(missing)')} → {escape(change.get('current') or '(missing)')}"
@@ -1257,7 +1377,7 @@ def _investigation_text(
             f"impact={escape(timeline.get('customer_impact') or 'unknown')}"
         )
         if timeline.get("has_cycles"):
-            lines.append(f"  [red]Cycle warning:[/red] {escape(timeline.get('cycle_warning') or '')}")
+            lines.append(f"  [bold {SEMANTIC_WARNING}]Cycle warning:[/bold {SEMANTIC_WARNING}] {escape(timeline.get('cycle_warning') or '')}")
         entries = timeline.get("entries") if isinstance(timeline.get("entries"), list) else []
         if entries:
             for entry in entries[:40]:
@@ -1274,8 +1394,8 @@ def _investigation_text(
                 )
                 if entry.get("trace_id") or entry.get("span_id"):
                     lines.append(
-                        f"    trace={escape(entry.get('trace_id') or '—')} "
-                        f"span={escape(entry.get('span_id') or '—')}"
+                        f"    trace={escape(entry.get('trace_id') or 'not available')} "
+                        f"span={escape(entry.get('span_id') or 'not available')}"
                     )
                 if entry.get("uncertainty"):
                     lines.append(f"    uncertainty: {escape(entry['uncertainty'])}")
@@ -1367,7 +1487,7 @@ def _investigation_text(
         lines.append(
             f"  latest: outcome={escape(latest.get('actual_outcome') or 'unknown')} "
             f"status={escape(latest.get('review_status') or 'pending')} "
-            f"reviewer={escape(latest.get('reviewer') or '—')}"
+            f"reviewer={escape(latest.get('reviewer') or 'not available')}"
         )
     return "\n".join(lines)
 
@@ -1523,90 +1643,103 @@ class SettingsScreen(ModalScreen[None]):
                     id="settings-description",
                 )
                 yield Static(id="settings-session-summary")
-                yield Static("ANALYSIS MODE & PROVIDER", id="settings-provider-title")
-                yield Button(
-                    self._offline_label(),
-                    id="settings-offline",
-                    classes="" if self._offline else "is-llm",
-                )
-                with Vertical(classes="settings-field"):
-                    yield Static("Provider", classes="settings-label")
-                    yield Select(
-                        [(str(definition.get("name") or name), name) for name, definition in self._providers.items()],
-                        value=self._app.provider if self._app.provider in self._providers else "openai",
-                        id="settings-provider",
+                with Vertical(classes="settings-section"):
+                    yield Static("ANALYSIS MODE & PROVIDER", id="settings-provider-title")
+                    yield Button(
+                        self._offline_label(),
+                        id="settings-offline",
+                        classes="" if self._offline else "is-llm",
                     )
+                    with Horizontal(classes="settings-pair"):
+                        with Vertical(classes="settings-field"):
+                            yield Static("Provider", classes="settings-label")
+                            yield Select(
+                                [(str(definition.get("name") or name), name) for name, definition in self._providers.items()],
+                                value=self._app.provider if self._app.provider in self._providers else "openai",
+                                id="settings-provider",
+                            )
+                        with Vertical(classes="settings-field"):
+                            yield Static("Model", classes="settings-label")
+                            models = self._model_options(self._app.provider or "openai", self._app.model)
+                            yield Select(models, value=self._app.model if self._app.model in {value for _, value in models} else models[0][1], id="settings-model")
                     yield Static(self._app._provider_hint(), id="provider-hint")
-                with Vertical(classes="settings-field"):
-                    yield Static("Model", classes="settings-label")
-                    models = self._model_options(self._app.provider or "openai", self._app.model)
-                    yield Select(models, value=self._app.model if self._app.model in {value for _, value in models} else models[0][1], id="settings-model")
-                    yield Input(
-                        value="" if self._app.model == "auto" else self._app.model,
-                        placeholder="Manual model ID (optional, overrides the list)",
-                        id="settings-model-manual",
+                    with Horizontal(classes="settings-pair"):
+                        with Vertical(classes="settings-field"):
+                            yield Static("Manual model ID", classes="settings-label")
+                            yield Input(
+                                value="" if self._app.model == "auto" else self._app.model,
+                                placeholder="optional override",
+                                id="settings-model-manual",
+                            )
+                        with Vertical(classes="settings-field"):
+                            yield Static("Base URL", classes="settings-label")
+                            yield Input(value=self._app.base_url or "", placeholder="optional base URL", id="settings-base-url")
+                    with Vertical(classes="settings-field"):
+                        yield Static("API key override", classes="settings-label")
+                        yield Input(value=self._app.api_key or "", placeholder="optional API key", password=True, id="settings-api-key")
+                    yield Static("[dim]Credentials are stored in the operating system keyring.[/dim]", id="auth-status")
+                    with Horizontal(id="connection-actions"):
+                        yield Button("Disconnect", id="settings-disconnect")
+                        yield Button("Connect & discover", id="settings-connect", variant="primary")
+                with Vertical(classes="settings-section"):
+                    yield Static("EVIDENCE & TRUST", id="settings-context-title")
+                    yield Static(
+                        "These controls only enable bounded, read-only evidence collection. Trust policy can still block a capability.",
+                        id="settings-context-hint",
                     )
-                with Vertical(classes="settings-field"):
-                    yield Static("Base URL", classes="settings-label")
-                    yield Input(value=self._app.base_url or "", placeholder="optional base URL", id="settings-base-url")
-                with Vertical(classes="settings-field"):
-                    yield Static("API key override", classes="settings-label")
-                    yield Input(value=self._app.api_key or "", placeholder="optional API key", password=True, id="settings-api-key")
-                yield Static("[dim]Credentials are stored in the operating system keyring.[/dim]", id="auth-status")
-                with Horizontal(id="connection-actions"):
-                    yield Button("Disconnect", id="settings-disconnect")
-                    yield Button("Connect & discover", id="settings-connect", variant="primary")
-                yield Static("EVIDENCE & TRUST", id="settings-context-title")
-                yield Static(
-                    "These controls only enable bounded, read-only evidence collection. Trust policy can still block a capability.",
-                    id="settings-context-hint",
-                )
-                with Vertical(classes="settings-field"):
-                    yield Static("Repository directory (optional)", classes="settings-label")
-                    yield Input(value=self._repo_dir, placeholder="/path/to/trusted/checkout", id="settings-repo-dir")
-                with Vertical(classes="settings-field"):
-                    yield Static("Deployment context JSON (optional)", classes="settings-label")
-                    yield Input(value=self._context_path, placeholder="/path/to/context.json", id="settings-context-path")
-                with Vertical(classes="settings-field"):
-                    yield Static("Source class / trust profile", classes="settings-label")
-                    yield Select(
-                        [(value.replace("_", " ").title(), value) for value in sorted(SOURCE_CLASSES)],
-                        value=self._source_class if self._source_class in SOURCE_CLASSES else "local_artifact",
-                        id="settings-source-class",
+                    with Horizontal(classes="settings-pair"):
+                        with Vertical(classes="settings-field"):
+                            yield Static("Repository directory", classes="settings-label")
+                            yield Input(value=self._repo_dir, placeholder="optional trusted checkout", id="settings-repo-dir")
+                        with Vertical(classes="settings-field"):
+                            yield Static("Deployment context JSON", classes="settings-label")
+                            yield Input(value=self._context_path, placeholder="optional context file", id="settings-context-path")
+                    with Vertical(classes="settings-field"):
+                        yield Static("Source class / trust profile", classes="settings-label")
+                        yield Select(
+                            [(value.replace("_", " ").title(), value) for value in sorted(SOURCE_CLASSES)],
+                            value=self._source_class if self._source_class in SOURCE_CLASSES else "local_artifact",
+                            id="settings-source-class",
+                        )
+                    yield Static("Evidence collection options", id="settings-evidence-options", classes="settings-label")
+                    with Horizontal(classes="settings-toggle-row"):
+                        yield Button("Source context: OFF", id="settings-source-context", classes="settings-toggle")
+                        yield Button("Read-only enrichment: OFF", id="settings-enrich", classes="settings-toggle")
+                    with Horizontal(classes="settings-pair"):
+                        with Vertical(classes="settings-field"):
+                            yield Static("Batch workers", classes="settings-label")
+                            yield Input(value=str(self._jobs), placeholder="1", id="settings-jobs")
+                        with Vertical(classes="settings-field"):
+                            yield Static("Max LLM calls", classes="settings-label")
+                            yield Input(value="" if self._max_llm_calls is None else str(self._max_llm_calls), placeholder="unlimited", id="settings-max-llm-calls")
+                        with Vertical(classes="settings-field"):
+                            yield Static("Max cost USD", classes="settings-label")
+                            yield Input(value="" if self._max_cost_usd is None else str(self._max_cost_usd), placeholder="unlimited", id="settings-max-cost")
+                    yield Static(id="settings-trust")
+                with Vertical(classes="settings-section"):
+                    yield Static("EXECUTION & DATA HANDLING", id="settings-execution-title")
+                    yield Static(
+                        "Redaction protects reports and provider payloads. Deduplication reuses matching prior analysis from this output directory.",
+                        id="settings-execution-hint",
                     )
-                yield Static("Evidence collection options", id="settings-evidence-options", classes="settings-label")
-                with Horizontal(classes="settings-toggle-row"):
-                    yield Button("Source context: OFF", id="settings-source-context", classes="settings-toggle")
-                    yield Button("Read-only enrichment: OFF", id="settings-enrich", classes="settings-toggle")
-                with Horizontal(classes="qa-form-row"):
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Batch workers", classes="settings-label")
-                        yield Input(value=str(self._jobs), placeholder="1", id="settings-jobs")
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Max LLM calls (optional)", classes="settings-label")
-                        yield Input(value="" if self._max_llm_calls is None else str(self._max_llm_calls), placeholder="unlimited", id="settings-max-llm-calls")
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Max cost USD (optional)", classes="settings-label")
-                        yield Input(value="" if self._max_cost_usd is None else str(self._max_cost_usd), placeholder="unlimited", id="settings-max-cost")
-                yield Static(id="settings-trust")
-                yield Static("EXECUTION & DATA HANDLING", id="settings-execution-title")
-                yield Static(
-                    "Redaction protects reports and provider payloads. Deduplication reuses matching prior analysis from this output directory.",
-                    id="settings-execution-hint",
-                )
-                with Horizontal(classes="settings-toggle-row"):
-                    yield Button(self._redaction_label(), id="settings-redact", classes="settings-toggle")
-                    yield Button(self._dedup_label(), id="settings-dedup", classes="settings-toggle")
-                with Vertical(classes="settings-field"):
-                    yield Static("LLM retries per request (0-10)", classes="settings-label")
-                    yield Input(value=str(self._max_retries), placeholder="3", id="settings-max-retries")
-                yield Static(id="settings-session-paths")
-                yield Static("ADD CUSTOM PROVIDER", id="custom-provider-title")
-                yield Input(placeholder="provider-id", id="custom-provider-id", classes="custom-field")
-                yield Input(placeholder="Display name", id="custom-provider-name", classes="custom-field")
-                yield Input(placeholder="https://models.example.com/v1", id="custom-provider-url", classes="custom-field")
-                yield Input(placeholder="preferred model (optional)", id="custom-provider-model", classes="custom-field")
-                yield Button("Add OpenAI-compatible provider", id="settings-add-provider")
+                    with Horizontal(classes="settings-toggle-row"):
+                        yield Button(self._redaction_label(), id="settings-redact", classes="settings-toggle")
+                        yield Button(self._dedup_label(), id="settings-dedup", classes="settings-toggle")
+                    with Vertical(classes="settings-field"):
+                        yield Static("LLM retries per request (0-10)", classes="settings-label")
+                        yield Input(value=str(self._max_retries), placeholder="3", id="settings-max-retries")
+                    yield Static(id="settings-session-paths")
+                with Collapsible(title="Custom provider", collapsed=True, id="settings-custom-provider"):
+                    with Horizontal(classes="settings-pair"):
+                        with Vertical(classes="settings-field"):
+                            yield Static("Provider ID", classes="settings-label")
+                            yield Input(placeholder="provider-id", id="custom-provider-id", classes="custom-field")
+                        with Vertical(classes="settings-field"):
+                            yield Static("Display name", classes="settings-label")
+                            yield Input(placeholder="Provider name", id="custom-provider-name", classes="custom-field")
+                    yield Input(placeholder="https://models.example.com/v1", id="custom-provider-url", classes="custom-field")
+                    yield Input(placeholder="preferred model (optional)", id="custom-provider-model", classes="custom-field")
+                    yield Button("Add OpenAI-compatible provider", id="settings-add-provider")
                 with Horizontal(id="settings-actions"):
                     yield Button("Cancel", id="settings-cancel")
                     yield Button("Save settings", id="settings-save", variant="primary")
@@ -1718,7 +1851,9 @@ class SettingsScreen(ModalScreen[None]):
             provider = str(self.query_one("#settings-provider", Select).value)
             delete_api_key(provider)
             self.query_one("#settings-api-key", Input).value = ""
-            self.query_one("#auth-status", Static).update("[yellow]Not connected[/yellow]")
+            self.query_one("#auth-status", Static).update(
+                f"[{SEMANTIC_WARNING}][WARN] Not connected[/{SEMANTIC_WARNING}]"
+            )
             return
         if event.button.id == "settings-add-provider":
             provider_id = self.query_one("#custom-provider-id", Input).value.strip()
@@ -1732,6 +1867,10 @@ class SettingsScreen(ModalScreen[None]):
                 self._app.notify(f"Could not add provider: {exc}", severity="error")
                 return
             self._app.notify(f"Provider {provider_id} added; reopen Settings to select it", timeout=4)
+            return
+        if event.button.id == "settings-save" and not getattr(self, "_processing_deferred_save", False):
+            # Apply toggle events posted immediately before Save before reading the form state.
+            self.call_later(self._save_after_pending_toggles)
             return
         if event.button.id != "settings-save":
             return
@@ -1817,6 +1956,15 @@ class SettingsScreen(ModalScreen[None]):
         self._app.notify(f"Settings saved: {saved_path}", timeout=3)
         self.dismiss()
 
+    def _save_after_pending_toggles(self) -> None:
+        if not self.is_mounted:
+            return
+        self._processing_deferred_save = True
+        try:
+            self.on_button_pressed(Button.Pressed(self.query_one("#settings-save", Button)))
+        finally:
+            self._processing_deferred_save = False
+
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "settings-source-class":
             self._source_class = str(event.value)
@@ -1860,10 +2008,14 @@ class SettingsScreen(ModalScreen[None]):
         connect.disabled = False
         connect.label = "Connect & discover"
         if error is not None:
-            self.query_one("#auth-status", Static).update("[red]Connection failed[/red]")
+            self.query_one("#auth-status", Static).update(
+                f"[bold {SEMANTIC_ERROR}][FAIL] Connection failed[/bold {SEMANTIC_ERROR}]"
+            )
             self._app.notify(f"Connection failed: {error}", severity="error")
             return
-        self.query_one("#auth-status", Static).update(f"[green]Connected[/green] • {len(models)} models discovered")
+        self.query_one("#auth-status", Static).update(
+            f"[bold {SEMANTIC_SUCCESS}][PASS] Connected[/bold {SEMANTIC_SUCCESS}]  |  {len(models)} models discovered"
+        )
         model_select = self.query_one("#settings-model", Select)
         current = str(model_select.value or "")
         preferred = str(self._providers.get(provider, {}).get("default_model") or "")
@@ -1901,11 +2053,11 @@ class FeedbackScreen(ModalScreen[None]):
         self._val_record = val
 
         if val.status == "PASS":
-            val_banner = f"[green]VALIDATION: PASS[/green] · {val.validation_id} · SHA: [dim]{val.report_sha256[:12]}[/dim] · Ready for reviewed status"
+            val_banner = f"[bold {SEMANTIC_SUCCESS}]✓ VALIDATION: PASS[/bold {SEMANTIC_SUCCESS}]  |  {val.validation_id}  |  SHA: [dim]{val.report_sha256[:12]}[/dim]  |  Ready for reviewed status"
         elif val.status == "WARN":
-            val_banner = f"[yellow]VALIDATION: WARN[/yellow] · {val.validation_id} · SHA: [dim]{val.report_sha256[:12]}[/dim] · Advisory warnings present"
+            val_banner = f"[bold {SEMANTIC_WARNING}]! VALIDATION: WARN[/bold {SEMANTIC_WARNING}]  |  {val.validation_id}  |  SHA: [dim]{val.report_sha256[:12]}[/dim]  |  Advisory warnings present"
         else:
-            val_banner = f"[red]VALIDATION: FAIL[/red] · {val.validation_id} · [red]Blocked: report must pass validation before marking reviewed[/red]"
+            val_banner = f"[bold {SEMANTIC_ERROR}]× VALIDATION: FAIL[/bold {SEMANTIC_ERROR}]  |  {val.validation_id}  |  [{SEMANTIC_ERROR}]Blocked: report must pass validation before marking reviewed[/{SEMANTIC_ERROR}]"
 
         with Vertical(id="feedback-dialog"):
             yield Static(f"Review feedback · {escape(run_label)}", id="feedback-title")
@@ -1939,16 +2091,6 @@ class FeedbackScreen(ModalScreen[None]):
                     for label, widget_id in (
                         ("Kind correct", "feedback-kind-correct"),
                         ("Severity correct", "feedback-severity-correct"),
-                    ):
-                        with Vertical(classes="feedback-field"):
-                            yield Static(label, classes="field-label")
-                            yield Select(
-                                self._options(["correct", "incorrect", "unknown"]),
-                                value="unknown",
-                                id=widget_id,
-                            )
-                with Horizontal(classes="qa-form-row feedback-form-row"):
-                    for label, widget_id in (
                         ("Owner correct", "feedback-owner-correct"),
                         ("Duplicate correct", "feedback-duplicate-correct"),
                     ):
@@ -2324,7 +2466,7 @@ class RcaTui(App):
                 yield Button("Settings", id="open-settings", classes="sidebar-button")
             with Vertical(id="content"):
                 with Horizontal(id="content-actions"):
-                    yield Button("◄ Back", id="back-button")
+                    yield Button("Back", id="back-button")
                     yield Button("Show sidebar", id="show-sidebar")
                 with Vertical(id="home"):
                     yield HomeLogo(HOUND_LOGO, id="home-logo")
@@ -2360,18 +2502,18 @@ class RcaTui(App):
                         )
                     yield ListView(id="artifact-workspace-list")
                     with Horizontal(classes="pagination-controls"):
-                        yield Button("Prev (p)", id="artifact-prev", disabled=True)
+                        yield Button("Previous", id="artifact-prev", disabled=True)
                         yield Static("Page 1/1", id="artifact-pagination-label", classes="pagination-label")
-                        yield Button("Next (n)", id="artifact-next", disabled=True)
+                        yield Button("Next", id="artifact-next", disabled=True)
                     with Vertical(classes="workspace-actions"):
                         with Horizontal(classes="workspace-action-row"):
-                            yield Button("Analyze selected (a)", id="workspace-analyze", variant="primary", disabled=True)
-                            yield Button("Analyze filtered (A)", id="workspace-analyze-all", variant="warning", disabled=True)
-                            yield Button("Select all (z)", id="workspace-select-all", disabled=True)
+                            yield Button("Analyze selected", id="workspace-analyze", variant="primary", disabled=True)
+                            yield Button("Analyze filtered", id="workspace-analyze-all", variant="warning", disabled=True)
+                            yield Button("Select all", id="workspace-select-all", disabled=True)
                         with Horizontal(classes="workspace-action-row"):
-                            yield Button("Deselect all (d)", id="workspace-deselect-all", disabled=True)
-                            yield Button("Browse (b)", id="workspace-browse")
-                            yield Button("Reload (r)", id="workspace-refresh")
+                            yield Button("Deselect all", id="workspace-deselect-all", disabled=True)
+                            yield Button("Browse", id="workspace-browse")
+                            yield Button("Reload", id="workspace-refresh")
                 with Vertical(id="results-workspace"):
                     yield Static("ANALYSIS RESULTS", classes="workspace-title")
                     yield Static(id="results-workspace-meta", classes="workspace-meta")
@@ -2389,126 +2531,124 @@ class RcaTui(App):
                         )
                     yield ResultsListView(id="results-workspace-list", on_item_clicked=self._toggle_result_selection)
                     with Horizontal(classes="pagination-controls"):
-                        yield Button("Prev (p)", id="results-prev", disabled=True)
+                        yield Button("Previous", id="results-prev", disabled=True)
                         yield Static("Page 1/1", id="results-pagination-label", classes="pagination-label")
-                        yield Button("Next (n)", id="results-next", disabled=True)
+                        yield Button("Next", id="results-next", disabled=True)
                     with Vertical(classes="workspace-actions"):
                         with Horizontal(classes="workspace-action-row"):
-                            yield Button("Open result (enter)", id="open-workspace-result", variant="primary", disabled=True)
-                            yield Button("Record feedback (v)", id="results-feedback", disabled=True)
-                            yield Button("Select all (z)", id="results-select-all", disabled=True)
+                            yield Button("Open result", id="open-workspace-result", variant="primary", disabled=True)
+                            yield Button("Record feedback", id="results-feedback", disabled=True)
+                            yield Button("Select all", id="results-select-all", disabled=True)
                         with Horizontal(classes="workspace-action-row"):
-                            yield Button("Deselect all (d)", id="results-deselect-all", disabled=True)
-                            yield Button("Clear selected (x)", id="clear-selected", disabled=True)
-                            yield Button("Clear all (X)", id="clear-all", disabled=True)
+                            yield Button("Deselect all", id="results-deselect-all", disabled=True)
+                            yield Button("Clear selected", id="clear-selected", disabled=True)
+                            yield Button("Clear all", id="clear-all", disabled=True)
                 with Vertical(id="qa-workspace"):
                     yield Static("QUALITY & GATES", classes="workspace-title")
                     yield Static(
-                        "Deterministic release quality gates and test history. Evaluate release thresholds, track flakiness across runs, and inspect regression signals.",
+                        "Evaluate test evidence, import run history, and enforce a release policy.",
                         id="qa-workspace-meta",
                         classes="workspace-meta",
                     )
-                    with ItemGrid(classes="qa-status-row"):
-                        yield Static(id="qa-card-history", classes="qa-card")
-                        yield Static(id="qa-card-gate", classes="qa-card")
-                        yield Static(id="qa-card-signal", classes="qa-card")
-                    yield Static("Ready. Choose an operation below.", id="qa-status", classes="workspace-status")
+                    with Grid(classes="metadata-grid"):
+                        yield Static(id="qa-card-history", classes="metadata-card")
+                        yield Static(id="qa-card-gate", classes="metadata-card")
+                        yield Static(id="qa-card-signal", classes="metadata-card")
+                    with Horizontal(id="qa-actions", classes="workspace-action-row"):
+                        yield Button("Analyze evidence", id="qa-analyze", variant="primary")
+                        yield Button("Import history", id="qa-import-history")
+                        yield Button("Run gate", id="qa-gate", variant="warning")
+                        yield Button("Load history", id="qa-load-history")
+                    yield Static("Ready. Select an action, then review its result below.", id="qa-status", classes="workspace-status")
                     with ResultScroll(id="qa-scroll", classes="result-scroll workspace-data-panel"):
-                        yield Static("EVIDENCE SOURCE", classes="qa-section-title")
+                        yield Static("EVIDENCE", classes="qa-section-title")
                         yield Static(
-                            "Test reports are used by Insights. SARIF is handled separately as quality-gate evidence; the same SARIF file may also be analyzed as an RCA artifact from Artifacts.",
+                            "Test reports feed historical analysis. SARIF remains separate gate evidence and can also be opened as an RCA artifact.",
                             classes="qa-description",
                         )
                         with Vertical(classes="qa-field"):
-                            yield Static("Artifacts path (file or directory)", classes="field-label")
+                            yield Static("Artifacts path", classes="field-label")
                             yield Input(value=str(self.logs_dir), placeholder="/path/to/test-artifacts", id="qa-source-path")
-                        with Vertical(classes="qa-field"):
-                            yield Static("History database (TUI import writes; CLI handles export/administration)", classes="field-label")
-                            from hound.qa.history import default_history_store
-                            yield Input(value=str(default_history_store(self.out_dir)), id="qa-history-store")
                         with Horizontal(classes="qa-form-row"):
                             with Vertical(classes="qa-field"):
-                                yield Static("Repository directory", classes="field-label")
+                                yield Static("Repository", classes="field-label")
                                 yield Input(value=self.repo_dir or "", placeholder="/path/to/repository", id="qa-repo-dir")
                             with Vertical(classes="qa-field"):
-                                yield Static("Baseline ref", classes="field-label")
-                                yield Input(placeholder="required for gate; optional for insights", id="qa-baseline")
+                                yield Static("Baseline", classes="field-label")
+                                yield Input(placeholder="required for gate", id="qa-baseline")
                             with Vertical(classes="qa-field"):
-                                yield Static("Candidate ref", classes="field-label")
+                                yield Static("Candidate", classes="field-label")
                                 yield Input(value="HEAD", placeholder="HEAD", id="qa-head")
-                        with Horizontal(classes="qa-form-row"):
-                            with Vertical(classes="qa-field"):
-                                yield Static("Runner (optional)", classes="field-label")
-                                yield Input(placeholder="pytest / junit / jest…", id="qa-runner")
-                            with Vertical(classes="qa-field"):
-                                yield Static("Environment (optional)", classes="field-label")
-                                yield Input(placeholder="os=linux;python=3.12", id="qa-environment")
-                            with Vertical(classes="qa-field"):
-                                yield Static("History window days", classes="field-label")
-                                yield Input(placeholder="all history", id="qa-window-days")
-                        with Horizontal(classes="qa-form-row"):
-                            with Vertical(classes="qa-field"):
-                                yield Static("History run ID", classes="field-label")
-                                yield Input(value="tui-import", placeholder="CI run identifier", id="qa-run-id")
-                            with Vertical(classes="qa-field"):
-                                yield Static("Retention days (import)", classes="field-label")
-                                yield Input(placeholder="keep all history", id="qa-retention-days")
-                        with Horizontal(classes="qa-form-row"):
-                            with Vertical(classes="qa-field"):
-                                yield Static("Candidate commit (optional)", classes="field-label")
-                                yield Input(placeholder="optional commit SHA", id="qa-commit")
-                            with Vertical(classes="qa-field"):
-                                yield Static("Candidate branch (optional)", classes="field-label")
-                                yield Input(placeholder="optional branch", id="qa-branch")
-                        yield Static("QUALITY GATE INPUTS", classes="qa-section-title")
                         with Vertical(classes="qa-field"):
-                            yield Static("Policy file (required for gate)", classes="field-label")
+                            yield Static("Policy file", classes="field-label")
                             yield Input(placeholder="quality.yml or quality.json", id="qa-policy")
                         yield Static(
                             "No policy loaded. Enter a policy path to preview validated active rules before running the gate.",
                             id="qa-policy-preview",
                             classes="qa-policy-preview",
                         )
-                        with Vertical(classes="qa-field"):
-                            yield Static("Coverage files (comma/newline separated)", classes="field-label")
-                            yield Input(placeholder="candidate coverage artifacts", id="qa-coverage")
-                        with Vertical(classes="qa-field"):
-                            yield Static("Baseline coverage files (coverage delta)", classes="field-label")
-                            yield Input(placeholder="baseline coverage artifacts", id="qa-baseline-coverage")
-                        with Vertical(classes="qa-field"):
-                            yield Static("SARIF inputs (quality gate)", classes="field-label")
-                            yield Input(placeholder="security.sarif[, another.sarif]", id="qa-sarif")
-                        with Vertical(classes="qa-field"):
-                            yield Static("History suite prefix (optional)", classes="field-label")
-                            yield Input(placeholder="filter tracked suites", id="qa-suite-prefix")
+                        with Collapsible(title="Advanced inputs", collapsed=True, id="qa-advanced"):
+                            with Vertical(classes="qa-field"):
+                                yield Static("History database", classes="field-label")
+                                from hound.qa.history import default_history_store
+                                yield Input(value=str(default_history_store(self.out_dir)), id="qa-history-store")
+                            with Horizontal(classes="qa-form-row"):
+                                with Vertical(classes="qa-field"):
+                                    yield Static("Runner", classes="field-label")
+                                    yield Input(placeholder="pytest / junit / jest", id="qa-runner")
+                                with Vertical(classes="qa-field"):
+                                    yield Static("Environment", classes="field-label")
+                                    yield Input(placeholder="os=linux;python=3.12", id="qa-environment")
+                                with Vertical(classes="qa-field"):
+                                    yield Static("History window days", classes="field-label")
+                                    yield Input(placeholder="all history", id="qa-window-days")
+                            with Horizontal(classes="qa-form-row"):
+                                with Vertical(classes="qa-field"):
+                                    yield Static("History run ID", classes="field-label")
+                                    yield Input(value="tui-import", placeholder="CI run identifier", id="qa-run-id")
+                                with Vertical(classes="qa-field"):
+                                    yield Static("Retention days", classes="field-label")
+                                    yield Input(placeholder="keep all history", id="qa-retention-days")
+                            with Horizontal(classes="qa-form-row"):
+                                with Vertical(classes="qa-field"):
+                                    yield Static("Candidate commit", classes="field-label")
+                                    yield Input(placeholder="optional commit SHA", id="qa-commit")
+                                with Vertical(classes="qa-field"):
+                                    yield Static("Candidate branch", classes="field-label")
+                                    yield Input(placeholder="optional branch", id="qa-branch")
+                            with Vertical(classes="qa-field"):
+                                yield Static("Coverage files", classes="field-label")
+                                yield Input(placeholder="candidate coverage artifacts", id="qa-coverage")
+                            with Vertical(classes="qa-field"):
+                                yield Static("Baseline coverage files", classes="field-label")
+                                yield Input(placeholder="baseline coverage artifacts", id="qa-baseline-coverage")
+                            with Vertical(classes="qa-field"):
+                                yield Static("SARIF inputs", classes="field-label")
+                                yield Input(placeholder="security.sarif[, another.sarif]", id="qa-sarif")
+                            with Vertical(classes="qa-field"):
+                                yield Static("History suite prefix", classes="field-label")
+                                yield Input(placeholder="filter tracked suites", id="qa-suite-prefix")
                         yield ListView(id="qa-history-list")
                         yield Static("", id="qa-result")
-                    with Vertical(id="qa-actions", classes="workspace-actions"):
-                        with Horizontal(classes="workspace-action-row"):
-                            yield Button("Analyze test evidence", id="qa-analyze", variant="primary")
-                            yield Button("Import to history", id="qa-import-history")
-                        with Horizontal(classes="workspace-action-row"):
-                            yield Button("Run quality gate", id="qa-gate", variant="warning")
-                            yield Button("Load history", id="qa-load-history")
                 with Vertical(id="investigation-workspace"):
                     yield Static("CONTEXT (READ-ONLY)", classes="workspace-title")
                     yield Static(
-                        "Validates stored report context and renders deployment impact, timeline, observability, source ownership, and advisory test impact. Readiness is read-only; connector collection remains in the CLI/pipeline.",
+                        "Review report integrity, trust boundaries, deployment impact, and stored connector evidence. Context is read-only; connector collection remains in the CLI and pipeline.",
                         id="investigation-workspace-meta",
                         classes="workspace-meta",
                     )
-                    with ItemGrid(classes="context-status-row"):
-                        yield Static(id="context-card-integrity", classes="context-card")
-                        yield Static(id="context-card-trust", classes="context-card")
-                        yield Static(id="context-card-impact", classes="context-card")
+                    with Horizontal(id="context-actions", classes="workspace-action-row"):
+                        yield Button("Validate", id="context-validate", variant="primary", disabled=True)
+                        yield Button("Feedback", id="context-feedback", disabled=True)
+                        yield Button("Copy summary", id="context-copy-summary", disabled=True)
+                    yield Static("No report selected. Open a stored run to validate context.", id="context-status")
+                    with Grid(classes="metadata-grid"):
+                        yield Static(id="context-card-integrity", classes="metadata-card")
+                        yield Static(id="context-card-trust", classes="metadata-card")
+                        yield Static(id="context-card-impact", classes="metadata-card")
                     with ResultScroll(id="investigation-scroll", classes="result-scroll workspace-data-panel"):
                         yield Static(id="context-validation-summary")
                         yield Static(_investigation_text(None), id="investigation")
-                    with Horizontal(id="context-actions", classes="workspace-action-row"):
-                        yield Button("Validate report (u)", id="context-validate", variant="primary", disabled=True)
-                        yield Button("Record feedback (v)", id="context-feedback", disabled=True)
-                        yield Button("Copy summary", id="context-copy-summary", disabled=True)
-                        yield Static("No report selected. Open a stored run to validate context.", id="context-status")
                 with TabbedContent(initial="pane-overview", id="tabs"):
                     with TabPane("Overview", id="pane-overview"):
                         with Vertical(id="overview-shell"):
@@ -2588,7 +2728,7 @@ class RcaTui(App):
 
     def _update_statusbar(self) -> None:
         mode = "[#b8b8b8]offline[/#b8b8b8]" if self.offline else f"[#d8d8d8]llm:{escape(self.provider or 'auto')}[/#d8d8d8]"
-        state = "[bold #e3b341]analyzing…[/bold #e3b341]" if self._analyzing else "idle"
+        state = f"[bold {SEMANTIC_WARNING}]analyzing…[/bold {SEMANTIC_WARNING}]" if self._analyzing else "idle"
         try:
             if self.has_class("compact"):
                 content = f"[b]mode[/b] {mode}  [b]state[/b] {state}"
@@ -2640,7 +2780,7 @@ class RcaTui(App):
                     self._view_history.pop(0)
 
     def _update_back_button(self) -> None:
-        can_go_back = bool(getattr(self, "_view_history", None)) or self._current_view_state() != ("home", None)
+        can_go_back = self._current_view_state() != ("home", None)
         self.set_class(can_go_back, "has-back-nav")
         try:
             btn = self.query_one("#back-button", Button)
@@ -2675,7 +2815,7 @@ class RcaTui(App):
         except Exception:
             active = "pane-overview"
         key = "bold #b8b8b8"
-        can_back = bool(getattr(self, "_view_history", None)) or self._current_view_state() != ("home", None)
+        can_back = self._current_view_state() != ("home", None)
         back_hint = f"[{key}]esc[/{key}] back  " if can_back else ""
         if self.has_class("compact"):
             common = f"{back_hint}[{key}]a[/{key}] analyze  [{key}]b[/{key}] browse  [{key}]m[/{key}] sidebar  [{key}]s[/{key}] settings  [{key}]?[/{key}] help  [{key}]q[/{key}] quit"
@@ -2729,8 +2869,8 @@ class RcaTui(App):
             pass
 
     def _show_home(self, *, record_history: bool = True) -> None:
-        if record_history:
-            self._record_view_transition(("home", None))
+        if hasattr(self, "_view_history"):
+            self._view_history.clear()
         self.query_one("#home", Vertical).display = True
         self.query_one("#artifact-workspace", Vertical).display = False
         self.query_one("#results-workspace", Vertical).display = False
@@ -2943,22 +3083,22 @@ class RcaTui(App):
         if len(out_name) > 18:
             out_name = out_name[:17] + "…"
 
-        history_color = "green" if history_state == "ready" else ("dim" if history_state == "empty" else "yellow")
-        dedup_color = "green" if state == "ready" else ("dim" if state == "disabled" else "yellow")
+        history_color = SEMANTIC_SUCCESS if history_state == "ready" else ("dim" if history_state == "empty" else SEMANTIC_WARNING)
+        dedup_color = SEMANTIC_SUCCESS if state == "ready" else ("dim" if state == "disabled" else SEMANTIC_WARNING)
         delivery_present = delivery.is_file()
         deliv_str = "present" if delivery_present else "none"
-        deliv_color = "green" if delivery_present else "dim"
-        repo_color = "green" if self.repo_dir else "dim"
+        deliv_color = SEMANTIC_SUCCESS if delivery_present else "dim"
+        repo_color = SEMANTIC_SUCCESS if self.repo_dir else "dim"
 
         if connector_errors > 0:
-            runs_str = f"{analysis_total} [yellow]({connector_errors} err)[/yellow]"
+            runs_str = f"{analysis_total} [{SEMANTIC_ERROR}]({connector_errors} err)[/{SEMANTIC_ERROR}]"
         else:
             runs_str = f"{analysis_total} completed"
 
         git_ok = bool(shutil.which("git"))
         kube_ok = bool(shutil.which("kubectl"))
-        git_str = "git:[green]yes[/green]" if git_ok else "git:[dim]no[/dim]"
-        kube_str = "kubectl:[green]yes[/green]" if kube_ok else "kubectl:[dim]no[/dim]"
+        git_str = f"git:[{SEMANTIC_SUCCESS}]yes[/{SEMANTIC_SUCCESS}]" if git_ok else "git:[dim]no[/dim]"
+        kube_str = f"kubectl:[{SEMANTIC_SUCCESS}]yes[/{SEMANTIC_SUCCESS}]" if kube_ok else "kubectl:[dim]no[/dim]"
 
         try:
             from hound.validation import count_validations, default_validation_store
@@ -2968,7 +3108,7 @@ class RcaTui(App):
             val_pass = val_counts.get("pass", 0)
             val_fail = val_counts.get("fail", 0)
             if val_total > 0:
-                val_color = "green" if val_fail == 0 else "yellow"
+                val_color = SEMANTIC_SUCCESS if val_fail == 0 else SEMANTIC_WARNING
                 val_str = f"[{val_color}]{val_pass}/{val_total} valid[/{val_color}]"
             else:
                 val_str = "[dim]0 verified[/dim]"
@@ -2982,7 +3122,7 @@ class RcaTui(App):
             if fb_file.is_file():
                 fb_records = read_feedback(fb_file)
                 fb_rev = sum(1 for r in fb_records if r.get("review_status") == "reviewed")
-                fb_str = f"[green]{fb_rev} rev[/green] · [dim]{len(fb_records)} tot[/dim]"
+                fb_str = f"[{SEMANTIC_SUCCESS}]{fb_rev} rev[/{SEMANTIC_SUCCESS}] · [dim]{len(fb_records)} tot[/dim]"
             else:
                 fb_str = "[dim]none[/dim]"
         except Exception:
@@ -3198,13 +3338,13 @@ class RcaTui(App):
         retry = self.query_one("#retry", Button)
         retry.display = state == "error"
         if state == "loading":
-            status.update(f"[blue]●[/blue] {message}")
+            status.update(f"[{SEMANTIC_WARNING}]●[/{SEMANTIC_WARNING}] {message}")
         elif state == "success":
-            status.update(f"[green]●[/green] {message}")
+            status.update(f"[{SEMANTIC_SUCCESS}]✓[/{SEMANTIC_SUCCESS}] {message}")
         elif state == "error":
-            status.update(f"[red]×[/red] {message}")
+            status.update(f"[bold {SEMANTIC_ERROR}]×[/bold {SEMANTIC_ERROR}] {message}")
         elif state == "empty":
-            status.update(f"[yellow]●[/yellow] {message}")
+            status.update(f"[{SEMANTIC_WARNING}]![/{SEMANTIC_WARNING}] {message}")
         else:
             status.update(message)
 
@@ -3369,7 +3509,7 @@ class RcaTui(App):
             files.sort(key=lambda path: path.name.lower(), reverse=True)
         self.query_one("#dir-meta", Static).update(
             f"[dim]{len(all_logs)} log file{'s' if len(all_logs) != 1 else ''}  •  {escape(str(self.logs_dir))}[/dim]"
-            if directory_valid else f"[red]Directory not found:[/red] {escape(str(self.logs_dir))}"
+            if directory_valid else f"[bold {SEMANTIC_ERROR}]× Directory not found:[/bold {SEMANTIC_ERROR}] {escape(str(self.logs_dir))}"
         )
         self._visible_log_files = files
         self._render_artifact_workspace(files)
@@ -3437,9 +3577,9 @@ class RcaTui(App):
             # Update analyze selected button label
             analyze_btn = self.query_one("#workspace-analyze", Button)
             if selected_count > 1:
-                analyze_btn.label = f"Analyze {selected_count} selected (a)"
+                analyze_btn.label = f"Analyze {selected_count} selected"
             else:
-                analyze_btn.label = "Analyze selected (a)"
+                analyze_btn.label = "Analyze selected"
 
             if not force and not self.query_one("#artifact-workspace", Vertical).display:
                 return
@@ -3502,7 +3642,7 @@ class RcaTui(App):
             f"{len(self._visible_log_files)} filtered artifacts{selected_text}  •  {escape(str(self.logs_dir))}\n"
             "Select a row to preview it in Raw log; use space to toggle batch selection."
         )
-        button.label = f"Analyze {selected_count} selected (a)" if selected_count > 1 else "Analyze selected (a)"
+        button.label = f"Analyze {selected_count} selected" if selected_count > 1 else "Analyze selected"
         page_start = (self._artifact_page - 1) * PAGE_SIZE
         page_files = self._visible_log_files[page_start:page_start + PAGE_SIZE]
         changed_paths = set(changed) if changed is not None else set(page_files)
@@ -3543,7 +3683,7 @@ class RcaTui(App):
         log_filter = next(iter(self.query("#log-filter")), None)
         if not isinstance(log_filter, Input):
             return
-        # Always update the sidebar (#log-list) labels in-place — no generation bump.
+        # Keep sidebar labels synchronized without restarting classification.
         self._refresh_sidebar_classifications(list(results))
         type_filter = str(self.query_one("#type-filter", Select).value)
         sort_mode = str(self.query_one("#log-sort", Select).value)
@@ -3701,9 +3841,9 @@ class RcaTui(App):
 
             clear_sel_btn = self.query_one("#clear-selected", Button)
             if selected_count > 1:
-                clear_sel_btn.label = f"Clear {selected_count} selected (x)"
+                clear_sel_btn.label = f"Clear {selected_count} selected"
             else:
-                clear_sel_btn.label = "Clear selected (x)"
+                clear_sel_btn.label = "Clear selected"
 
             if not force and not self.query_one("#results-workspace", Vertical).display:
                 return
@@ -3756,7 +3896,7 @@ class RcaTui(App):
             f"{len(self._filtered_runs)} matching{selected_text}  •  {len(self._run_index)} total  •  {escape(str(self.out_dir))}"
         )
         clear_button = self.query_one("#clear-selected", Button)
-        clear_button.label = f"Clear {selected_count} selected (x)" if selected_count > 1 else "Clear selected (x)"
+        clear_button.label = f"Clear {selected_count} selected" if selected_count > 1 else "Clear selected"
         list_view = self.query_one("#results-workspace-list", ListView)
         page_start = (self._results_page - 1) * PAGE_SIZE
         page_runs = self._filtered_runs[page_start:page_start + PAGE_SIZE]
@@ -3842,8 +3982,8 @@ class RcaTui(App):
             return
         if error is not None:
             preview.update(
-                "[bold red]ACTIVE QUALITY POLICY[/bold red]\n"
-                f"[red]Invalid policy: {escape(error)}[/red]"
+                f"[bold {SEMANTIC_ERROR}]× ACTIVE QUALITY POLICY[/bold {SEMANTIC_ERROR}]\n"
+                f"[{SEMANTIC_ERROR}]Invalid policy: {escape(error)}[/{SEMANTIC_ERROR}]"
             )
             return
         if policy is None:
@@ -3870,13 +4010,19 @@ class RcaTui(App):
 
     def _update_qa_status_cards(self) -> None:
         try:
-            card_hist = self.query_one("#qa-card-history", Static)
+            card_history = self.query_one("#qa-card-history", Static)
             card_gate = self.query_one("#qa-card-gate", Static)
-            card_sig = self.query_one("#qa-card-signal", Static)
+            card_signal = self.query_one("#qa-card-signal", Static)
         except Exception:
             return
 
         from hound.qa.history import default_history_store, count_by_status
+
+        history_state = "EMPTY"
+        history_color = SEMANTIC_WARNING
+        history_symbol = "!"
+        history_detail = "No tracked test runs"
+        history_hint = "Import evidence to create history"
         hist_file = default_history_store(self.out_dir)
         if hist_file.is_file():
             try:
@@ -3884,75 +4030,83 @@ class RcaTui(App):
                 total = sum(counts.values())
                 passed = counts.get("passed", 0)
                 failed = counts.get("failed", 0)
-                card_hist.update(
-                    "[bold #8f8f8f]TEST HISTORY DATABASE[/bold #8f8f8f]\n"
-                    f"[green]ready[/green] · [b]{total}[/b] run(s)\n"
-                    f"[dim]{passed} passed, {failed} failed · 90d window[/dim]"
-                )
+                history_state = "READY"
+                history_color = SEMANTIC_SUCCESS
+                history_symbol = "✓"
+                history_detail = f"{total} runs  |  {passed} passed  |  {failed} failed"
+                history_hint = _compact(hist_file, 46)
             except Exception:
-                card_hist.update(
-                    "[bold #8f8f8f]TEST HISTORY DATABASE[/bold #8f8f8f]\n"
-                    "[green]ready[/green] (active)\n"
-                    "[dim]default 90d window[/dim]"
-                )
-        else:
-            card_hist.update(
-                "[bold #8f8f8f]TEST HISTORY DATABASE[/bold #8f8f8f]\n"
-                "[dim]empty (not initialized)[/dim]\n"
-                "[dim]run 'Import to history' to seed[/dim]"
-            )
+                history_state = "READY"
+                history_color = SEMANTIC_SUCCESS
+                history_symbol = "✓"
+                history_detail = "History store is available"
+                history_hint = _compact(hist_file, 46)
+        card_history.update(
+            "[bold #a6a6a6]TEST HISTORY DATABASE[/bold #a6a6a6]\n"
+            f"[bold {history_color}]{history_symbol} {history_state}[/bold {history_color}]\n"
+            f"{escape(history_detail)}\n"
+            f"[dim]{escape(history_hint)}[/dim]"
+        )
 
         payload = getattr(self, "_qa_result", None)
+        gate_state = "NO POLICY"
+        gate_color = SEMANTIC_WARNING
+        gate_symbol = "!"
+        gate_detail = "Gate has not been configured"
+        gate_hint = "Select a policy file"
         if payload and payload.get("type") == "gate":
             gate_res = payload.get("result", {})
             outcome = gate_res.get("policy_outcome", "unknown").upper()
-            status_color = "green" if outcome == "PASS" else "red" if outcome == "BLOCK" else "yellow"
-            card_gate.update(
-                "[bold #8f8f8f]RELEASE QUALITY GATE[/bold #8f8f8f]\n"
-                f"[{status_color}]{outcome}[/{status_color}] · {'enforced' if gate_res.get('enforced', True) else 'advisory'}\n"
-                f"[dim]{len(gate_res.get('violations', []))} violation(s)[/dim]"
-            )
+            gate_state = outcome
+            gate_color = _outcome_color(outcome)
+            gate_symbol = "✓" if outcome == "PASS" else "×" if outcome == "BLOCK" else "!"
+            gate_detail = f"{len(gate_res.get('violations', []))} policy violations"
+            gate_hint = "Enforced release decision"
         else:
             policy_input = self.query("#qa-policy").first(Input)
             policy_val = policy_input.value.strip() if policy_input else ""
             if policy_val and Path(policy_val).is_file():
-                card_gate.update(
-                    "[bold #8f8f8f]RELEASE QUALITY GATE[/bold #8f8f8f]\n"
-                    "[yellow]policy ready[/yellow]\n"
-                    "[dim]ready to evaluate candidate ref[/dim]"
-                )
-            else:
-                card_gate.update(
-                    "[bold #8f8f8f]RELEASE QUALITY GATE[/bold #8f8f8f]\n"
-                    "[dim]no policy loaded[/dim]\n"
-                    "[dim]specify policy file to run gate[/dim]"
-                )
+                gate_state = "READY"
+                gate_color = SEMANTIC_SUCCESS
+                gate_symbol = "✓"
+                gate_detail = "Policy loaded and validated"
+                gate_hint = _compact(Path(policy_val).name, 46)
+        card_gate.update(
+            "[bold #a6a6a6]RELEASE QUALITY GATE[/bold #a6a6a6]\n"
+            f"[bold {gate_color}]{gate_symbol} {escape(gate_state)}[/bold {gate_color}]\n"
+            f"{escape(gate_detail)}\n"
+            f"[dim]{escape(gate_hint)}[/dim]"
+        )
 
+        signal_state = "NOT ANALYZED"
+        signal_color = SEMANTIC_WARNING
+        signal_symbol = "!"
+        signal_detail = "No regression classification"
+        signal_hint = "Analyze evidence to inspect signals"
         if payload and payload.get("type") == "insights":
             classifications = payload.get("classifications") or []
             flaky_cnt = sum(1 for c in classifications if c.get("category") == "flaky")
             regress_cnt = sum(1 for c in classifications if c.get("category") == "regression")
-            sig_color = "yellow" if flaky_cnt > 0 else "green"
-            card_sig.update(
-                "[bold #8f8f8f]REGRESSION SIGNAL[/bold #8f8f8f]\n"
-                f"[{sig_color}]{len(classifications)} test(s) analyzed[/{sig_color}]\n"
-                f"[dim]{flaky_cnt} flaky · {regress_cnt} regression(s)[/dim]"
-            )
+            signal_state = "ACTIVE"
+            signal_color = SEMANTIC_ERROR if regress_cnt else SEMANTIC_WARNING if flaky_cnt else SEMANTIC_SUCCESS
+            signal_symbol = "×" if regress_cnt else "!" if flaky_cnt else "✓"
+            signal_detail = f"{len(classifications)} tests  |  {flaky_cnt} flaky"
+            signal_hint = f"{regress_cnt} regression signals"
         elif self._current_qa_classifications:
             classifications = self._current_qa_classifications
             flaky_cnt = sum(1 for c in classifications if c.get("category") == "flaky")
             regress_cnt = sum(1 for c in classifications if c.get("category") == "regression")
-            card_sig.update(
-                "[bold #8f8f8f]REGRESSION SIGNAL[/bold #8f8f8f]\n"
-                f"[green]{len(classifications)} active run test(s)[/green]\n"
-                f"[dim]{flaky_cnt} flaky · {regress_cnt} regression(s)[/dim]"
-            )
-        else:
-            card_sig.update(
-                "[bold #8f8f8f]REGRESSION SIGNAL[/bold #8f8f8f]\n"
-                "[dim]idle[/dim]\n"
-                "[dim]run 'Analyze test evidence' for signals[/dim]"
-            )
+            signal_state = "ACTIVE"
+            signal_color = SEMANTIC_ERROR if regress_cnt else SEMANTIC_WARNING if flaky_cnt else SEMANTIC_SUCCESS
+            signal_symbol = "×" if regress_cnt else "!" if flaky_cnt else "✓"
+            signal_detail = f"{len(classifications)} tests  |  {flaky_cnt} flaky"
+            signal_hint = f"{regress_cnt} regression signals"
+        card_signal.update(
+            "[bold #a6a6a6]REGRESSION SIGNAL[/bold #a6a6a6]\n"
+            f"[bold {signal_color}]{signal_symbol} {signal_state}[/bold {signal_color}]\n"
+            f"{escape(signal_detail)}\n"
+            f"[dim]{escape(signal_hint)}[/dim]"
+        )
 
     def _refresh_qa_policy_preview(self) -> None:
         """Validate and render the current policy without starting a gate."""
@@ -4027,8 +4181,13 @@ class RcaTui(App):
     def _set_qa_status(self, state: str, message: str) -> None:
         try:
             status = self.query_one("#qa-status", Static)
-            color = {"loading": "blue", "success": "green", "error": "red", "empty": "yellow"}.get(state, "#b8b8b8")
-            marker = "●" if state != "error" else "×"
+            color = {
+                "loading": SEMANTIC_WARNING,
+                "success": SEMANTIC_SUCCESS,
+                "error": SEMANTIC_ERROR,
+                "empty": SEMANTIC_WARNING,
+            }.get(state, "#b8b8b8")
+            marker = "✓" if state == "success" else "×" if state == "error" else "!" if state == "empty" else "●"
             status.update(f"[{color}]{marker}[/{color}] {escape(message)}")
         except Exception:
             return
@@ -4203,7 +4362,7 @@ class RcaTui(App):
         if kind == "error":
             self._qa_history_tests = []
             history_list.clear()
-            result.update(f"[bold red]QA operation failed[/bold red]\n\n{escape(payload.get('message', 'unknown error'))}")
+            result.update(f"[bold {SEMANTIC_ERROR}]× QA operation failed[/bold {SEMANTIC_ERROR}]\n\n{escape(payload.get('message', 'unknown error'))}")
             return
         if kind == "insights":
             self._qa_history_tests = []
@@ -4268,7 +4427,7 @@ class RcaTui(App):
                     if provenance:
                         lines.append(f"  evidence sources: {len(provenance)}")
             else:
-                lines.append("[green]No policy reasons; gate passed.[/green]")
+                lines.append(f"[{SEMANTIC_SUCCESS}]✓ No policy reasons; gate passed.[/{SEMANTIC_SUCCESS}]")
             result.update("\n".join(lines))
             return
         if kind == "history":
@@ -4309,7 +4468,7 @@ class RcaTui(App):
             for row in history_rows[:20]:
                 lines.append(
                     f"  {escape(row.get('recorded_at') or '')} {escape(row.get('status') or '')} "
-                    f"attempt={escape(row.get('attempt', 1))} commit={escape(row.get('commit_sha') or '—')}"
+                    f"attempt={escape(row.get('attempt', 1))} commit={escape(row.get('commit_sha') or 'not available')}"
                 )
             result.update("\n".join(lines))
 
@@ -4995,7 +5154,7 @@ class RcaTui(App):
             overview = self.query("#overview").first(Static)
             if overview is not None:
                 overview.update(
-                    f"[bold blue]Analyzing {escape(path.name)}…[/bold blue]\n\n"
+                    f"[bold {SEMANTIC_WARNING}]● Analyzing {escape(path.name)}…[/bold {SEMANTIC_WARNING}]\n\n"
                     "[dim]Reading log → collecting context → investigating root cause → writing report[/dim]"
                 )
             self._update_markdown("#report", "_Analysis in progress._")
@@ -5040,7 +5199,7 @@ class RcaTui(App):
             overview = self.query("#overview").first(Static)
             if overview is not None:
                 overview.update(
-                    "[bold red]Analysis failed[/bold red]\n\n"
+                    f"[bold {SEMANTIC_ERROR}]× Analysis failed[/bold {SEMANTIC_ERROR}]\n\n"
                     f"{escape(_compact(exc, 300))}\n\n"
                     "[dim]Check selected log, provider settings, and filesystem access. Press a or choose Retry.[/dim]"
                 )
@@ -5308,14 +5467,14 @@ class RcaTui(App):
             self._scan_runs()
         finally:
             self._update_statusbar()
-        breakdown = "  ".join(f"{name}×{count}" for name, count in sorted(severities.items())) or "—"
+        breakdown = "  ".join(f"{name}×{count}" for name, count in sorted(severities.items())) or "none"
         notes = []
         if duplicates:
-            notes.append(f"[green]{duplicates} duplicate(s) suppressed[/green]")
+            notes.append(f"[{SEMANTIC_SUCCESS}]✓ {duplicates} duplicate(s) suppressed[/{SEMANTIC_SUCCESS}]")
         if reused:
             notes.append(f"[dim]{reused} reused stored root cause[/dim]")
         if failed:
-            notes.append(f"[yellow]{failed} failed[/yellow]")
+            notes.append(f"[{SEMANTIC_ERROR}]× {failed} failed[/{SEMANTIC_ERROR}]")
         if stopped:
             notes.append(f"[dim]{stopped} stopped[/dim]")
         note_text = (" • " + " • ".join(notes)) if notes else ""
@@ -5326,7 +5485,7 @@ class RcaTui(App):
         overview = self.query("#overview").first(Static)
         if overview is not None:
             overview.update(
-                "[bold blue]Batch analysis complete[/bold blue]\n\n"
+                f"[bold {SEMANTIC_SUCCESS}]✓ Batch analysis complete[/bold {SEMANTIC_SUCCESS}]\n\n"
                 f"Analyzed [b]{analyzed}/{total}[/b] visible artifacts.{note_text}\n\n"
                 f"[dim]Severity: {escape(breakdown)}[/dim]\n\n"
                 f"[dim]LLM calls: {llm_calls} • budget-skipped: {budget_skipped} • "
@@ -5461,68 +5620,78 @@ class RcaTui(App):
             val_summary = self.query("#context-validation-summary").first(Static)
 
             if card_integrity is not None:
+                integrity_state = "NOT VALIDATED"
+                integrity_color = SEMANTIC_WARNING
+                integrity_symbol = "!"
+                integrity_detail = "No validation record"
+                integrity_hint = "Press u to validate the report"
                 if val is not None:
-                    if is_stale:
-                        stat_color = "yellow"
-                        status_label = "STALE"
-                        sub_text = "[yellow]Report modified since last validation run[/yellow]"
-                    else:
-                        stat_color = "green" if val.status == "PASS" else "yellow" if val.status == "WARN" else "red"
-                        status_label = val.status
-                        sub_text = f"schema v{val.schema_version} · SHA: {val.report_sha256[:10]}…" if val.report_sha256 else f"schema v{val.schema_version}"
-                    card_integrity.update(
-                        "[bold #8f8f8f]REPORT INTEGRITY[/bold #8f8f8f]\n"
-                        f"[{stat_color}][{status_label}][/{stat_color}] {val.validation_id}\n"
-                        f"[dim]{sub_text}[/dim]"
+                    integrity_state = "STALE" if is_stale else val.status
+                    integrity_color = (
+                        SEMANTIC_WARNING
+                        if is_stale or val.status == "WARN"
+                        else SEMANTIC_SUCCESS
+                        if val.status == "PASS"
+                        else SEMANTIC_ERROR
                     )
-                else:
-                    card_integrity.update(
-                        "[bold #8f8f8f]REPORT INTEGRITY[/bold #8f8f8f]\n"
-                        "[dim]NOT VALIDATED[/dim]\n"
-                        "[dim]press 'u' to validate stored report[/dim]"
+                    integrity_symbol = "!" if is_stale or val.status == "WARN" else "✓" if val.status == "PASS" else "×"
+                    integrity_detail = f"Schema v{val.schema_version}  |  {val.validation_id}"
+                    integrity_hint = (
+                        "Report changed since validation"
+                        if is_stale else f"SHA {val.report_sha256[:12]}" if val.report_sha256 else val.summary
                     )
+                card_integrity.update(
+                    "[bold #a6a6a6]REPORT INTEGRITY[/bold #a6a6a6]\n"
+                    f"[bold {integrity_color}]{integrity_symbol} {escape(integrity_state)}[/bold {integrity_color}]\n"
+                    f"{escape(integrity_detail)}\n"
+                    f"[dim]{escape(_compact(integrity_hint, 54))}[/dim]"
+                )
 
             if card_trust is not None:
+                trust_state = "NOT LOADED"
+                trust_color = SEMANTIC_WARNING
+                trust_symbol = "!"
+                trust_detail = "No trust profile available"
+                trust_hint = "Capabilities remain fail-closed"
                 if self._current_doc:
                     trust_meta = self._current_doc.get("meta", {}).get("trust", {})
-                    src_class = trust_meta.get("source_class", "unknown") if isinstance(trust_meta, dict) else "unknown"
-                    if src_class == "fork_pr":
-                        trust_str = "[red]fork_pr[/red] (fail-closed, external blocked)"
-                    elif src_class in {"trusted_branch", "local_artifact"}:
-                        trust_str = f"[green]{src_class}[/green] (read-only allowed)"
-                    else:
-                        trust_str = f"[yellow]{src_class}[/yellow] (unspecified)"
-                    card_trust.update(
-                        "[bold #8f8f8f]TRUST & CAPABILITIES[/bold #8f8f8f]\n"
-                        f"{trust_str}\n"
-                        "[dim]Fail-closed boundary verified[/dim]"
-                    )
-                else:
-                    card_trust.update(
-                        "[bold #8f8f8f]TRUST & CAPABILITIES[/bold #8f8f8f]\n"
-                        "[dim]not loaded[/dim]"
-                    )
+                    source_class = trust_meta.get("source_class", "unknown") if isinstance(trust_meta, dict) else "unknown"
+                    trust_state = str(source_class).upper()
+                    trust_color = SEMANTIC_ERROR if source_class == "fork_pr" else SEMANTIC_SUCCESS if source_class in {"trusted_branch", "local_artifact"} else SEMANTIC_WARNING
+                    trust_symbol = "×" if source_class == "fork_pr" else "✓" if source_class in {"trusted_branch", "local_artifact"} else "!"
+                    trust_detail = "External capabilities blocked" if source_class == "fork_pr" else "Read-only capabilities evaluated"
+                    trust_hint = "Fail-closed policy boundary"
+                card_trust.update(
+                    "[bold #a6a6a6]TRUST & CAPABILITIES[/bold #a6a6a6]\n"
+                    f"[bold {trust_color}]{trust_symbol} {escape(trust_state)}[/bold {trust_color}]\n"
+                    f"{escape(trust_detail)}\n"
+                    f"[dim]{escape(trust_hint)}[/dim]"
+                )
 
             if card_impact is not None:
+                impact_state = "NOT LOADED"
+                impact_color = SEMANTIC_WARNING
+                impact_symbol = "!"
+                impact_detail = "No operational impact data"
+                impact_hint = "Open a stored report"
                 if self._current_doc:
                     devops = self._current_doc.get("devops", {}) if isinstance(self._current_doc.get("devops"), dict) else {}
                     triage = self._current_doc.get("triage", {}) if isinstance(self._current_doc.get("triage"), dict) else {}
                     timeline = self._current_doc.get("timeline", {}) if isinstance(self._current_doc.get("timeline"), dict) else {}
-                    sev = str(devops.get("effective_severity") or triage.get("severity") or "unknown")
+                    severity = str(devops.get("effective_severity") or triage.get("severity") or "unknown")
                     impact = str(timeline.get("customer_impact") or "unknown")
                     slo = devops.get("slo", {}) if isinstance(devops.get("slo"), dict) else {}
-                    budget = slo.get("error_budget_remaining", "n/a")
-                    sev_color = "red" if sev in {"critical", "high"} else "yellow" if sev == "medium" else "dim"
-                    card_impact.update(
-                        "[bold #8f8f8f]OPERATIONAL IMPACT[/bold #8f8f8f]\n"
-                        f"[{sev_color}]severity: {sev}[/{sev_color}] · impact: {impact}\n"
-                        f"[dim]SLO error budget: {budget}[/dim]"
-                    )
-                else:
-                    card_impact.update(
-                        "[bold #8f8f8f]OPERATIONAL IMPACT[/bold #8f8f8f]\n"
-                        "[dim]not loaded[/dim]"
-                    )
+                    impact_state = severity.upper()
+                    impact_color = SEV_COLOR.get(severity, SEMANTIC_WARNING)
+                    impact_symbol = "×" if severity in {"critical", "high"} else "!" if severity in {"medium", "unknown"} else "✓"
+                    impact_detail = f"Customer impact: {impact}"
+                    impact_hint = f"SLO budget: {slo.get('error_budget_remaining', 'not available')}"
+                card_impact.update(
+                    "[bold #a6a6a6]OPERATIONAL IMPACT[/bold #a6a6a6]\n"
+                    f"[bold {impact_color}]{impact_symbol} {escape(impact_state)}[/bold {impact_color}]\n"
+                    f"{escape(impact_detail)}\n"
+                    f"[dim]{escape(impact_hint)}[/dim]"
+                )
 
             if val_summary is not None:
                 if val is not None and val.checks:
@@ -5530,10 +5699,10 @@ class RcaTui(App):
                         "[bold #b8b8b8]Integrity Checks & Audit Breakdown[/bold #b8b8b8]",
                     ]
                     for chk in val.checks:
-                        c_color = "green" if chk.status == "PASS" else "yellow" if chk.status == "WARN" else "red"
+                        c_color = SEMANTIC_SUCCESS if chk.status == "PASS" else SEMANTIC_WARNING if chk.status == "WARN" else SEMANTIC_ERROR
                         symbol = "✓" if chk.status == "PASS" else "!" if chk.status == "WARN" else "✗"
                         checks_lines.append(
-                            f"  [{c_color}][{symbol}] {chk.name} ({chk.status})[/{c_color}] — [dim]{chk.message}[/dim]"
+                            f"  [{c_color}][{symbol}] {chk.name} ({chk.status})[/{c_color}]  |  [dim]{chk.message}[/dim]"
                         )
                     val_summary.update("\n".join(checks_lines))
                     val_summary.display = True
