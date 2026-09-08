@@ -1,0 +1,16 @@
+--- tables.custom
+        +++ /home/travis/build/jgm/pandoc/sourcedist/dist/build/pandoc/pandoc --quiet tables.native -f native -t ../data/sample.lua
+        +  29 </table>
+        -  29 </table
+        +  58 </table>
+        -  58 </table
+        +  88 </table>
+        -  88 </table
+        + 122 </table>
+        - 122 </table
+        + 154 </table>
+        - 154 </table
+        + 177 </table>
+        - 177 </table
+        + 200 </table>
+        - 200 </table

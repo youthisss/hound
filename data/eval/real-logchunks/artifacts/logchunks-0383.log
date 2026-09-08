@@ -1,0 +1,16 @@
+Running ‘test-all.R’ [10s/15s]
+ ERROR
+Running the tests in ‘tests/test-all.R’ failed.
+Last 13 lines of output:
+  
+  ── 2. Failure: All man pages have an entry in staticdocs/index.r (@test-staticdo
+  length(missing) not equal to 0.
+  1/1 mismatches
+  [1] 1 - 0 == 1
+  Functions missing from index:
+    testApp
+  
+  ══ testthat results  ═══════════════════════════════════════════════════════════
+  [ OK: 822 | SKIPPED: 0 | WARNINGS: 0 | FAILED: 2 ]
+  1. Error: app with both r/ and R/ prefers R/ (@test-app.R#41) 
+  2. Failure: All man pages have an entry in staticdocs/index.r (@test-staticdocs.R#43)

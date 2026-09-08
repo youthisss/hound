@@ -60,7 +60,9 @@ def _make_client(config: Config):
     # configured attempt and timeout limits remain accurate.
     kwargs: dict = {"api_key": config.api_key or "sk-no-key", "max_retries": 0}
     if config.base_url:
-        kwargs["base_url"] = config.base_url
+        from hound.providers import validate_base_url
+
+        kwargs["base_url"] = validate_base_url(config.base_url)
     if config.timeout:
         kwargs["timeout"] = config.timeout
 

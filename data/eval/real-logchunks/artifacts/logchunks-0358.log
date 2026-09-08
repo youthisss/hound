@@ -1,0 +1,6 @@
+_______________ ERROR collecting tests/shells/test_powershell.py _______________[0m
+[1m[31mtests/shells/test_powershell.py[0m:8: in module>
+[1m    class TestPowershell(object):[0m
+[1m[31mtests/shells/test_powershell.py[0m:33: in TestPowershell
+[1m    ([FileNotFoundError, b'PowerShell 6.1.2\n'], 'PowerShell 6.1.2', 'pwsh')])[0m
+[1m[31mE   NameError: name 'FileNotFoundError' is not defined[0m

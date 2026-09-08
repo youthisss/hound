@@ -1,0 +1,6 @@
+1) AtomApplication waits until all the windows have saved their state before quitting:
+     Error: timeout of 60000ms exceeded. Ensure the done() callback is being called in this test.
+  
+
+  2) AtomApplication "after each" hook for "waits until all the windows have saved their state before quitting":
+     Error: timeout of 60000ms exceeded. Ensure the done() callback is being called in this test.

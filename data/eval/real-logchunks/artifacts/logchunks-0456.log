@@ -1,0 +1,15 @@
+[error] /home/travis/build/twitter/finagle/finagle-exp/src/test/scala/com/twitter/finagle/exp/ConcurrencyEndToEndTest.scala:6:35: object utils is not a member of package com.twitter.finagle.client
+[error] import com.twitter.finagle.client.utils.StringClient
+[error]                                   ^
+[error] /home/travis/build/twitter/finagle/finagle-exp/src/test/scala/com/twitter/finagle/exp/ConcurrencyEndToEndTest.scala:8:35: object utils is not a member of package com.twitter.finagle.server
+[error] import com.twitter.finagle.server.utils.StringServer
+[error]                                   ^
+[error] /home/travis/build/twitter/finagle/finagle-exp/src/test/scala/com/twitter/finagle/exp/ConcurrencyEndToEndTest.scala:33:20: not found: value StringServer
+[error]       val server = StringServer.server.serve(address, svc)
+[error]                    ^
+[error] /home/travis/build/twitter/finagle/finagle-exp/src/test/scala/com/twitter/finagle/exp/ConcurrencyEndToEndTest.scala:35:20: not found: value StringClient
+[error]       val client = StringClient.client
+[error]                    ^
+[error] four errors found
+[error] (finagle-exp / Test / compileIncremental) Compilation failed
+[error] Total time: 101 s, completed Jul 29, 2019 9:41:55 PM

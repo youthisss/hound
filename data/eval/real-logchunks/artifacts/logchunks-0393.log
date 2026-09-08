@@ -1,0 +1,16 @@
+Running ‘testthat.R’ [19s/19s]
+ ERROR
+Running the tests in ‘tests/testthat.R’ failed.
+Last 13 lines of output:
+  
+  > library('testthat')
+  > test_check("AnomalyDetection") 
+  Loading required package: AnomalyDetection
+  1. Failure (at test-ts.R#29): average the count for each unique timestamp if the timestamps are not unique 
+  AnomalyDetectionTs(raw_data, max_anoms = 0.02, direction = "both", plot = TRUE, unique_by_time = TRUE) threw an error
+  
+  testthat results ================================================================
+  OK: 30 SKIPPED: 0 FAILED: 1
+  1. Failure (at test-ts.R#29): average the count for each unique timestamp if the timestamps are not unique 
+  
+  Error: testthat unit tests failed

@@ -1,0 +1,12 @@
+From test_popupwin.vim:
+	Found errors in Test_popup_beval():
+	Run 1:
+	Caught exception in Test_popup_beval(): Vim(call):E958: Job already finished @ function RunTheTest[40]..Test_popup_beval[40]..VerifyScreenDump, line 19
+	Run 2:
+	function RunTheTest[40]..Test_popup_beval[34]..VerifyScreenDump line 55: See dump file difference: call term_dumpdiff("testdir/failed/Test_popupwin_beval_1.dump", "testdir/dumps/Test_popupwin_beval_1.dump"); difference in line 4: "|4| @73"
+	Caught exception in Test_popup_beval(): Vim(call):E958: Job already finished @ function RunTheTest[40]..Test_popup_beval[40]..VerifyScreenDump, line 19
+	Run 3:
+	Caught exception in Test_popup_beval(): Vim(call):E958: Job already finished @ function RunTheTest[40]..Test_popup_beval[40]..VerifyScreenDump, line 19
+	Run 4:
+	Caught exception in Test_popup_beval(): Vim(call):E958: Job already finished @ function RunTheTest[40]..Test_popup_beval[40]..VerifyScreenDump, line 19
+	Flaky test failed too often, giving up

@@ -1,0 +1,4 @@
+[0K$ ./check_integrity.sh $(find bin | cut -b 5- | xargs)
+Skip command rscp
+Skip command line-summary
+create man/git-extras.md

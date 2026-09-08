@@ -1,0 +1,52 @@
+wait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 1 second.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 1 second.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 2 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 2 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 3 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 3 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 5 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 5 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 8 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 8 seconds.
+[[31mfail[0m] Failed to upload index.html (Access key cannot be null.)
+[[31mfail[0m] Failed to fetch an object listing (Access key cannot be null.)
+[[34minfo[0m] Summary: 3 operations failed.
+[[31mfail[0m] Failed to push the website to http://java-design-patterns.com.s3-website-us-east-1.amazonaws.com
+
+[31;1mThe command "bundle exec s3_website push" failed. Retrying, 2 of 3.[0m
+
+[[34minfo[0m] Deploying /home/travis/build/iluwatar/java-design-patterns/_site/* to java-design-patterns.com
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 1 second.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 1 second.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 2 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 2 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 3 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 3 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 5 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 5 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 8 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 8 seconds.
+[[31mfail[0m] Failed to upload index.html (Access key cannot be null.)
+[[31mfail[0m] Failed to fetch an object listing (Access key cannot be null.)
+[[34minfo[0m] Summary: 3 operations failed.
+[[31mfail[0m] Failed to push the website to http://java-design-patterns.com.s3-website-us-east-1.amazonaws.com
+
+[31;1mThe command "bundle exec s3_website push" failed. Retrying, 3 of 3.[0m
+
+[[34minfo[0m] Deploying /home/travis/build/iluwatar/java-design-patterns/_site/* to java-design-patterns.com
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 1 second.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 1 second.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 2 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 2 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 3 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 3 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 5 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 5 seconds.
+[[33mwait[0m] Failed to upload index.html (Access key cannot be null.). Trying again in 8 seconds.
+[[33mwait[0m] Failed to fetch an object listing (Access key cannot be null.). Trying again in 8 seconds.
+[[31mfail[0m] Failed to upload index.html (Access key cannot be null.)
+[[31mfail[0m] Failed to fetch an object listing (Access key cannot be null.)
+[[34minfo[0m] Summary: 3 operations failed.
+[[31mfail[0m] Failed to push the website to http://java-design-patterns.com.s3-website-us-east-1.amazonaws.com
+
+[31;1mThe command "bundle exec s3_website push" failed 3 times.

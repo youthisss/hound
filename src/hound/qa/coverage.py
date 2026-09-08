@@ -22,6 +22,9 @@ from defusedxml import ElementTree as ET
 from hound.ingest.structured import _read_artifact
 from hound.ingest.redact import redact_text
 from hound.executables import trusted_executable
+from hound.process import run_bounded
+
+MAX_GIT_DIFF_BYTES = 16 * 1024 * 1024
 
 
 def _tag(element: Any) -> str:
@@ -230,7 +233,7 @@ def get_git_changed_lines(
             if not key.startswith("GIT_") and key != "SSH_ASKPASS"
         }
         environment.update(GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0")
-        proc = subprocess.run(
+        proc = run_bounded(
             [
                 executable, "-C", str(repo),
                 "-c", "core.fsmonitor=false",
@@ -240,16 +243,11 @@ def get_git_changed_lines(
                 "--diff-algorithm=myers", "--no-indent-heuristic",
                 "--src-prefix=a/", "--dst-prefix=b/", "--unified=0", "--no-color", diff_target,
             ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             timeout=max(0.1, min(timeout, 15.0)),
-            check=False,
-            shell=False,
+            max_output_bytes=MAX_GIT_DIFF_BYTES,
             env=environment,
         )
-        if proc.returncode != 0:
+        if proc.returncode != 0 or proc.truncated:
             return None
         return parse_unified_diff_changed_lines(proc.stdout)
     except (OSError, subprocess.SubprocessError):

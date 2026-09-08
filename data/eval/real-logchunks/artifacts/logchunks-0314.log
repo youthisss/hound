@@ -1,0 +1,25 @@
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:88:42: warning: Colon Violation: Colons should be next to the identifier when specifying a type and next to the key in dictionary literals. (colon)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:53:9: warning: Control Statement Violation: `if`, `for`, `guard`, `switch`, `while`, and `catch` statements shouldn't unnecessarily wrap their conditionals or arguments in parentheses. (control_statement)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:46:31: warning: Empty Parentheses with Trailing Closure Violation: When using trailing closures, empty parentheses should be avoided after the method call. (empty_parentheses_with_trailing_closure)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:43:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:45:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:51:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:64:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:68:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:74:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:79:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:82:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:84:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)
+
+/Users/travis/build/realm/realm-cocoa/RealmSwift/Object+Combine.swift:91:1: warning: Trailing Whitespace Violation: Lines should not have trailing whitespace. (trailing_whitespace)

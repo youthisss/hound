@@ -1,0 +1,23 @@
+1) Composer\Test\InstallerTest::testIntegration with data set "solver-problems.test" ('solver-problems.test', 'Test the error output of solv...blems.', null, array(array(array('package', array(array('unstable/package', '2.0.0-alpha'), array('unstable/package', '1.0.0'), array('requirer/pkg', '1.0.0', array('1.0.0')), array('dependency/pkg', '2.0.0'), array('dependency/pkg', '1.0.0'), array('stable-requiree-excluded/pkg', '1.0.1'), array('stable-requiree-excluded/pkg', '1.0.0')))), array('2.*', '1.*', '1.*', '2.*', '1.0.1')), array(), array(array('stable-requiree-excluded/pkg', '1.0.0')), 'update unstable/package requi...cy/pkg', array(), 'Loading composer repositories...blems.', '\n', 2)
+Failed asserting that format description matches text.
+--- Expected
++++ Actual
+@@ @@
+  - It's a private package and you forgot to add a custom repository to find it
++ - It's a private package and you forgot to configure the required authentication credentials
+ 
+ Read <https://getcomposer.org/doc/articles/troubleshooting.md> for further common problems.
+
+/home/travis/build/composer/composer/tests/Composer/Test/InstallerTest.php:269
+
+2) Composer\Test\InstallerTest::testIntegration with data set "broken-deps-do-not-replace.test" ('broken-deps-do-not-replace.test', 'Broken dependencies should no...y name', null, array(array(array('package', array(array('a/a', '1.0.0'), array('b/b', '1.0.0', array('1.*')), array('c/c', '1.0.0', array('1.0.0'), array('1.0')), array('d/d', '1.0.0', array('1.0.0', '1.0.0'))))), array('1.*', '1.*')), array(), array(), 'install', array(), 'Loading composer repositories...blems.', '', 2)
+Failed asserting that format description matches text.
+--- Expected
++++ Actual
+@@ @@
+  - It's a private package and you forgot to add a custom repository to find it
++ - It's a private package and you forgot to configure the required authentication credentials
+ 
+ Read <https://getcomposer.org/doc/articles/troubleshooting.md> for further common problems.
+
+/home/travis/build/composer/composer/tests/Composer/Test/InstallerTest.php:269

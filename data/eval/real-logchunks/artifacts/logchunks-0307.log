@@ -1,0 +1,21 @@
+❌  [0m/Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveCocoaTests/CocoaActionSpec.swift:47:19: [31m'value' is inaccessible due to 'internal' protection level[0m
+nl
+nl
+nl
+nl                        expect(result?.value) == 1
+
+[36m                                       ^[0m
+nl
+nl
+nl
+nl
+nl
+nl
+nl
+nl[31m❌  [0m/Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveCocoaTests/CocoaActionSpec.swift:62:19: [31m'value' is inaccessible due to 'internal' protection level[0m
+nl
+nl
+nl
+nl                        expect(result?.value) == 1
+
+[36m                                       ^

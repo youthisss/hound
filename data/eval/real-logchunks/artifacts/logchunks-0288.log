@@ -1,0 +1,2 @@
+/tmp/ccHp5IXX.o: In function `build_values':
+map.c:(.text.build_values+0xd): undefined reference to `array_add_ptr'

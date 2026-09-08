@@ -352,8 +352,8 @@ class TestTrackers:
             def __init__(self, data, status, _):
                 self._d = json.dumps(data).encode("utf-8")
 
-            def read(self):
-                return self._d
+            def read(self, limit=None):
+                return self._d if limit is None else self._d[:limit]
 
             def __enter__(self):
                 return self
@@ -382,8 +382,8 @@ class TestTrackers:
             def __init__(self, data):
                 self._d = json.dumps(data).encode("utf-8")
 
-            def read(self):
-                return self._d
+            def read(self, limit=None):
+                return self._d if limit is None else self._d[:limit]
 
             def __enter__(self):
                 return self
@@ -409,8 +409,9 @@ class TestTrackers:
         captured = {}
 
         class Resp:
-            def read(self):
-                return b"{}"
+            def read(self, limit=None):
+                data = b"{}"
+                return data if limit is None else data[:limit]
 
             def __enter__(self):
                 return self
@@ -471,16 +472,6 @@ class TestConfigDiscovery:
 
 # ------------------------------------------------------------ webhook server
 class TestServer:
-    def test_health_ok(self):
-        from hound.server import _Handler
-
-        assert _Handler  # module importable
-
-    def test_server_importable(self):
-        from hound import server
-
-        assert hasattr(server, "run_server")
-
     def test_server_requires_token_and_roots(self, tmp_path):
         import pytest
         from hound.server import ServerConfig

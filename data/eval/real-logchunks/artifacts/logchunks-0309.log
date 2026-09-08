@@ -1,0 +1,31 @@
+InterprocessTest
+
+  testCompactOnLaunchFailSilently, [31m((sizeBefore) equal to (sizeAfter)) failed: ("12288") is not equal to ("16384")[0m
+
+  [36m/Users/travis/build/realm/realm-cocoa/Realm/Tests/InterprocessTests.m:139[0m
+
+  ```
+
+[38;5;230m        [39m[38;5;155;01munsigned[39;00m[38;5;230m [39m[38;5;155;01mlong[39;00m[38;5;230m [39m[38;5;155;01mlong[39;00m[38;5;230m [39m[38;5;230msizeAfter[39m[38;5;230m [39m[38;5;87m=[39m[38;5;230m [39m[38;5;230mfileSize[39m[38;5;87m([39m[38;5;230mconfig[39m[38;5;87m.[39m[38;5;230mfileURL[39m[38;5;87m.[39m[38;5;230mpath[39m[38;5;87m);[39m[38;5;230m
+
+[38;5;230m        [39m[38;5;230mXCTAssertEqual[39m[38;5;87m([39m[38;5;230msizeBefore[39m[38;5;87m,[39m[38;5;230m [39m[38;5;230msizeAfter[39m[38;5;87m);[39m[38;5;230m
+
+[38;5;230m        [39m[38;5;230mXCTAssertTrue[39m[38;5;87m([39m[38;5;230mrealm[39m[38;5;87m.[39m[38;5;230misEmpty[39m[38;5;87m);[39m[38;5;230m
+
+[38;5;230m[39m  ```
+nl
+nl
+nl
+nl  testCompactOnLaunchFailSilently, [31m((0) equal to ([self runChildAndWait])) failed: ("0") is not equal to ("1") - Tests in child process failed[0m
+
+  [36m/Users/travis/build/realm/realm-cocoa/Realm/Tests/InterprocessTests.m:122[0m
+
+  ```
+
+[38;5;230m        [39m[38;5;87m[[[39m[38;5;230mRLMRealm[39m[38;5;230m [39m[38;5;153mdefaultRealm[39m[38;5;87m][39m[38;5;230m [39m[38;5;153mtransactionWithBlock[39m[38;5;87m:[39m[38;5;87m^[39m[38;5;87m{}];[39m[38;5;230m
+
+[38;5;230m        [39m[38;5;230mRLMRunChildAndWait[39m[38;5;87m();[39m[38;5;230m [39m[38;5;67;04m// runs the event loop
+
+[38;5;67;04m[39;00m[38;5;230m    [39m[38;5;87m}[39m[38;5;230m [39m[38;5;221;01melse[39;00m[38;5;230m [39m[38;5;87m{[39m[38;5;230m
+
+[38;5;230m[39m  ```

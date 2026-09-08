@@ -1,0 +1,4 @@
+current-buffer: README.orgphoenix>2>
+current-file: /tmp/docs/layers/+frameworks/phoenix/README.org
+error: File "/tmp/docs/layers/+frameworks/phoenix/README.org" doesn't have "Features:"(With a colon) list in the top level "Description" headline
+See "https://github.com/syl20bnr/spacemacs/blob/develop/core/templates/README.org.template"

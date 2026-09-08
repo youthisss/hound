@@ -1,0 +1,39 @@
+Undocumented Realm swift declarations:
+
+{
+
+  "warnings": [
+
+    {
+
+      "file": "/Users/travis/build/realm/realm-cocoa/RealmSwift/Util.swift",
+
+      "line": 86,
+
+      "symbol": "dynamicBridgeCast(fromObjectiveC:)",
+
+      "symbol_kind": "source.lang.swift.decl.function.free",
+
+      "warning": "undocumented"
+
+    },
+
+    {
+
+      "file": "/Users/travis/build/realm/realm-cocoa/RealmSwift/Util.swift",
+
+      "line": 96,
+
+      "symbol": "dynamicBridgeCast(fromSwift:)",
+
+      "symbol_kind": "source.lang.swift.decl.function.free",
+
+      "warning": "undocumented"
+
+    }
+
+  ],
+
+  "source_directory": "/Users/travis/build/realm/realm-cocoa"
+
+}

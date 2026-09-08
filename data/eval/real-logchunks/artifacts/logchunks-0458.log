@@ -1,0 +1,13 @@
+[info] - [HTTP/2] should never leak direct paylods into the user space *** FAILED ***
+[info]   com.twitter.util.TimeoutException: 30.seconds
+[info]   at com.twitter.util.Promise.ready(Promise.scala:656)
+[info]   at com.twitter.util.Promise.result(Promise.scala:665)
+[info]   at com.twitter.util.Await$$anonfun$result$1.apply(Awaitable.scala:152)
+[info]   at com.twitter.concurrent.LocalScheduler$Activation.blocking(Scheduler.scala:189)
+[info]   at com.twitter.concurrent.LocalScheduler.blocking(Scheduler.scala:256)
+[info]   at com.twitter.concurrent.Scheduler$.blocking(Scheduler.scala:85)
+[info]   at com.twitter.util.Await$.result(Awaitable.scala:152)
+[info]   at com.twitter.finagle.http.DirectPayloadsLifecycleTest$$anonfun$doTest$1.apply(DirectPayloadsLifecycleTest.scala:43)
+[info]   at com.twitter.finagle.http.DirectPayloadsLifecycleTest$$anonfun$doTest$1.apply(DirectPayloadsLifecycleTest.scala:20)
+[info]   at org.scalatest.OutcomeOf$class.outcomeOf(OutcomeOf.scala:85)
+[info]   ...

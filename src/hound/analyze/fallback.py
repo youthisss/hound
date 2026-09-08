@@ -5,32 +5,32 @@ from hound.models import Artifacts, RootCause, build_evidence_items
 from hound.pathutil import path_matches
 
 FIX_BY_KIND = {
-    "import_error": "Install the missing dependency or fix the import path/module name.",
-    "compilation_error": "Fix the compile error at the reported file:line, or update the build config / dependencies.",
-    "test_failure": "Inspect the failing assertion; fix the code under test or update the expected value.",
-    "timeout": "Increase the timeout, or fix the slow path / hanging call.",
-    "flaky": "Treat as flaky: rerun in CI; add retries or quarantine until root cause is found.",
+    "import_error": "Inspect the missing dependency or import path/module name in the isolated build environment.",
+    "compilation_error": "Inspect the compile error at the reported file:line and compare the build config / dependencies.",
+    "test_failure": "Inspect the failing assertion and the code under test before changing the expected value.",
+    "timeout": "Collect the timed-out step's duration and stack evidence; inspect the slow or hanging path.",
+    "flaky": "Rerun the same test in an isolated diagnostic attempt and compare the failed and passing traces.",
     "ci_failure": "Inspect the failed CI job or step and correct the command, configuration, or dependency that returned non-zero.",
-    "deployment_failed": "Inspect the deployment tool output, then correct the rejected manifest, release configuration, or target environment.",
-    "rollback": "Inspect the rollout history and the failed release revision before correcting the deployment configuration and retrying.",
-    "health_check_failed": "Inspect application startup logs and probe configuration; fix the service or health-check thresholds before redeploying.",
-    "image_pull_error": "Verify the image name, tag, registry availability, and image-pull credentials in the target environment.",
-    "migration_failed": "Review the migration error, correct the schema/data migration, and verify it is safe to rerun before redeploying.",
-    "permission_error": "Grant the deployment identity the minimum required permission, then rerun the failed deployment.",
-    "readiness_timeout": "Inspect pod events and startup logs; fix readiness conditions or the slow startup path before increasing the rollout timeout.",
+    "deployment_failed": "Inspect the deployment tool output and compare the rejected manifest, release configuration, and target environment.",
+    "rollback": "Inspect the rollout history and failed release revision; confirm recovery state before any retry.",
+    "health_check_failed": "Inspect application startup logs and probe configuration; compare observed health-check thresholds.",
+    "image_pull_error": "Verify the image name, tag, registry availability, and image-pull credential reference in the target environment.",
+    "migration_failed": "Review the migration error and inspect schema/data state before deciding whether a rerun is safe.",
+    "permission_error": "Inspect the denied operation, identity, and minimum required permission without changing access.",
+    "readiness_timeout": "Inspect pod events and startup logs; compare readiness conditions with the observed startup duration.",
     "oom_killed": "Inspect container memory limits and the workload memory profile; fix the leak or raise the limit only after sizing it.",
     "crash_loop": "Inspect the previous container log and startup configuration; fix the process crash before redeploying.",
     "liveness_probe_failed": "Verify the liveness endpoint and startup timing; avoid restarting a process that is still initializing.",
     "readiness_probe_failed": "Verify the readiness endpoint, dependencies, and startup timing before routing traffic to the workload.",
     "scheduling_failed": "Inspect pod scheduling events, node selectors, taints, and resource requests.",
-    "quota_exceeded": "Increase or rebalance the relevant quota, or reduce the deployment resource request.",
-    "network_failure": "Inspect service DNS, network policies, endpoints, and the target dependency before retrying.",
-    "registry_auth_failure": "Verify the registry credential and image-pull secret assigned to the workload identity.",
-    "config_missing": "Restore the required ConfigMap, Secret, or environment variable and verify the release manifest.",
+    "quota_exceeded": "Inspect the relevant quota, current usage, and deployment resource request before proposing a change.",
+    "network_failure": "Collect service DNS, network-policy, endpoint, and target-dependency diagnostics before retrying.",
+    "registry_auth_failure": "Inspect the registry credential reference and image-pull secret assignment without exposing their values.",
+    "config_missing": "Inspect the required ConfigMap, Secret, or environment-variable reference and compare the release manifest.",
     "dependency_resolution": "Resolve the dependency conflict: align the conflicting pins/peer requirements, then refresh the lockfile.",
-    "disk_full": "Free disk space on the runner (caches, old artifacts, images) and size the volume before retrying the job.",
-    "tls_certificate_error": "Renew or trust the expired/self-signed certificate on the registry or mirror, then rerun the download.",
-    "api_rate_limited": "Back off and retry after the rate-limit window; use an authenticated token or raise the service quota if persistent.",
+    "disk_full": "Inspect runner disk space usage, cache/artifact growth, and volume capacity before retrying the job.",
+    "tls_certificate_error": "Inspect the certificate chain, hostname, expiry, and trust configuration without disabling verification.",
+    "api_rate_limited": "Inspect the Retry-After value, rate-limit behavior, and provider quota diagnostics before retrying.",
     "unknown": "Investigate manually: reproduce the failure locally with the reported log.",
 }
 
@@ -86,7 +86,11 @@ def build_root_cause(artifacts: Artifacts) -> RootCause:
 
     if kind not in HYPOTHESIS_BY_KIND or kind == "unknown":
         confidence = "low"
-    elif any(path_matches(frame, changed) for frame in frame_files):
+    elif (
+        artifacts.message
+        and (artifacts.frames or artifacts.failed_tests)
+        and any(path_matches(frame, changed) for frame in frame_files)
+    ):
         confidence = "high"
     elif artifacts.frames or artifacts.failed_tests:
         confidence = "medium"
@@ -112,7 +116,14 @@ def build_root_cause(artifacts: Artifacts) -> RootCause:
         evidence=evidence,
         fix_suggestion=fix,
         engine="fallback",
-        evidence_refs=[item["id"] for item in build_evidence_items(artifacts)],
+        evidence_refs=[
+            item["id"]
+            for item in build_evidence_items(artifacts)
+            if item["kind"] in {
+                "failure_message", "failure_event", "stack_frame", "failed_test",
+                "connector_observation", "metric_sample", "trace_span",
+            }
+        ],
         missing_information=(
             ["No recognized failure kind was observed." if kind not in HYPOTHESIS_BY_KIND or kind == "unknown"
              else "No direct stack frame, failed test, or change intersection was observed."]

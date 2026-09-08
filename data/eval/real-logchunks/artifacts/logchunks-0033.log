@@ -1,0 +1,11 @@
+Execution of { dotnet run } by build.psm1: line 1885 failed with exit code 1
+
+At /Users/travis/build/PowerShell/PowerShell/build.psm1:2038 char:17
+
++                 throw $errorMessage
+
++                 ~~~~~~~~~~~~~~~~~~~
+
++ CategoryInfo          : OperationStopped: (Execution of { dotn\u2026ed with exit code 1:String) [], RuntimeException
+
++ FullyQualifiedErrorId : Execution of { dotnet run } by build.psm1: line 1885 failed with exit code 1

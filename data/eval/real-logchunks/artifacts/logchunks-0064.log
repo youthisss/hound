@@ -1,0 +1,17 @@
+Cloning into 'jashkenas/coffeescript'...
+warning: Could not find remote branch revert-5083-patch-docs to clone.
+fatal: Remote branch revert-5083-patch-docs not found in upstream origin
+
+[31;1mThe command "eval git clone --depth=50 --branch=revert-5083-patch-docs https://github.com/jashkenas/coffeescript.git jashkenas/coffeescript " failed. Retrying, 2 of 3.[0m
+
+Cloning into 'jashkenas/coffeescript'...
+warning: Could not find remote branch revert-5083-patch-docs to clone.
+fatal: Remote branch revert-5083-patch-docs not found in upstream origin
+
+[31;1mThe command "eval git clone --depth=50 --branch=revert-5083-patch-docs https://github.com/jashkenas/coffeescript.git jashkenas/coffeescript " failed. Retrying, 3 of 3.[0m
+
+Cloning into 'jashkenas/coffeescript'...
+warning: Could not find remote branch revert-5083-patch-docs to clone.
+fatal: Remote branch revert-5083-patch-docs not found in upstream origin
+
+[31;1mThe command "eval git clone --depth=50 --branch=revert-5083-patch-docs https://github.com/jashkenas/coffeescript.git jashkenas/coffeescript " failed 3 times.[0m

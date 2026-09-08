@@ -1,0 +1,10 @@
+1) Inflector_helper_test::test_plural
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'tellies'
++'telly'
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/helpers/inflector_helper_test.php:43
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351

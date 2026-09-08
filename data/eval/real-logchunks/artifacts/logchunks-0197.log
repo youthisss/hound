@@ -1,0 +1,21 @@
+/home/travis/build/purescript/purescript/sdist-test/[;1msrc/Language/PureScript/Suggest.hs:8:1: [;1m[31merror:[0m[0m[;1m [[;1m[31m-Wunused-imports, -Werror=unused-imports[0m[0m[;1m][0m[0m[;1m[0m
+[0m    The import of ‘maybeToList’ from module ‘Data.Maybe’ is redundant[0m[0m[0m
+[0m[;1m[34m  |[0m[0m[0m
+[0m[;1m[34m8 |[0m[0m [;1m[31mimport Data.Maybe (catMaybes, maybeToList)[0m[0m[0m
+[0m[;1m[34m  |[0m[0m[;1m[31m ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m[0m
+[0m[0m[0m[0m[0m
+[0m/home/travis/build/purescript/purescript/sdist-test/[;1msrc/Language/PureScript/Suggest.hs:10:1: [;1m[31merror:[0m[0m[;1m [[;1m[31m-Wunused-imports, -Werror=unused-imports[0m[0m[;1m][0m[0m[;1m[0m
+[0m    The qualified import of ‘Data.List.NonEmpty’ is redundant[0m
+[0m      except perhaps to import instances from ‘Data.List.NonEmpty’[0m
+[0m    To import instances alone, use: import Data.List.NonEmpty()[0m[0m[0m
+[0m[;1m[34m   |[0m[0m[0m
+[0m[;1m[34m10 |[0m[0m [;1m[31mimport qualified Data.List.NonEmpty as NEL[0m[0m[0m
+[0m[;1m[34m   |[0m[0m[;1m[31m ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m[0m
+[0m[0m[0m[0m[0m
+[0m/home/travis/build/purescript/purescript/sdist-test/[;1msrc/Language/PureScript/Suggest.hs:29:7: [;1m[31merror:[0m[0m[;1m [[;1m[31m-Woverlapping-patterns, -Werror=overlapping-patterns[0m[0m[;1m][0m[0m[;1m[0m
+[0m    Pattern match is redundant[0m
+[0m    In an equation for ‘decorateErrorMessage’:[0m
+[0m        decorateErrorMessage others = ...[0m[0m[0m
+[0m[;1m[34m   |[0m[0m[0m
+[0m[;1m[34m29 |[0m[0m       [;1m[31mdecorateErrorMessage others = others[0m[0m[0m
+[0m[;1m[34m   |[0m[0m[;1m[31m       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

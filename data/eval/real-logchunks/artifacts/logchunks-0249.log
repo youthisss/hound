@@ -1,0 +1,8 @@
+1) Check challenges
+       Check challenges (english)
+         Apply a Style Until a Condition is Met with @while
+           Check tests against solutions
+             Solution 1:
+[0m[31m     TypeError: Cannot read property 'message' of undefined[0m[90m
+      at /home/travis/build/freeCodeCamp/freeCodeCamp/curriculum/test/test-challenges.js:320:15
+      at process._tickCallback (internal/process/next_tick.js:68:7)

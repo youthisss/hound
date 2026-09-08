@@ -8,10 +8,12 @@ import sys
 import re
 
 from hound.models import GitInfo
-from hound.pathutil import path_matches
+from hound.pathutil import path_has_symlink, path_matches
 from hound.executables import trusted_executable
+from hound.process import run_bounded
 
 _GIT_TIMEOUT = 10
+_GIT_OUTPUT_BYTES = 8 * 1024 * 1024
 _REVISION = re.compile(r"[0-9a-fA-F]{7,64}")
 _MAX_CORRELATED_COMMITS = 3
 _MAX_COMMIT_SUBJECT_CHARS = 240
@@ -38,24 +40,23 @@ def _run(repo: Path, *args: str) -> str:
         "-c", f"core.hooksPath={os.devnull}",
         *args,
     ]
-    result = subprocess.run(
+    result = run_bounded(
         command,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env=environment,
         timeout=_GIT_TIMEOUT,
-        check=False,
-        shell=False,
+        max_output_bytes=_GIT_OUTPUT_BYTES,
+        env=environment,
     )
+    if result.truncated:
+        raise OSError(f"git output exceeded the {_GIT_OUTPUT_BYTES}-byte limit")
     if result.returncode != 0:
-        raise OSError(result.stderr.strip() or f"git exited {result.returncode}")
+        raise OSError(result.stdout.strip() or f"git exited {result.returncode}")
     return result.stdout.strip()
 
 
 def gather(repo_dir: str | None, base_sha: str = "", head_sha: str = "") -> GitInfo:
     if not repo_dir:
+        return GitInfo()
+    if path_has_symlink(repo_dir):
         return GitInfo()
     repo = Path(repo_dir).resolve()
     if not repo.is_dir():
@@ -127,6 +128,8 @@ def correlated_commit_subjects(
     """
     if not repo_dir or not frame_files or not changed_files or limit <= 0:
         return []
+    if path_has_symlink(repo_dir):
+        return []
     repo = Path(repo_dir).resolve()
     if not repo.is_dir():
         return []
@@ -153,6 +156,8 @@ def correlated_commit_subjects(
 def blame_line(repo_dir: str | Path, path: str, line: int) -> dict:
     """Return bounded commit metadata for one safe source line."""
     if line <= 0 or not _safe_repo_path(path):
+        return {}
+    if path_has_symlink(repo_dir):
         return {}
     repo = Path(repo_dir).resolve()
     try:

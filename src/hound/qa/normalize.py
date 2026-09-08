@@ -20,7 +20,7 @@ from pathlib import Path
 from defusedxml import ElementTree as ET
 
 from hound.ingest.redact import redact_text
-from hound.ingest.structured import MAX_ARTIFACT_BYTES, _read_artifact
+from hound.ingest.structured import _read_artifact
 from hound.models import FailedTest
 from hound.qa.model import (
     NormalizedTestResult,
@@ -269,11 +269,12 @@ def parse_test_json_results(
 ) -> list[NormalizedTestResult]:
     """Parse pytest-json-report / generic test JSON into history rows."""
     source = Path(path)
-    if source.is_symlink() or source.stat().st_size > MAX_ARTIFACT_BYTES:
+    raw = _read_artifact(source)
+    if raw is None:
         raise ValueError("test JSON must not use symlinks and must be bounded")
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError(f"could not parse test JSON: {exc}") from exc
 
     results: list[NormalizedTestResult] = []
@@ -335,8 +336,11 @@ def import_artifact(
         return parse_test_json_results(source, run_id, commit, branch, environment, recorded_at)
     if suffix in {".log", ".txt", ""}:
         try:
-            text = source.read_text(encoding="utf-8", errors="replace")[:2_000_000]
-        except OSError as exc:
+            raw = _read_artifact(source)
+            if raw is None:
+                raise ValueError("log must not use symlinks and must be bounded")
+            text = raw.decode("utf-8", errors="replace")
+        except (UnicodeDecodeError, ValueError) as exc:
             raise ValueError(f"could not read log: {exc}") from exc
         detected = runner or detect_runner(text, source)
         failed = _parse_failed_tests(text)

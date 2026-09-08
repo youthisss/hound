@@ -1,0 +1,3 @@
+src/github.com/getlantern/appdir/appdir_test.go:4: log redeclared as imported package name
+	previous declaration at $WORK/github.com/getlantern/appdir/_test/_obj_test/appdir.go:16
+FAIL	github.com/getlantern/appdir [build failed]

@@ -1,0 +1,24 @@
+1) test does not log converted errors if response already sent (Phoenix.Endpoint.RenderErrorsTest)
+     [1m[30mtest/phoenix/endpoint/render_errors_test.exs:146[0m
+     [31mAssertion with == failed[0m
+     [36mcode:  [0massert capture_log(fn -> try do
+              try do
+                Plug.Conn.send_resp(conn, 200, "hello")
+                throw(:hello)
+              catch
+                kind, reason ->
+                  stack = System.stacktrace()
+                  opts = [view: __MODULE__, accepts: ~w"html"]
+                  Phoenix.Endpoint.RenderErrors.__catch__(conn, kind, reason, stack, opts)
+              else
+                _ ->
+                  flunk("function should have failed")
+              end
+            catch
+              :throw, :hello ->
+                :ok
+            end end) == ""
+     [36mleft:  [0m"\n12:58:38.506 [info]  Access Phoenix.Endpoint.EndpointTest.StaticEndpoint at http://localhost\n"
+     [36mright: [0m""
+     [36mstacktrace:[0m
+       test/phoenix/endpoint/render_errors_test.exs:149: (test)

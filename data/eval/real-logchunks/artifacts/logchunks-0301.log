@@ -1,0 +1,14 @@
+-> ReactiveMapKit
+[31m -> [0mReactiveMapKit (10.0.0)
+
+    - ERROR | [OSX] unknown: Encountered an unknown error (CocoaPods could not find compatible versions for pod "ReactiveCocoa":
+
+  In Podfile:
+
+    ReactiveMapKit (from `/Users/travis/build/ReactiveCocoa/ReactiveCocoa`) was resolved to 10.0.0, which depends on
+
+      ReactiveCocoa (= 10.0.0)
+nl
+nl
+nl
+nlNone of your spec sources contain a spec satisfying the dependency: `ReactiveCocoa (= 10.0.0)`.

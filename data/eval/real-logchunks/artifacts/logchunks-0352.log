@@ -1,0 +1,75 @@
+[-] i1[39;49m[39;49m[39;49m[30m[39;49m[30m 645ms (581ms|64ms)[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      PropertyNotFoundException: The property 'Value' cannot be found on this object. Verify that the property exists.[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1408[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1355[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-ScriptBlock, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1537[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-TestItem, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:589[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-Block, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:262[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:333[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1399[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1355[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-ScriptBlock, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1540[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-Block, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:362[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Run-Test, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1133[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-Test, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1876[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-PesterEnd>, /Users/travis/build/pester/Pester/Pester.psm1:729[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:20[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at t, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:103[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:19[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at b, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:77[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:18[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at i, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:43[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:17[39;49m[39;49m
+
+[39;49m[31m[39;49m[31mBlock 'd1' failed[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      PropertyNotFoundException: The property 'Value' cannot be found on this object. Verify that the property exists.[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1408[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1355[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-ScriptBlock, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1540[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-Block, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:362[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Run-Test, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1133[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-Test, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Runtime.psm1:1876[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at Invoke-PesterEnd>, /Users/travis/build/pester/Pester/Pester.psm1:729[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:20[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at t, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:103[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:19[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at b, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:77[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:18[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at i, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:43[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      at ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:17

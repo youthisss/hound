@@ -1,0 +1,6 @@
+ERROR[39m
+  Disconnected, because no message in 30000 ms.
+Chrome 75.0.3770 (Mac OS X 10.13.6) ERROR
+  Disconnected, because no message in 30000 ms.
+Chrome 75.0.3770 (Mac OS X 10.13.6): Executed 0 of 0[31m DISCONNECTED[39m (30.002 secs / 0 secs)
+[91m31 07 2019 20:21:24.471:ERROR [reporter.browserlabs]: [39m✖ Test Disconnected

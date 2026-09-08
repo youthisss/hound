@@ -6,6 +6,7 @@ from pathlib import Path
 
 from hound.fsio import atomic_write as _atomic_write  # noqa: F401 (back-compat alias)
 from hound.output.markdown import escape_code, escape_text, sanitize_text
+from hound.pathutil import path_has_symlink
 
 OUTPUT_MARKER = ".hound-owned"
 OUTPUT_MARKER_CONTENT = "Hound managed output directory\n"
@@ -15,6 +16,8 @@ def ensure_outdir(outdir: str | Path) -> Path:
     p = Path(outdir)
     if p.is_symlink():
         raise ValueError(f"output path must not be a symlink: {p}")
+    if path_has_symlink(p):
+        raise ValueError(f"output path must not contain symlinked path components: {p}")
     if p.exists() and not p.is_dir():
         raise ValueError(f"output path is not a directory: {p}")
     marker = p / OUTPUT_MARKER
@@ -30,6 +33,8 @@ def ensure_outdir(outdir: str | Path) -> Path:
         elif any(p.iterdir()):
             raise ValueError(f"refusing to use non-empty unowned output directory: {p}")
     p.mkdir(parents=True, exist_ok=True)
+    if path_has_symlink(p):
+        raise ValueError(f"output path must not contain symlinked path components: {p}")
     if not marker.exists():
         _atomic_write(marker, OUTPUT_MARKER_CONTENT)
     return p

@@ -1,0 +1,17 @@
+normalize-opinionate.css[24m
+ [2m63:1[22m  [31m[31m[31m[31m[31m[31m[31m[31m[31m[31m✖[31m[39m  Unexpected missing end-of-source     [2m[2m[2m[2mno-missing-end-of-source-newline[22m
+          newline                                                              
+
+[4mnormalize.css[24m
+   [2m4:1[22m  [31m[31m[31m[31m[31m[31m[31m[31m[31m[31m✖[31m[39m  Expected no more than 1 empty       [2m[2m[2m[2mmax-empty-lines[22m                 
+           line(s)                                                             
+   [2m7:1[22m  [31m[31m[31m[31m[31m[31m[31m[31m[31m[31m✖[31m[39m  Expected no more than 1 empty       [2m[2m[2m[2mmax-empty-lines[22m                 
+           line(s)                                                             
+ [2m442:1[22m  [31m[31m[31m[31m[31m[31m[31m[31m[31m[31m✖[31m[39m  Expected no more than 1 empty       [2m[2m[2m[2mmax-empty-lines[22m                 
+           line(s)                                                             
+ [2m443:1[22m  [31m[31m[31m[31m[31m[31m[31m[31m[31m[31m✖[31m[39m  Expected no more than 1 empty       [2m[2m[2m[2mmax-empty-lines[22m                 
+           line(s)                                                             
+ [2m446:1[22m  [31m[31m[31m[31m[31m[31m[31m[31m[31m[31m✖[31m[39m  Expected no more than 1 empty       [2m[2m[2m[2mmax-empty-lines[22m                 
+           line(s)                                                             
+ [2m506:1[22m  [31m[31m[31m[31m[31m[31m[31m[31m[31m[31m✖[31m[39m  Unexpected missing end-of-source    [2m[2m[2m[2mno-missing-end-of-source-newline[22m
+           newline

@@ -4,8 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from hound.connectors import observability
-from hound.connectors.observability import collect_observability_bundle
+from hound.connectors import collect_observability_bundle, observability
 from hound.models import Artifacts, DeploymentContext, FailureEvent
 
 

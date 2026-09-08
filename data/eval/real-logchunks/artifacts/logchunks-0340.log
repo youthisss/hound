@@ -1,0 +1,4 @@
+Line   src/Composer/Installer.php                                    
+ ------ -------------------------------------------------------------- 
+  1174   Method Composer\Installer::updatePackageUrl() invoked with 8  
+         parameters, 7 required.

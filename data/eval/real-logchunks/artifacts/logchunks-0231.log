@@ -1,0 +1,6 @@
+o.reactivex.validators.TooManyEmptyNewLines > tooManyEmptyNewLines2 FAILED
+    java.lang.AssertionError: The following code pattern was found: \R\R\R
+    FlowableTakeUntilPredicateTest.java#L33
+    Found 1 instances
+        at io.reactivex.validators.TooManyEmptyNewLines.findPattern(TooManyEmptyNewLines.java:131)
+        at io.reactivex.validators.TooManyEmptyNewLines.tooManyEmptyNewLines2(TooManyEmptyNewLines.java:30)

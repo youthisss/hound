@@ -4,10 +4,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from hound.fsio import read_bounded_bytes
 from hound.ingest.git import blame_line, correlated_commit_subjects
 from hound.ingest.owners import resolve_owners
 from hound.models import StackFrame
-from hound.pathutil import path_matches
+from hound.pathutil import path_has_symlink, path_matches
 
 MAX_FILES = 20
 MAX_FILE_BYTES = 64 * 1024
@@ -30,6 +31,8 @@ def collect_source_evidence(
 ) -> list[dict]:
     """Resolve only recognized frame files under strict containment and byte limits."""
     repo = Path(repo_dir).resolve()
+    if path_has_symlink(repo_dir):
+        return []
     evidence: list[dict] = []
     seen: set[str] = set()
     total_bytes = 0
@@ -45,8 +48,8 @@ def collect_source_evidence(
             size = full.stat().st_size
             if size > MAX_FILE_BYTES or total_bytes + size > MAX_TOTAL_BYTES:
                 continue
-            raw = full.read_bytes()
-        except OSError:
+            raw = read_bounded_bytes(full, MAX_FILE_BYTES)
+        except (OSError, ValueError):
             continue
         if b"\x00" in raw:
             continue
@@ -76,7 +79,7 @@ def _safe_file(repo: Path, relative: str) -> Path | None:
     if candidate.is_absolute() or ".." in candidate.parts or not relative:
         return None
     unresolved = repo / candidate
-    if unresolved.is_symlink():
+    if path_has_symlink(unresolved):
         return None
     try:
         full = unresolved.resolve(strict=True)
@@ -140,8 +143,8 @@ def _related_tests(repo: Path, source_path: str, symbol: str) -> list[str]:
             size = path.stat().st_size
             if size > MAX_FILE_BYTES or scanned_bytes + size > MAX_TEST_SCAN_BYTES:
                 continue
-            raw = path.read_bytes()
-        except OSError:
+            raw = read_bounded_bytes(path, MAX_FILE_BYTES)
+        except (OSError, ValueError):
             continue
         if b"\x00" in raw:
             continue

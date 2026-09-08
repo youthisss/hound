@@ -1,0 +1,25 @@
+[-] - Running without any params runs all files from the local folder -> Expected and actual values differ!
+
+Expected: '/var/folders/bb/n7t3rs157850byt_jfdcq9k80000gn/T/dir/file1.Tests.ps1'
+
+Actual  : 'file1.Tests.ps1'
+
+at Verify-Equal, /Users/travis/build/pester/Pester/Dependencies/Axiom/Verify-Equal.ps1:16
+
+at <ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.RSpec.ts.ps1:184
+
+at t, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:103
+
+at <ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.RSpec.ts.ps1:179
+
+at b, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:77
+
+at <ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.RSpec.ts.ps1:167
+
+at i, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:43
+
+at <ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.RSpec.ts.ps1:16
+
+at <ScriptBlock>, <No file>:1
+
+at <ScriptBlock>, <No file>:1

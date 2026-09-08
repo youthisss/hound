@@ -1,0 +1,3 @@
+pages/common/sphinx-build.md: 10: MD006/ul-start-left Consider starting bulleted lists at the beginning of the line [Expected: 0; Actual: 1]
+pages/common/sphinx-build.md: 10: MD007/ul-indent Unordered list indentation [Expected: 4; Actual: 1]
+pages/common/sphinx-build.md: 12: MD005/list-indent Inconsistent indentation for list items at the same level [Expected: 1; Actual: 0]

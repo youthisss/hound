@@ -4,7 +4,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from hound.fsio import read_bounded_text
 from hound.models import StackFrame
+from hound.pathutil import path_has_symlink
 
 MAX_STACK_FRAMES = 100
 MAX_SNIPPET_FRAMES = 20
@@ -101,12 +103,18 @@ def dedupe_repo_paths(frames: list[StackFrame], repo_dir: str | None = None) -> 
     """Resolve/trim frame paths relative to a repo dir; keep as-is if absent."""
     if not repo_dir:
         return frames
-    base = Path(repo_dir).resolve()
+    raw_base = Path(repo_dir)
+    if path_has_symlink(raw_base):
+        return []
+    base = raw_base.resolve()
     out: list[StackFrame] = []
     for f in frames:
         try:
             candidate = Path(f.file)
-            resolved = candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
+            unresolved = candidate if candidate.is_absolute() else base / candidate
+            if path_has_symlink(unresolved):
+                continue
+            resolved = unresolved.resolve()
             f.file = str(resolved.relative_to(base)).replace("\\", "/")
         except (ValueError, OSError):
             continue
@@ -146,7 +154,10 @@ def attach_snippets(frames: list[StackFrame], repo_dir: str | None = None) -> li
     """
     if not repo_dir:
         return frames
-    base = Path(repo_dir).resolve()
+    raw_base = Path(repo_dir)
+    if path_has_symlink(raw_base):
+        return frames
+    base = raw_base.resolve()
     cache: dict[str, list[str]] = {}
     for index, f in enumerate(frames):
         if index >= MAX_SNIPPET_FRAMES:
@@ -155,7 +166,10 @@ def attach_snippets(frames: list[StackFrame], repo_dir: str | None = None) -> li
             continue
         try:
             candidate = Path(f.file)
-            full = candidate.resolve(strict=True) if candidate.is_absolute() else (base / candidate).resolve(strict=True)
+            unresolved = candidate if candidate.is_absolute() else base / candidate
+            if path_has_symlink(unresolved):
+                continue
+            full = unresolved.resolve(strict=True)
             full.relative_to(base)
         except (ValueError, OSError):
             continue
@@ -165,7 +179,7 @@ def attach_snippets(frames: list[StackFrame], repo_dir: str | None = None) -> li
         if key not in cache:
             try:
                 cache[key] = (
-                    full.read_text(encoding="utf-8", errors="replace").splitlines()
+                    read_bounded_text(full, MAX_SOURCE_FILE_BYTES, encoding="utf-8", errors="replace").splitlines()
                     if full.stat().st_size <= MAX_SOURCE_FILE_BYTES else []
                 )
             except OSError:

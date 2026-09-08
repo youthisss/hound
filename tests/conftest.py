@@ -7,7 +7,7 @@ from git import Repo
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
-_SLOW_MODULES = {"test_demo_project.py", "test_eval.py", "test_offline_accuracy.py", "test_tui.py"}
+_SLOW_MODULES = {"test_eval.py", "test_offline_accuracy.py", "test_tui.py", "test_tui_regressions.py"}
 
 
 def pytest_collection_modifyitems(items):

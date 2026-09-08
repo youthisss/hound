@@ -1,0 +1,19 @@
+[1mdiff --git a/layers/+lang/ruby/README.org b/layers/+lang/ruby/README.org[m
+[1mindex 1c84b51..a6d991c 100644[m
+[1m--- a/layers/+lang/ruby/README.org[m
+[1m+++ b/layers/+lang/ruby/README.org[m
+[36m@@ -214,10 +214,10 @@[m [mWhen =ruby-test-runner= equals =minitest=.[m
+ [m
+ ** Seeing is believing[m
+ [m
+[31m-| Key Binding     | Description                      |[m
+[31m-|-----------------+----------------------------------|[m
+[31m-| ~SPC> m @ @~   | Run seeing is believing          |[m
+[31m-| ~SPC> m @ c~   | Clear seeing is believing output |[m
+[32m+[m[32m| Key Binding   | Description                      |[m
+[32m+[m[32m|---------------+----------------------------------|[m
+[32m+[m[32m| ~SPC> m @ @~ | Run seeing is believing          |[m
+[32m+[m[32m| ~SPC> m @ c~ | Clear seeing is believing output |[m
+ [m
+ * Layer options[m
+ [m

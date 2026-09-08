@@ -1,0 +1,7 @@
+/home/travis/.rvm/gems/ruby-1.9.3-p551/gems/albacore-1.0.0.rc.2/lib/albacore/support/failure.rb:12:in `fail_with_message'
+/home/travis/.rvm/gems/ruby-1.9.3-p551/gems/albacore-1.0.0.rc.2/lib/albacore/xunittestrunner.rb:48:in `block in execute'
+/home/travis/.rvm/gems/ruby-1.9.3-p551/gems/albacore-1.0.0.rc.2/lib/albacore/xunittestrunner.rb:44:in `execute'
+/home/travis/.rvm/gems/ruby-1.9.3-p551/gems/albacore-1.0.0.rc.2/lib/albacore/support/createtask.rb:24:in `block in xunit'
+/home/travis/.rvm/gems/ruby-1.9.3-p551/gems/rake-12.2.1/exe/rake:27:in `top (required)>'
+/home/travis/.rvm/gems/ruby-1.9.3-p551/bin/ruby_executable_hooks:15:in `eval'
+/home/travis/.rvm/gems/ruby-1.9.3-p551/bin/ruby_executable_hooks:15:in `main>'

@@ -52,6 +52,18 @@ def test_history_store_preserves_corrupt_database(tmp_path):
     recovery = next(tmp_path.glob("history.sqlite3.corrupt-*"))
     assert (recovery / "history.sqlite3").read_bytes() == b"not a sqlite database"
 
+
+def test_history_store_rejects_symlinked_path(tmp_path):
+    path = tmp_path / "history.sqlite3"
+    target = tmp_path / "outside.sqlite3"
+    target.write_bytes(b"not a sqlite database")
+    try:
+        path.symlink_to(target)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(ValueError, match="must not use symlinks"):
+        upsert_results(path, [_result()])
+
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures"
 
 _JUNIT = """<?xml version="1.0" encoding="UTF-8"?>
@@ -276,6 +288,18 @@ class TestHistoryStore:
         assert failure_rate(store2, "tests.test_checkout", "test_cart_total") == 0.5
         rows = history_for_test(store2, "tests.test_checkout", "test_cart_total")
         assert {row["evidence_id"] for row in rows} == {"ev-001", None}
+
+    def test_duplicate_import_is_idempotent(self, tmp_path):
+        store = tmp_path / "history.sqlite3"
+        source = tmp_path / "history.json"
+        upsert_results(store, [_result(run_id="same-run")])
+        export_history(store, source)
+
+        imported = tmp_path / "imported.sqlite3"
+        assert import_history(imported, source) == 1
+        assert import_history(imported, source) == 1
+        with sqlite3.connect(imported) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM test_results").fetchone()[0] == 1
 
     def test_record_doc_results(self, tmp_path):
         store = tmp_path / "history.sqlite3"

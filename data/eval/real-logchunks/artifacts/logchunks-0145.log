@@ -1,0 +1,6 @@
+src/rabbit_vhost.erl:91: field description undefined in record vhost
+src/rabbit_vhost.erl:92: field tags undefined in record vhost
+src/rabbit_vhost.erl:344: variable 'Description' is unbound
+src/rabbit_vhost.erl:344: field description undefined in record vhost
+src/rabbit_vhost.erl:345: variable 'Tags' is unbound
+src/rabbit_vhost.erl:345: field tags undefined in record vhost

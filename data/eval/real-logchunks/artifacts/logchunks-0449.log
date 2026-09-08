@@ -1,0 +1,17 @@
+error[0m] [0m[0m [0m
+[0m[[0m[31merror[0m] [0m[0m2 of 17 test tasks failed:[0m
+[0m[[0m[31merror[0m] [0m[0m- partest run[0m
+[0m[[0m[31merror[0m] [0m[0m  - test/it:testOnly failed: sbt.TestsFailedException: Tests unsuccessful[0m
+[0m[[0m[31merror[0m] [0m[0m- library/mimaReportBinaryIssues[0m
+[0m[[0m[31merror[0m] [0m[0m  - library/mimaReportBinaryIssues failed: java.lang.RuntimeException: scala-library: Binary compatibility check failed![0m
+[0m[[0m[31merror[0m] [0m[0mSaved log of library/mimaReportBinaryIssues:[0m
+[0m[[0m[31merror[0m] [0m[0m * abstract method stepper(scala.collection.StepperShape)scala.collection.Stepper in class scala.collection.immutable.ArraySeq does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[DirectAbstractMethodProblem]("scala.collection.immutable.ArraySeq.stepper")[0m
+[0m[[0m[31merror[0m] [0m[0m * in current version there is abstract method stepper(scala.collection.StepperShape)scala.collection.Stepper in class scala.collection.immutable.ArraySeq, which does not have a correspondent[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[ReversedAbstractMethodProblem]("scala.collection.immutable.ArraySeq.stepper")[0m
+[0m[[0m[31merror[0m] [0m[0m * abstract method stepper(scala.collection.StepperShape)scala.collection.Stepper in class scala.collection.mutable.ArraySeq does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[DirectAbstractMethodProblem]("scala.collection.mutable.ArraySeq.stepper")[0m
+[0m[[0m[31merror[0m] [0m[0m * in current version there is abstract method stepper(scala.collection.StepperShape)scala.collection.Stepper in class scala.collection.mutable.ArraySeq, which does not have a correspondent[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[ReversedAbstractMethodProblem]("scala.collection.mutable.ArraySeq.stepper")[0m
+[0m[[0m[31merror[0m] [0m[0mtestAll failed due to previous errors[0m
+[0m[[0m[31merror[0m] [0m[0m([31mtestAll[0m) testAll failed due to previous errors[0m

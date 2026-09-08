@@ -1,0 +1,20 @@
+[-] Should validate test results against the nunit 2.5 schema[39;49m[39;49m[39;49m[30m[39;49m[30m 191ms[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      Expected no exception to be thrown, but an exception "Exception calling "Validate" with "1" argument(s): "The 'junit-version' attribute is not declared."" was thrown from /Users/travis/build/pester/Pester/Functions/TestResults.Tests.ps1:163 char:15[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m          +             { $xml.Validate( {throw $args.Exception }) } | Should -No ...[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m          +               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~.[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      163:             { $xml.Validate( {throw $args.Exception }) } | Should -Not -Throw
+[39;49m[39;49m
+
+[?1h=[?1h=[?1h=[?1h=[39;49m[31m[39;49m[31m    [-] handles special characters in block descriptions well -!@#$%^*()_+1234567890[];'',./"- [39;49m[39;49m[39;49m[30m[39;49m[30m 130ms[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      Expected no exception to be thrown, but an exception "Exception calling "Validate" with "1" argument(s): "The 'junit-version' attribute is not declared."" was thrown from /Users/travis/build/pester/Pester/Functions/TestResults.Tests.ps1:180 char:15[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m          +             { $xml.Validate( {throw $args.Exception }) } | Should -No ...[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m          +               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~.[39;49m[39;49m
+
+[39;49m[31m[39;49m[31m      180:             { $xml.Validate( {throw $args.Exception }) } | Should -Not -Throw

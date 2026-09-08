@@ -1,0 +1,3 @@
+[0K$ ./check_integrity.sh $(find bin | cut -b 5- | xargs)
+Skip command rscp
+Add git-rename-remote in the list of commands in Commands.md

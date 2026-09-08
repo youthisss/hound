@@ -1,0 +1,16 @@
+Running examples in ‘AnomalyDetection-Ex.R’ failed
+The error most likely occurred in:
+
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: AnomalyDetectionTs
+> ### Title: Anomaly Detection Using Seasonal Hybrid ESD Test
+> ### Aliases: AnomalyDetectionTs
+> ### Keywords: datasets
+> 
+> ### ** Examples
+> 
+> data(raw_data)
+> AnomalyDetectionTs(raw_data, max_anoms=0.02, direction='both', plot=TRUE)
+Error in format_timestamp(data_decomp) : 
+  could not find function "str_detect"
+Calls: AnomalyDetectionTs -> detect_anoms -> format_timestamp

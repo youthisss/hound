@@ -1,0 +1,2 @@
+FAIL: TestSeparator (0.04s)
+    repo_test.go:75: expected entry to be in form of `* [link] - description.`, got '* [pletter](https://github.com/vimeda/pletter) - A standard way to wrap a proto message for message brokers'

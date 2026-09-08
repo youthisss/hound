@@ -1,0 +1,46 @@
+TestFramework (ERROR): Unexpected exception caught during testing [0m
+[0;36m                                   Traceback (most recent call last):[0m
+[0;36m                                     File "/home/travis/build/bitcoin/bitcoin/build/bitcoin-i686-pc-linux-gnu/test/functional/test_framework/authproxy.py", line 107, in _request[0m
+[0;36m                                       return self._get_response()[0m
+[0;36m                                     File "/home/travis/build/bitcoin/bitcoin/build/bitcoin-i686-pc-linux-gnu/test/functional/test_framework/authproxy.py", line 163, in _get_response[0m
+[0;36m                                       http_response = self.__conn.getresponse()[0m
+[0;36m                                     File "/usr/lib/python3.6/http/client.py", line 1331, in getresponse[0m
+[0;36m                                       response.begin()[0m
+[0;36m                                     File "/usr/lib/python3.6/http/client.py", line 297, in begin[0m
+[0;36m                                       version, status, reason = self._read_status()[0m
+[0;36m                                     File "/usr/lib/python3.6/http/client.py", line 266, in _read_status[0m
+[0;36m                                       raise RemoteDisconnected("Remote end closed connection without"[0m
+[0;36m                                   http.client.RemoteDisconnected: Remote end closed connection without response[0m
+[0;36m                                   During handling of the above exception, another exception occurred:[0m
+[0;36m                                   Traceback (most recent call last):[0m
+[0;36m                                     File "/home/travis/build/bitcoin/bitcoin/build/bitcoin-i686-pc-linux-gnu/test/functional/test_framework/test_framework.py", line 193, in main[0m
+[0;36m                                       self.run_test()[0m
+[0;36m                                     File "/home/travis/build/bitcoin/bitcoin/build/bitcoin-i686-pc-linux-gnu/test/functional/feature_shutdown.py", line 31, in run_test[0m
+[0;36m                                       self.stop_node(0, wait=1000)[0m
+[0;36m                                     File "/home/travis/build/bitcoin/bitcoin/build/bitcoin-i686-pc-linux-gnu/test/functional/test_framework/test_framework.py", line 390, in stop_node[0m
+[0;36m                                       self.nodes[i].stop_node(expected_stderr, wait=wait)[0m
+[0;36m                                     File "/home/travis/build/bitcoin/bitcoin/build/bitcoin-i686-pc-linux-gnu/test/functional/test_framework/test_node.py", line 264, in stop_node[0m
+[0;36m                                       self.stop(wait=wait)[0m
+[0;36m                                     File "/home/travis/build/bitcoin/bitcoin/build/bitcoin-i686-pc-linux-gnu/test/functional/test_framework/coverage.py", line 47, in __call__[0m
+[0;36m                                       return_val = self.auth_service_proxy_instance.__call__(*args, **kwargs)[0m
+[0;36m                                     File "/home/travis/build/bitcoin/bitcoin/build/bitcoin-i686-pc-linux-gnu/test/functional/test_framework/authproxy.py", line 139, in __call__[0m
+[0;36m                                       response, status = self._request('POST', self.__url.path, postdata.encode('utf-8'))[0m
+[0;36m                                     File "/home/travis/build/bitcoin/bitcoin/build/bitcoin-i686-pc-linux-gnu/test/functional/test_framework/authproxy.py", line 111, in _request[0m
+[0;36m                                       self.__conn.request(method, path, postdata, headers)[0m
+[0;36m                                     File "/usr/lib/python3.6/http/client.py", line 1239, in request[0m
+[0;36m                                       self._send_request(method, url, body, headers, encode_chunked)[0m
+[0;36m                                     File "/usr/lib/python3.6/http/client.py", line 1285, in _send_request[0m
+[0;36m                                       self.endheaders(body, encode_chunked=encode_chunked)[0m
+[0;36m                                     File "/usr/lib/python3.6/http/client.py", line 1234, in endheaders[0m
+[0;36m                                       self._send_output(message_body, encode_chunked=encode_chunked)[0m
+[0;36m                                     File "/usr/lib/python3.6/http/client.py", line 1026, in _send_output[0m
+[0;36m                                       self.send(msg)[0m
+[0;36m                                     File "/usr/lib/python3.6/http/client.py", line 964, in send[0m
+[0;36m                                       self.connect()[0m
+[0;36m                                     File "/usr/lib/python3.6/http/client.py", line 936, in connect[0m
+[0;36m                                       (self.host,self.port), self.timeout, self.source_address)[0m
+[0;36m                                     File "/usr/lib/python3.6/socket.py", line 724, in create_connection[0m
+[0;36m                                       raise err[0m
+[0;36m                                     File "/usr/lib/python3.6/socket.py", line 713, in create_connection[0m
+[0;36m                                       sock.connect(sa)[0m
+[0;36m                                   ConnectionRefusedError: [Errno 111] Connection refused

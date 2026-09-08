@@ -1,12 +1,14 @@
 """Bounded authenticated HTTP receiver for trusted local log roots."""
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 import contextlib
+import hashlib
 import hmac
 import json
 import os
+import re
 import socket
 import sqlite3
 import stat
@@ -17,15 +19,19 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from hound import service
 from hound.config import load_config
 from hound.operational_logging import configure_server_logging, server_logger
 from hound.output.report import ensure_outdir
+from hound.pathutil import path_has_symlink
 from hound.pipeline import default_state_path
 from hound.state_recovery import preserve_corrupt_sqlite
 from hound.telemetry import telemetry
+from hound.triage.dedup import _pid_alive as _dedup_pid_alive
 
 DEFAULT_PORT = 8123
 MAX_BODY_BYTES = 1024 * 1024
@@ -39,7 +45,84 @@ MAX_REQUESTS_PER_WINDOW = 60
 MAX_TRACKED_CLIENTS = 1024
 MAX_SERVER_LOG_BYTES = 16 * 1024 * 1024
 COPY_CHUNK_BYTES = 64 * 1024
+MAX_IDEMPOTENCY_KEY_BYTES = 128
+MAX_ERROR_TEXT_BYTES = 512
+MAX_OUTPUT_BYTES_PER_JOB = 32 * 1024 * 1024
+MAX_HTTP_RESPONSE_BYTES = 256 * 1024
+SERVER_SHUTDOWN_TIMEOUT_SECONDS = 10.0
 LOG = server_logger()
+
+
+def _bounded_text(value: object, limit: int = MAX_ERROR_TEXT_BYTES) -> str:
+    """Return a safe, bounded diagnostic value for persistence and responses."""
+    text = str(value).replace("\x00", "")
+    return text[:limit]
+
+
+def _job_error(exc: BaseException) -> dict[str, object]:
+    """Map internal exceptions to a stable, non-sensitive job error contract."""
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return {"code": "analysis_timeout", "category": "analysis", "retryable": True}
+    if isinstance(exc, (sqlite3.Error,)):
+        return {"code": "persistence_unavailable", "category": "persistence", "retryable": True}
+    if isinstance(exc, (FileNotFoundError, PermissionError, IsADirectoryError)):
+        return {"code": "input_unavailable", "category": "input", "retryable": False}
+    if isinstance(exc, ValueError):
+        return {"code": "invalid_input", "category": "input", "retryable": False}
+    if isinstance(exc, OSError):
+        return {"code": "storage_error", "category": "persistence", "retryable": True}
+    return {"code": "analysis_failed", "category": "analysis", "retryable": False}
+
+
+def _consume_rate_token(
+    buckets: dict[str, tuple[float, float]],
+    client: str,
+    capacity: int,
+    now: float,
+) -> bool:
+    """Consume one token using a bounded, O(1)-state per-client bucket."""
+    previous = buckets.get(client)
+    if previous is None:
+        buckets[client] = (now, float(max(capacity - 1, 0)))
+        return capacity > 0
+    updated_at, tokens = previous
+    refill = (now - updated_at) * (capacity / RATE_WINDOW_SECONDS)
+    tokens = min(float(capacity), max(0.0, tokens + max(refill, 0.0)))
+    if tokens < 1.0:
+        buckets[client] = (now, tokens)
+        return False
+    buckets[client] = (now, tokens - 1.0)
+    return True
+
+
+def _safe_input_message(exc: BaseException) -> str:
+    """Keep validation responses useful without echoing arbitrary input."""
+    message = _bounded_text(exc, 256)
+    # Paths and parser details are not needed by an HTTP caller and can carry
+    # local usernames, repository names, or injected terminal text.
+    safe = message.replace("\r", " ").replace("\n", " ")
+    return safe if safe else "invalid request"
+
+
+def _request_hash(payload: dict) -> str:
+    """Hash the canonical request body used by durable idempotency records."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _read_lock_pid(path: Path) -> int | None:
+    try:
+        with path.open("rb") as stream:
+            first = stream.read(256).decode("ascii").splitlines()[0]
+        name, value = first.split("=", 1)
+        return int(value) if name == "pid" else None
+    except (OSError, UnicodeDecodeError, IndexError, ValueError):
+        return None
+
+
+def _pid_is_alive(pid: int) -> bool:
+    """Use the tested cross-platform PID probe shared with deduplication."""
+    return _dedup_pid_alive(pid)
 
 
 def _env_int(name: str, explicit: int | None, *, default: int, lo: int, hi: int) -> int:
@@ -73,7 +156,11 @@ class _JobStore:
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
+        if path_has_symlink(self.path) or self.path.is_symlink():
+            raise ValueError("server job store must not contain symlinked path components")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        if path_has_symlink(self.path.parent) or self.path.is_symlink():
+            raise ValueError("server job store must not contain symlinked path components")
         try:
             self._init_schema()
         except sqlite3.DatabaseError as exc:
@@ -81,6 +168,8 @@ class _JobStore:
             raise ValueError(f"job store is damaged; original preserved at {recovery}") from exc
 
     def _connect(self) -> sqlite3.Connection:
+        if path_has_symlink(self.path) or self.path.is_symlink():
+            raise ValueError("server job store must not contain symlinked path components")
         conn = sqlite3.connect(str(self.path), timeout=10.0)
         try:
             conn.row_factory = sqlite3.Row
@@ -113,40 +202,164 @@ class _JobStore:
                     updated REAL NOT NULL,
                     report  TEXT NOT NULL DEFAULT '',
                     engine  TEXT NOT NULL DEFAULT '',
-                    error   TEXT NOT NULL DEFAULT ''
+                    error   TEXT NOT NULL DEFAULT '',
+                    error_code TEXT NOT NULL DEFAULT '',
+                    error_category TEXT NOT NULL DEFAULT '',
+                    retryable INTEGER NOT NULL DEFAULT 0,
+                    request_id TEXT NOT NULL DEFAULT ''
                 )"""
             )
+            # Existing installations predate the diagnostic columns. SQLite
+            # has no portable ``ADD COLUMN IF NOT EXISTS`` across supported
+            # versions, so inspect the table and migrate each additive column.
+            columns = {
+                str(row[1])
+                for row in conn.execute("PRAGMA table_info(jobs)").fetchall()
+            }
+            for name, definition in (
+                ("error_code", "TEXT NOT NULL DEFAULT ''"),
+                ("error_category", "TEXT NOT NULL DEFAULT ''"),
+                ("retryable", "INTEGER NOT NULL DEFAULT 0"),
+                ("request_id", "TEXT NOT NULL DEFAULT ''"),
+            ):
+                if name not in columns:
+                    conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {definition}")
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS idempotency (
+                    client_id TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL,
+                    request_hash TEXT NOT NULL,
+                    job_id TEXT NOT NULL,
+                    created REAL NOT NULL,
+                    PRIMARY KEY (client_id, idempotency_key)
+                )"""
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_idempotency_job ON idempotency(job_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_updated ON jobs(updated)")
             conn.commit()
 
-    def create(self, job_id: str, status: str = "queued") -> None:
+    def create(self, job_id: str, status: str = "queued", *, request_id: str = "") -> None:
         now = time.time()
         with self._session() as conn:
             conn.execute(
-                "INSERT INTO jobs(id, status, created, updated) VALUES(?, ?, ?, ?)",
-                (job_id, status, now, now),
+                "INSERT INTO jobs(id, status, created, updated, request_id) VALUES(?, ?, ?, ?, ?)",
+                (job_id, status, now, now, _bounded_text(request_id, 64)),
             )
             conn.commit()
 
     def update(self, job_id: str, **fields) -> None:
-        allowed = ("status", "updated", "report", "engine", "error")
+        allowed = (
+            "status", "updated", "report", "engine", "error", "error_code",
+            "error_category", "retryable", "request_id",
+        )
         updates = {key: value for key, value in fields.items() if key in allowed}
         if not updates:
             return
+        if "error" in updates:
+            updates["error"] = _bounded_text(updates["error"])
+        if "error_code" in updates:
+            updates["error_code"] = _bounded_text(updates["error_code"], 64)
+        if "error_category" in updates:
+            updates["error_category"] = _bounded_text(updates["error_category"], 64)
+        if "report" in updates:
+            updates["report"] = _bounded_text(updates["report"], 1024)
         updates.setdefault("updated", time.time())
         clause = ", ".join(f"{key} = ?" for key in updates)
         with self._session() as conn:
             conn.execute(f"UPDATE jobs SET {clause} WHERE id = ?", (*updates.values(), job_id))
             conn.commit()
 
+    def transition(self, job_id: str, expected_status: str, status: str, **fields) -> bool:
+        """Atomically move one job through its lifecycle.
+
+        A compare-and-set transition prevents a late worker or shutdown path
+        from overwriting a terminal state written by another path.
+        """
+        fields["status"] = status
+        fields["updated"] = time.time()
+        allowed = {
+            "status", "updated", "report", "engine", "error", "error_code",
+            "error_category", "retryable", "request_id",
+        }
+        updates = {key: value for key, value in fields.items() if key in allowed}
+        if "error" in updates:
+            updates["error"] = _bounded_text(updates["error"])
+        if "error_code" in updates:
+            updates["error_code"] = _bounded_text(updates["error_code"], 64)
+        if "error_category" in updates:
+            updates["error_category"] = _bounded_text(updates["error_category"], 64)
+        if "report" in updates:
+            updates["report"] = _bounded_text(updates["report"], 1024)
+        clause = ", ".join(f"{key} = ?" for key in updates)
+        with self._session() as conn:
+            cursor = conn.execute(
+                f"UPDATE jobs SET {clause} WHERE id = ? AND status = ?",
+                (*updates.values(), job_id, expected_status),
+            )
+            conn.commit()
+            return cursor.rowcount == 1
+
     def get(self, job_id: str) -> dict | None:
         with self._session() as conn:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-        return dict(row) if row is not None else None
+        if row is None:
+            return None
+        result = dict(row)
+        for key in ("id", "status", "engine", "error_code", "error_category", "request_id"):
+            result[key] = _bounded_text(result.get(key, ""), 128)
+        result["report"] = _bounded_text(result.get("report", ""), 2048)
+        result["error"] = _bounded_text(result.get("error", ""))
+        return result
 
     def delete(self, job_id: str) -> None:
         with self._session() as conn:
+            conn.execute("DELETE FROM idempotency WHERE job_id = ?", (job_id,))
             conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+            conn.commit()
+
+    def cancel(self, job_id: str) -> bool:
+        """Mark a queued/running job canceled using a compare-and-set update."""
+        with self._session() as conn:
+            cursor = conn.execute(
+                "UPDATE jobs SET status='canceled', error='canceled by client', "
+                "error_code='job_canceled', error_category='lifecycle', retryable=0, updated=? "
+                "WHERE id=? AND status IN ('queued','running')",
+                (time.time(), job_id),
+            )
+            conn.commit()
+            return cursor.rowcount == 1
+
+    def idempotency(self, client_id: str, key: str) -> dict | None:
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT client_id, idempotency_key, request_hash, job_id, created "
+                "FROM idempotency WHERE client_id = ? AND idempotency_key = ?",
+                (client_id, key),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def reserve_idempotency(
+        self,
+        client_id: str,
+        key: str,
+        request_hash: str,
+        job_id: str,
+    ) -> bool:
+        try:
+            with self._session() as conn:
+                conn.execute(
+                    "INSERT INTO idempotency(client_id, idempotency_key, request_hash, job_id, created) "
+                    "VALUES(?, ?, ?, ?, ?)",
+                    (client_id, key, request_hash, job_id, time.time()),
+                )
+                conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def delete_idempotency_for_job(self, job_id: str) -> None:
+        with self._session() as conn:
+            conn.execute("DELETE FROM idempotency WHERE job_id = ?", (job_id,))
             conn.commit()
 
     def all_ids(self) -> list[str]:
@@ -176,7 +389,8 @@ class _JobStore:
                      SUM(CASE WHEN status='queued'    THEN 1 ELSE 0 END) AS queued,
                      SUM(CASE WHEN status='running'   THEN 1 ELSE 0 END) AS running,
                      SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed,
-                     SUM(CASE WHEN status='failed'    THEN 1 ELSE 0 END) AS failed
+                     SUM(CASE WHEN status='failed'    THEN 1 ELSE 0 END) AS failed,
+                     SUM(CASE WHEN status='canceled'  THEN 1 ELSE 0 END) AS canceled
                    FROM jobs"""
             ).fetchone()
         return {name: int(row[name] or 0) for name in row.keys()}
@@ -200,13 +414,15 @@ class _JobStore:
         cutoff = time.time() - ttl
         with self._session() as conn:
             rows = conn.execute(
-                "SELECT report FROM jobs WHERE updated < ? AND status IN ('completed','failed')",
+                "SELECT id, report FROM jobs WHERE updated < ? AND status IN ('completed','failed','canceled') "
+                "ORDER BY updated LIMIT 1000",
                 (cutoff,),
             ).fetchall()
-            conn.execute(
-                "DELETE FROM jobs WHERE updated < ? AND status IN ('completed','failed')",
-                (cutoff,),
-            )
+            ids = [row["id"] for row in rows]
+            if ids:
+                placeholders = ",".join("?" for _ in ids)
+                conn.execute(f"DELETE FROM idempotency WHERE job_id IN ({placeholders})", ids)
+                conn.execute(f"DELETE FROM jobs WHERE id IN ({placeholders})", ids)
             conn.commit()
         return [str(row["report"]) for row in rows if row["report"]]
 
@@ -214,7 +430,8 @@ class _JobStore:
         """Jobs left queued/running by a previous process are marked failed."""
         with self._session() as conn:
             conn.execute(
-                "UPDATE jobs SET status = 'failed', error = 'interrupted by server restart', updated = ? "
+                "UPDATE jobs SET status = 'failed', error = 'interrupted by server restart', "
+                "error_code = 'server_restart', error_category = 'lifecycle', retryable = 1, updated = ? "
                 "WHERE status IN ('queued','running')",
                 (time.time(),),
             )
@@ -222,6 +439,7 @@ class _JobStore:
 
     def clear(self) -> None:
         with self._session() as conn:
+            conn.execute("DELETE FROM idempotency")
             conn.execute("DELETE FROM jobs")
             conn.commit()
 
@@ -243,9 +461,19 @@ class ServerConfig:
         if not token:
             raise ValueError("server token is required")
         self.token = token
-        self.log_root = Path(log_root).resolve()
-        self.output_root = Path(output_root).resolve()
-        self.repo_root = Path(repo_root).resolve() if repo_root else None
+        raw_log_root = Path(log_root).expanduser()
+        raw_output_root = Path(output_root).expanduser()
+        raw_repo_root = Path(repo_root).expanduser() if repo_root else None
+        for path, label in (
+            (raw_log_root, "log root"),
+            (raw_output_root, "output root"),
+            (raw_repo_root, "repository root"),
+        ):
+            if path is not None and path_has_symlink(path):
+                raise ValueError(f"server {label} must not contain symlinked path components")
+        self.log_root = raw_log_root.resolve()
+        self.output_root = raw_output_root.resolve()
+        self.repo_root = raw_repo_root.resolve() if raw_repo_root else None
         self.analysis_options = analysis_options or {}
         self.workers = _env_int("HOUND_SERVER_WORKERS", workers, default=MAX_WORKERS, lo=1, hi=64)
         self.max_queue = _env_int("HOUND_SERVER_MAX_QUEUE", max_queue, default=MAX_QUEUED_JOBS, lo=1, hi=100000)
@@ -273,10 +501,13 @@ class ServerConfig:
             bool(self.analysis_options.get("no_dedup", False)),
             backend=config.state_backend,
         )
-        # Jobs survive restarts; anything a previous process left running is
-        # a zombie and must be marked failed before we accept new work.
-        self.jobs_store = _JobStore(self.output_root / ".hound" / "jobs.sqlite3")
-        self.jobs_store.mark_interrupted()
+        # Jobs survive restarts. Recovery is performed by _Server only after it
+        # owns the output-root lock, so another process cannot terminate work
+        # belonging to a live server.
+        jobs_path = self.output_root / ".hound" / "jobs.sqlite3"
+        if path_has_symlink(jobs_path.parent) or jobs_path.is_symlink():
+            raise ValueError("server job store must not be symlinked")
+        self.jobs_store = _JobStore(jobs_path)
 
 
 class _Server(ThreadingHTTPServer):
@@ -285,21 +516,106 @@ class _Server(ThreadingHTTPServer):
     request_queue_size = MAX_CLIENT_CONNECTIONS
 
     def __init__(self, address, config: ServerConfig):
-        self.executor = ThreadPoolExecutor(max_workers=config.workers, thread_name_prefix="hound")
-        self.address_family = socket.AF_INET6 if ":" in address[0] else socket.AF_INET
-        super().__init__(address, _Handler)
         self.config = config
-        self.jobs_lock = threading.Lock()
-        self.request_times: dict[str, list[float]] = {}
-        self.unauthorized_times: dict[str, list[float]] = {}
+        self.jobs_lock = threading.RLock()
+        self.request_times: dict[str, tuple[float, float]] = {}
+        self.unauthorized_times: dict[str, tuple[float, float]] = {}
         self.client_slots = threading.BoundedSemaphore(MAX_CLIENT_CONNECTIONS)
         self.cleanup_stop = threading.Event()
-        self.cleanup_thread = threading.Thread(
-            target=self._cleanup_loop,
-            name="hound_cleanup",
-            daemon=True,
-        )
-        self.cleanup_thread.start()
+        self.accepting = True
+        self._closed = False
+        self._futures: set[Future[Any]] = set()
+        self._running_jobs: set[str] = set()
+        self._snapshots: dict[str, Path] = {}
+        self._owner_fd: int | None = None
+        self._owner_token = uuid4().hex
+        self._owner_lock_path = config.output_root / ".hound" / "server.lock"
+        self._release_after_shutdown = False
+        self._acquire_owner_lock()
+        try:
+            self.executor = ThreadPoolExecutor(max_workers=config.workers, thread_name_prefix="hound")
+            self.address_family = socket.AF_INET6 if ":" in address[0] else socket.AF_INET
+            super().__init__(address, _Handler)
+            # Only the owner of this output root may recover jobs. This avoids
+            # one process marking another process's work as interrupted.
+            self.config.jobs_store.mark_interrupted()
+            self.cleanup_thread = threading.Thread(
+                target=self._cleanup_loop,
+                name="hound_cleanup",
+                daemon=True,
+            )
+            self.cleanup_thread.start()
+        except Exception:
+            self._release_owner_lock()
+            raise
+
+    def _acquire_owner_lock(self) -> None:
+        if path_has_symlink(self._owner_lock_path.parent) or self._owner_lock_path.is_symlink():
+            raise ValueError("server owner lock path must not be symlinked")
+        self._owner_lock_path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        try:
+            fd = os.open(self._owner_lock_path, flags, 0o600)
+        except FileExistsError as exc:
+            owner_pid = _read_lock_pid(self._owner_lock_path)
+            if owner_pid is not None and not _pid_is_alive(owner_pid):
+                try:
+                    self._owner_lock_path.unlink()
+                except OSError:
+                    raise ValueError(
+                        "server output root is already owned by another Hound server"
+                    ) from exc
+                return self._acquire_owner_lock()
+            raise ValueError(
+                "server output root is already owned by another Hound server; "
+                "stop it or remove the lock after verifying the owner"
+            ) from exc
+        marker = (
+            f"pid={os.getpid()}\n"
+            f"started={time.time():.6f}\n"
+            f"token={self._owner_token}\n"
+        ).encode("ascii")
+        try:
+            written = 0
+            while written < len(marker):
+                written += os.write(fd, marker[written:])
+        except OSError:
+            os.close(fd)
+            try:
+                with self._owner_lock_path.open("rb") as stream:
+                    current = stream.read(len(marker) + 1)
+                if current == marker:
+                    self._owner_lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+        # The marker is deliberately closed after atomic creation. This keeps
+        # ``hound clean`` cross-platform (Windows cannot delete open files)
+        # while the PID-bearing marker still prevents a second owner.
+        os.close(fd)
+        self._owner_fd = None
+
+    def _release_owner_lock(self) -> None:
+        fd, self._owner_fd = self._owner_fd, None
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        try:
+            if path_has_symlink(self._owner_lock_path):
+                return
+            with self._owner_lock_path.open("rb") as stream:
+                marker = stream.read(512).decode("ascii")
+            if f"token={self._owner_token}" not in marker.splitlines():
+                LOG.warning(
+                    "owner lock changed before release; preserving replacement marker",
+                    extra={"event": "owner_lock_replaced", "failure_category": "lifecycle"},
+                )
+                return
+            self._owner_lock_path.unlink(missing_ok=True)
+        except (OSError, UnicodeDecodeError):
+            pass
 
     def cleanup_expired(self) -> None:
         try:
@@ -315,6 +631,9 @@ class _Server(ThreadingHTTPServer):
             self.cleanup_expired()
 
     def process_request(self, request, client_address) -> None:
+        if not self.accepting:
+            request.close()
+            return
         if not self.client_slots.acquire(blocking=False):
             request.close()
             return
@@ -327,18 +646,67 @@ class _Server(ThreadingHTTPServer):
             self.client_slots.release()
 
     def server_close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self.accepting = False
         LOG.info("server shutdown started", extra={"event": "shutdown_started"})
         if hasattr(self, "cleanup_stop"):
             self.cleanup_stop.set()
             self.cleanup_thread.join(timeout=5)
         if hasattr(self, "executor"):
-            self.executor.shutdown(wait=True, cancel_futures=True)
+            with self.jobs_lock:
+                pending = [
+                    (job_id, snapshot)
+                    for job_id, snapshot in self._snapshots.items()
+                    if job_id not in self._running_jobs
+                ]
+                for job_id, snapshot in pending:
+                    snapshot.unlink(missing_ok=True)
+                    self._snapshots.pop(job_id, None)
+                futures = list(self._futures)
+                for future in futures:
+                    future.cancel()
+            deadline = time.monotonic() + SERVER_SHUTDOWN_TIMEOUT_SECONDS
+            while time.monotonic() < deadline:
+                with self.jobs_lock:
+                    if all(future.done() for future in self._futures):
+                        break
+                time.sleep(0.02)
+            self.executor.shutdown(wait=False, cancel_futures=True)
+            with self.jobs_lock:
+                workers_stopped = all(future.done() for future in self._futures)
+            if workers_stopped:
+                try:
+                    self.config.jobs_store.mark_interrupted()
+                except sqlite3.Error:
+                    pass
+                self._release_owner_lock()
+            else:
+                # A Python thread cannot be safely killed. Keep the ownership
+                # marker until the process exits rather than letting a second
+                # server race a still-running worker against the same store.
+                LOG.error(
+                    "shutdown deadline reached with active analysis workers",
+                    extra={"event": "shutdown_timeout", "failure_category": "analysis"},
+                )
+                self._release_after_shutdown = True
+        super().server_close()
+        LOG.info("server shutdown completed", extra={"event": "shutdown_completed"})
+
+    def _forget_future(self, future: Future[Any]) -> None:
+        release = False
+        with self.jobs_lock:
+            self._futures.discard(future)
+            if self._release_after_shutdown and not self._futures:
+                self._release_after_shutdown = False
+                release = True
+        if release:
             try:
                 self.config.jobs_store.mark_interrupted()
             except sqlite3.Error:
                 pass
-        super().server_close()
-        LOG.info("server shutdown completed", extra={"event": "shutdown_completed"})
+            self._release_owner_lock()
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -351,13 +719,108 @@ class _Handler(BaseHTTPRequestHandler):
         self.request_id = uuid4().hex
 
     def _json(self, code: int, obj: dict) -> None:
-        body = json.dumps(obj).encode("utf-8")
+        try:
+            body = json.dumps(obj, allow_nan=False).encode("utf-8")
+        except (TypeError, ValueError, OverflowError):
+            body = b'{"error":"internal server error","code":"internal_error","retryable":false}'
+            code = 500
+        if len(body) > MAX_HTTP_RESPONSE_BYTES:
+            body = b'{"error":"response too large","code":"response_too_large","retryable":false}'
+            code = 500
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Request-ID", self.request_id)
         self.end_headers()
         self.wfile.write(body)
+
+    def _error(
+        self,
+        code: int,
+        message: str,
+        *,
+        error_code: str,
+        retryable: bool = False,
+        allow: str | None = None,
+    ) -> None:
+        """Write the stable JSON error contract for every handled failure."""
+        if allow:
+            self.send_response(code)
+            self.send_header("Allow", allow)
+            payload = {
+                "error": _bounded_text(message),
+                "code": error_code,
+                "request_id": self.request_id,
+                "retryable": retryable,
+            }
+            body = json.dumps(payload).encode("utf-8")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("X-Request-ID", self.request_id)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self._json(code, {
+            "error": _bounded_text(message),
+            "code": error_code,
+            "request_id": self.request_id,
+            "retryable": retryable,
+        })
+
+    def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
+        """Replace BaseHTTPRequestHandler's HTML errors with safe JSON."""
+        del explain
+        messages = {
+            400: "invalid request",
+            401: "unauthorized",
+            404: "not found",
+            405: "method not allowed",
+            413: "request body too large",
+            429: "rate limit exceeded",
+            500: "internal server error",
+            501: "method not implemented",
+            503: "service unavailable",
+        }
+        self._error(
+            code,
+            message or messages.get(code, "request failed"),
+            error_code={
+                400: "invalid_request",
+                401: "unauthorized",
+                404: "not_found",
+                405: "method_not_allowed",
+                413: "request_too_large",
+                429: "rate_limited",
+                500: "internal_error",
+                501: "method_not_implemented",
+                503: "service_unavailable",
+            }.get(code, "request_failed"),
+            retryable=code in {429, 500, 503},
+        )
+
+    def _target(self) -> tuple[str, str]:
+        try:
+            parsed = urlsplit(self.path)
+        except ValueError:
+            self._error(400, "invalid request target", error_code="invalid_request")
+            return "", ""
+        if parsed.scheme or parsed.netloc:
+            self._error(400, "absolute request targets are not supported", error_code="invalid_request")
+            return "", ""
+        return parsed.path or "/", parsed.query
+
+    def _reject_query(self, query: str) -> bool:
+        if query:
+            self._error(
+                400,
+                "query parameters are not supported for this endpoint",
+                error_code="unsupported_query",
+            )
+            return True
+        return False
+
+    def _method_not_allowed(self, allow: str) -> None:
+        self._error(405, "method not allowed", error_code="method_not_allowed", allow=allow)
 
     def _authorized(self) -> bool:
         supplied = self.headers.get("Authorization", "")
@@ -371,18 +834,23 @@ class _Handler(BaseHTTPRequestHandler):
         client = self.client_address[0]
         with self.server.jobs_lock:
             self.server.unauthorized_times = {
-                ip: [value for value in values if now - value < RATE_WINDOW_SECONDS]
-                for ip, values in self.server.unauthorized_times.items()
-                if any(now - value < RATE_WINDOW_SECONDS for value in values)
+                ip: values for ip, values in self.server.unauthorized_times.items()
+                if now - values[0] < RATE_WINDOW_SECONDS
             }
             if client not in self.server.unauthorized_times and len(self.server.unauthorized_times) >= MAX_TRACKED_CLIENTS:
                 self.server.unauthorized_times.pop(next(iter(self.server.unauthorized_times)))
-            times = self.server.unauthorized_times.get(client, [])
-            limited = len(times) >= self.server.config.rate_limit
-            if not limited:
-                times.append(now)
-            self.server.unauthorized_times[client] = times
-        self._json(429 if limited else 401, {"error": "rate limit exceeded" if limited else "unauthorized"})
+            limited = not _consume_rate_token(
+                self.server.unauthorized_times,
+                client,
+                self.server.config.rate_limit,
+                now,
+            )
+        self._error(
+            429 if limited else 401,
+            "rate limit exceeded" if limited else "unauthorized",
+            error_code="rate_limited" if limited else "unauthorized",
+            retryable=limited,
+        )
         LOG.warning("request rejected", extra={"event": "request_rejected", "request_id": self.request_id,
                     "status": 429 if limited else 401, "failure_category": "authentication"})
         return False
@@ -393,28 +861,35 @@ class _Handler(BaseHTTPRequestHandler):
         self.server.cleanup_expired()
         with self.server.jobs_lock:
             self.server.request_times = {
-                ip: [value for value in values if now - value < RATE_WINDOW_SECONDS]
-                for ip, values in self.server.request_times.items()
-                if any(now - value < RATE_WINDOW_SECONDS for value in values)
+                ip: values for ip, values in self.server.request_times.items()
+                if now - values[0] < RATE_WINDOW_SECONDS
             }
             if client not in self.server.request_times and len(self.server.request_times) >= MAX_TRACKED_CLIENTS:
                 self.server.request_times.pop(next(iter(self.server.request_times)))
-            times = self.server.request_times.get(client, [])
-            if len(times) >= self.server.config.rate_limit:
-                self.server.request_times[client] = times
-                self._json(429, {"error": "rate limit exceeded"})
+            if not _consume_rate_token(
+                self.server.request_times,
+                client,
+                self.server.config.rate_limit,
+                now,
+            ):
+                self._error(429, "rate limit exceeded", error_code="rate_limited", retryable=True)
                 LOG.warning("request rejected", extra={"event": "request_rejected", "request_id": self.request_id,
                             "status": 429, "failure_category": "rate_limit"})
                 return False
-            times.append(now)
-            self.server.request_times[client] = times
         return True
 
     def do_GET(self) -> None:
-        if self.path.rstrip("/") == "/health":
+        route, query = self._target()
+        if not route:
+            return
+        if route.rstrip("/") == "/health":
+            if self._reject_query(query):
+                return
             self._json(200, {"status": "ok"})
             return
-        if self.path.rstrip("/") == "/ready":
+        if route.rstrip("/") == "/ready":
+            if self._reject_query(query):
+                return
             ready = self.server.config.jobs_store.ready() and os.access(self.server.config.output_root, os.W_OK)
             self._json(200 if ready else 503, {"status": "ready" if ready else "not_ready"})
             return
@@ -422,33 +897,62 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if not self._admit_request():
             return
-        if self.path.rstrip("/") == "/stats":
-            counts = self.server.config.jobs_store.counts()
+        if self._reject_query(query):
+            return
+        if route.rstrip("/") == "/stats":
+            try:
+                counts = self.server.config.jobs_store.counts()
+                analysis = self.server.config.jobs_store.telemetry()
+            except sqlite3.Error:
+                self._error(
+                    503,
+                    "job store unavailable",
+                    error_code="persistence_unavailable",
+                    retryable=True,
+                )
+                return
             telemetry.gauge("server_queue_depth", float(counts["queued"] + counts["running"]))
             self._json(200, {
                 "jobs": counts,
-                "analysis": self.server.config.jobs_store.telemetry(),
+                "analysis": analysis,
                 "hound": telemetry.snapshot(),
             })
             return
         prefix = "/jobs/"
-        if self.path.startswith(prefix):
-            job_id = self.path[len(prefix):]
+        if route.startswith(prefix):
+            job_id = route[len(prefix):]
             if not job_id.isalnum() or len(job_id) != 32:
-                self._json(404, {"error": "job not found"})
+                self._error(404, "job not found", error_code="job_not_found")
                 return
-            job = self.server.config.jobs_store.get(job_id)
-            self._json(200, job) if job else self._json(404, {"error": "job not found"})
+            try:
+                job = self.server.config.jobs_store.get(job_id)
+            except sqlite3.Error:
+                self._error(
+                    503,
+                    "job store unavailable",
+                    error_code="persistence_unavailable",
+                    retryable=True,
+                )
+                return
+            self._json(200, job) if job else self._error(404, "job not found", error_code="job_not_found")
             return
-        self._json(404, {"error": "not found"})
+        self._error(404, "not found", error_code="not_found")
 
     def do_POST(self) -> None:
-        if self.path.rstrip("/") != "/analyze":
-            self._json(404, {"error": "not found"})
+        route, query = self._target()
+        if not route:
+            return
+        if route.rstrip("/") in {"/health", "/ready"}:
+            self._method_not_allowed("GET")
             return
         if not self._require_auth():
             return
+        if route.rstrip("/") != "/analyze":
+            self._error(404, "not found", error_code="not_found")
+            return
         if not self._admit_request():
+            return
+        if self._reject_query(query):
             return
         try:
             length = int(self.headers.get("Content-Length", "-1"))
@@ -468,53 +972,197 @@ class _Handler(BaseHTTPRequestHandler):
                 if repo_path is None or payload["repo"] != ".":
                     raise ValueError("repo selection is not allowed")
         except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
-            self._json(400, {"error": str(exc)})
+            self._error(400, _safe_input_message(exc), error_code="invalid_request")
             return
+        except OSError:
+            self._error(503, "request body could not be read", error_code="storage_error", retryable=True)
+            return
+
+        idempotency_key = self._idempotency_key()
+        if getattr(self, "_idempotency_invalid", False):
+            return
+        request_hash = _request_hash(payload)
+        client_id = hashlib.sha256(self.server.config.token.encode("utf-8")).hexdigest()
         job_id = uuid4().hex
         # Capacity admission and reservation must be one process-local critical
         # section; otherwise parallel handlers can all observe the same free slot.
-        with self.server.jobs_lock:
-            if self.server.config.jobs_store.active_count() >= self.server.config.max_queue:
-                self._json(429, {"error": "server queue full"})
-                LOG.warning("request rejected", extra={"event": "queue_rejected", "request_id": self.request_id, "status": 429})
-                return
-            self.server.config.jobs_store.create(job_id, status="queued")
+        try:
+            with self.server.jobs_lock:
+                if idempotency_key:
+                    existing = self.server.config.jobs_store.idempotency(client_id, idempotency_key)
+                    if existing is not None:
+                        if existing["request_hash"] != request_hash:
+                            self._error(409, "idempotency key was reused for a different request", error_code="idempotency_key_reused")
+                            return
+                        existing_job = self.server.config.jobs_store.get(existing["job_id"])
+                        if existing_job is not None:
+                            self._json(202, {"accepted": True, "job_id": existing["job_id"], "replayed": True})
+                            return
+                        self.server.config.jobs_store.delete_idempotency_for_job(existing["job_id"])
+                if self.server.config.jobs_store.active_count() >= self.server.config.max_queue:
+                    self._error(429, "server queue full", error_code="queue_full", retryable=True)
+                    LOG.warning("request rejected", extra={"event": "queue_rejected", "request_id": self.request_id, "status": 429})
+                    return
+                self.server.config.jobs_store.create(job_id, status="queued", request_id=self.request_id)
+                if idempotency_key and not self.server.config.jobs_store.reserve_idempotency(
+                    client_id, idempotency_key, request_hash, job_id
+                ):
+                    existing = self.server.config.jobs_store.idempotency(client_id, idempotency_key)
+                    self.server.config.jobs_store.delete(job_id)
+                    if existing and existing["request_hash"] == request_hash:
+                        self._json(202, {"accepted": True, "job_id": existing["job_id"], "replayed": True})
+                    else:
+                        self._error(409, "idempotency key was reused for a different request", error_code="idempotency_key_reused")
+                    return
+        except sqlite3.Error:
+            try:
+                self.server.config.jobs_store.delete(job_id)
+            except sqlite3.Error:
+                LOG.error(
+                    "could not roll back failed job reservation",
+                    extra={"event": "job_reservation_cleanup_failed", "request_id": self.request_id},
+                )
+            self._error(503, "job store unavailable", error_code="persistence_unavailable", retryable=True)
+            return
         LOG.info("job created", extra={"event": "job_created", "request_id": self.request_id, "job_id": job_id})
-        try:
-            log_path = _snapshot_log(self.server.config.log_root, log_path, self.server.config.output_root, job_id)
-        except FileNotFoundError:
-            self._drop_job(job_id)
-            self._json(404, {"error": "log not found"})
-            return
-        except ValueError as exc:
-            self._drop_job(job_id)
-            self._json(400, {"error": str(exc)})
-            return
-        except OSError:
-            self._drop_job(job_id)
-            self._json(500, {"error": "could not snapshot log"})
-            return
-        try:
-            self.server.executor.submit(
-                self._run_job, job_id, log_path, repo_path,
-                bool(payload.get("offline", False)), self.request_id,
-            )
-        except RuntimeError:
-            log_path.unlink(missing_ok=True)
-            self._drop_job(job_id)
-            self._json(503, {"error": "server is shutting down"})
-            return
+        # Snapshot, submit, and future registration share the lifecycle lock.
+        # Without this critical section shutdown could observe no future after
+        # the database reservation but before the handler registered work,
+        # release the owner lock, and allow a second server to race the job.
+        with self.server.jobs_lock:
+            if not self.server.accepting:
+                self._drop_job(job_id)
+                self._error(503, "server is shutting down", error_code="server_shutting_down", retryable=True)
+                return
+            try:
+                log_path = _snapshot_log(self.server.config.log_root, log_path, self.server.config.output_root, job_id)
+                self.server._snapshots[job_id] = log_path
+            except FileNotFoundError:
+                self._drop_job(job_id)
+                self._error(404, "log not found", error_code="log_not_found")
+                return
+            except ValueError as exc:
+                self._drop_job(job_id)
+                self._error(400, _safe_input_message(exc), error_code="invalid_input")
+                return
+            except OSError:
+                self._drop_job(job_id)
+                self._error(503, "could not snapshot log", error_code="storage_error", retryable=True)
+                return
+            try:
+                future = self.server.executor.submit(
+                    self._run_job, job_id, log_path, repo_path,
+                    bool(payload.get("offline", False)), self.request_id,
+                )
+            except RuntimeError:
+                self._drop_job(job_id)
+                self._error(503, "server is shutting down", error_code="server_shutting_down", retryable=True)
+                return
+            self.server._futures.add(future)
+            # Register while holding the same lock used by shutdown. If the
+            # work already completed, Future invokes the callback immediately
+            # and the RLock makes the discard race-free.
+            future.add_done_callback(self.server._forget_future)
         self._json(202, {"accepted": True, "job_id": job_id})
+
+    def _idempotency_key(self) -> str:
+        """Validate and return an optional bounded idempotency key.
+
+        An absent header is represented by the empty string. Invalid headers
+        write their response here and return ``""`` only to callers that do
+        not need to continue; POST checks ``response_sent`` below.
+        """
+        value = self.headers.get("Idempotency-Key")
+        if value is None:
+            return ""
+        value = value.strip()
+        if not value:
+            self._error(400, "Idempotency-Key must not be empty", error_code="invalid_idempotency_key")
+            self._idempotency_invalid = True
+            return ""
+        try:
+            length = len(value.encode("utf-8"))
+        except UnicodeEncodeError:
+            length = MAX_IDEMPOTENCY_KEY_BYTES + 1
+        if length > MAX_IDEMPOTENCY_KEY_BYTES or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+            self._error(
+                400,
+                "Idempotency-Key is invalid or too long",
+                error_code="invalid_idempotency_key",
+            )
+            self._idempotency_invalid = True
+            return ""
+        self._idempotency_invalid = False
+        return value
+
+    def do_PUT(self) -> None:
+        self._unsupported_method()
+
+    def do_PATCH(self) -> None:
+        self._unsupported_method()
+
+    def do_DELETE(self) -> None:
+        route, query = self._target()
+        if not route:
+            return
+        if not self._require_auth():
+            return
+        if not self._admit_request():
+            return
+        if self._reject_query(query):
+            return
+        prefix = "/jobs/"
+        job_id = route[len(prefix):] if route.startswith(prefix) else ""
+        if not job_id.isalnum() or len(job_id) != 32:
+            self._error(404, "job not found", error_code="job_not_found")
+            return
+        try:
+            job = self.server.config.jobs_store.get(job_id)
+            if job is None:
+                self._error(404, "job not found", error_code="job_not_found")
+                return
+            if not self.server.config.jobs_store.cancel(job_id):
+                self._error(409, "job is already terminal", error_code="job_not_cancelable")
+                return
+        except sqlite3.Error:
+            self._error(503, "job store unavailable", error_code="persistence_unavailable", retryable=True)
+            return
+        self._json(200, {"canceled": True, "job_id": job_id})
+
+    def do_OPTIONS(self) -> None:
+        self._unsupported_method()
+
+    def _unsupported_method(self) -> None:
+        route, _query = self._target()
+        if not route:
+            return
+        if route.rstrip("/") in {"/health", "/ready"}:
+            self._method_not_allowed("GET")
+            return
+        if not self._require_auth():
+            return
+        if route.rstrip("/") == "/analyze":
+            self._method_not_allowed("POST")
+        elif route.rstrip("/") == "/stats" or route.startswith("/jobs/"):
+            self._method_not_allowed("GET")
+        else:
+            self._error(404, "not found", error_code="not_found")
 
     def _drop_job(self, job_id: str) -> None:
         with self.server.jobs_lock:
+            snapshot = self.server._snapshots.pop(job_id, None)
+            if snapshot is not None:
+                snapshot.unlink(missing_ok=True)
             self.server.config.jobs_store.delete(job_id)
 
     def _run_job(self, job_id: str, log_path: Path, repo_path: Path | None, offline: bool, request_id: str) -> None:
-        self.server.config.jobs_store.update(job_id, status="running")
-        LOG.info("job started", extra={"event": "job_started", "request_id": request_id, "job_id": job_id})
+        with self.server.jobs_lock:
+            self.server._running_jobs.add(job_id)
         output = self.server.config.output_root / job_id
         try:
+            if not self.server.config.jobs_store.transition(job_id, "queued", "running"):
+                return
+            LOG.info("job started", extra={"event": "job_started", "request_id": request_id, "job_id": job_id})
             options = dict(self.server.config.analysis_options)
             options.update(repo_dir=repo_path, offline=offline or bool(options.get("offline", False)))
             options["state_path"] = self.server.config.state_path
@@ -523,26 +1171,53 @@ class _Handler(BaseHTTPRequestHandler):
                 offline=bool(options["offline"]),
             )
             doc = service.analyze_log(log_path, output, **options)
-            self.server.config.jobs_store.update(
+            report = output / "report.json"
+            if not report.is_file() or report.stat().st_size > MAX_OUTPUT_BYTES_PER_JOB:
+                raise ValueError("analysis output exceeds server limit")
+            completed = self.server.config.jobs_store.transition(
                 job_id,
-                status="completed",
+                "running",
+                "completed",
                 report=str(output / "report.json"),
                 engine=doc["meta"]["engine"],
                 error=(doc["meta"].get("llm") or {}).get("fallback_reason") or "",
             )
-            LOG.info("job completed", extra={"event": "job_completed", "request_id": request_id,
-                     "job_id": job_id, "status": "completed"})
-        except Exception:
+            if completed:
+                LOG.info("job completed", extra={"event": "job_completed", "request_id": request_id,
+                         "job_id": job_id, "status": "completed"})
+        except Exception as exc:
+            details = _job_error(exc)
             LOG.error("analysis job failed", extra={"event": "job_failed", "request_id": request_id, "job_id": job_id,
-                      "status": "failed", "failure_category": "analysis"})
-            self.server.config.jobs_store.update(
-                job_id,
-                status="failed",
-                report=str(output / "report.json"),
-                error="analysis failed",
-            )
+                       "status": "failed", "failure_category": "analysis"})
+            try:
+                self.server.config.jobs_store.transition(
+                    job_id,
+                    "running",
+                    "failed",
+                    report=str(output / "report.json"),
+                    error="analysis failed",
+                    error_code=details["code"],
+                    error_category=details["category"],
+                    retryable=details["retryable"],
+                )
+            except sqlite3.Error:
+                LOG.error(
+                    "could not persist failed job state",
+                    extra={"event": "job_persistence_failed", "request_id": request_id,
+                           "job_id": job_id, "failure_category": "persistence"},
+                )
         finally:
-            log_path.unlink(missing_ok=True)
+            try:
+                log_path.unlink(missing_ok=True)
+            except OSError:
+                LOG.error(
+                    "could not remove analysis snapshot",
+                    extra={"event": "snapshot_cleanup_failed", "request_id": request_id,
+                           "job_id": job_id, "failure_category": "persistence"},
+                )
+            with self.server.jobs_lock:
+                self.server._running_jobs.discard(job_id)
+                self.server._snapshots.pop(job_id, None)
 
     def log_message(self, fmt: str, *args) -> None:
         LOG.info("request completed", extra={"event": "request_completed", "request_id": self.request_id,
@@ -550,12 +1225,18 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def _contained_path(root: Path, relative_path: str) -> Path:
-    candidate = Path(relative_path)
-    if candidate.is_absolute():
+    candidate = Path(relative_path.replace("\\", "/"))
+    if candidate.is_absolute() or candidate.drive or candidate.anchor or any(
+        part in {"", ".", ".."} for part in candidate.parts
+    ) or re.match(r"^[A-Za-z]:", relative_path):
         raise ValueError("absolute paths are not allowed")
-    resolved = (root / candidate).resolve()
+    unresolved = root / candidate
+    if path_has_symlink(unresolved):
+        raise ValueError("symlinked paths are not allowed")
+    trusted_root = root.resolve()
+    resolved = unresolved.resolve()
     try:
-        resolved.relative_to(root)
+        resolved.relative_to(trusted_root)
     except ValueError as exc:
         raise ValueError("path escapes configured root") from exc
     return resolved
@@ -600,7 +1281,7 @@ def _copy_limited(source, target, size: int) -> None:
     while remaining > 0:
         chunk = source.read(min(COPY_CHUNK_BYTES, remaining))
         if not chunk:
-            return
+            raise OSError("input changed while creating the analysis snapshot")
         target.write(chunk)
         remaining -= len(chunk)
 
@@ -608,10 +1289,18 @@ def _copy_limited(source, target, size: int) -> None:
 def _remove_expired_report(output_root: Path, report: str) -> None:
     """Remove only a job-owned output directory below the configured root."""
     try:
-        report_path = Path(report).resolve()
+        root = output_root.resolve()
+        report_path = Path(report)
+        if not report_path.is_absolute():
+            return
+        if path_has_symlink(report_path) or report_path.is_symlink():
+            return
         job_dir = report_path.parent
-        job_dir.relative_to(output_root)
-        if report_path.name != "report.json" or len(job_dir.name) != 32 or not job_dir.name.isalnum():
+        if job_dir.parent != root or report_path.name != "report.json":
+            return
+        if not re.fullmatch(r"[0-9a-f]{32}", job_dir.name, re.IGNORECASE):
+            return
+        if not job_dir.is_dir() or job_dir.is_symlink():
             return
         shutil.rmtree(job_dir)
     except (OSError, ValueError):

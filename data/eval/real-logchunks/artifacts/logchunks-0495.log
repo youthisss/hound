@@ -1,0 +1,15 @@
+Alamofire_iOS_Tests.UploadMultipartFormDataTestCase
+
+  testThatUploadingMultipartFormDataWhileStreamingFromDiskMonitorsProgress, [31mXCTAssertEqual failed: ("0.0") is not equal to ("1.0")[0m
+
+  [36m/Users/travis/build/Alamofire/Alamofire/Tests/UploadTests.swift:645[0m
+
+  ```
+
+[38;5;230m        [39m[38;5;221;01mif[39;00m[38;5;230m [39m[38;5;221;01mlet[39;00m[38;5;230m [39m[38;5;153;01mlastProgressValue[39;00m[38;5;230m [39m[38;5;87m=[39m[38;5;230m [39m[38;5;230mdownloadProgressValues[39m[38;5;87m.[39m[38;5;230mlast[39m[38;5;230m [39m[38;5;87m{[39m[38;5;230m
+
+[38;5;230m            [39m[38;5;155;01mXCTAssertEqual[39;00m[38;5;87m([39m[38;5;230mlastProgressValue[39m[38;5;87m,[39m[38;5;230m [39m[38;5;212;01m1.0[39;00m[38;5;87m)[39m[38;5;230m
+
+[38;5;230m        [39m[38;5;87m}[39m[38;5;230m [39m[38;5;221;01melse[39;00m[38;5;230m [39m[38;5;87m{[39m[38;5;230m
+
+[38;5;230m[39m  ```

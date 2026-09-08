@@ -1,0 +1,33 @@
+FAIL [39m[22m[27m[0m [2mtest/[22m[1mautoprefixer.test.js[22m ([0m[1m[41m12.319s[49m[22m[0m)
+[1m[31m  [1m● [1mhas actual example in docs[39m[22m
+
+    [2mexpect([22m[31mreceived[39m[2m).toEqual([22m[32mexpected[39m[2m)[22m
+
+    Difference:
+
+    [32m- Expected[39m
+    [31m+ Received[39m
+
+    [33m@@ -1,8 +1,11 @@[39m
+    [2m  [REDACTED:ipv6_address]-webkit-input-placeholder {[22m
+    [2m    color: gray;[22m
+    [2m  }[22m
+    [31m+ [REDACTED:ipv6_address]-moz-placeholder {[39m
+    [31m+   color: gray;[39m
+    [31m+ }[39m
+    [2m  :-ms-input-placeholder {[22m
+    [2m    color: gray;[22m
+    [2m  }[22m
+    [2m  [REDACTED:ipv6_address]-ms-input-placeholder {[22m
+    [2m    color: gray;[22m
+[2m[22m
+[2m    [0m [90m 148 | [39m  let result [33m=[39m postcss([instance])[33m.[39mprocess(input)[0m[22m
+[2m    [0m [90m 149 | [39m  expect(result[33m.[39mwarnings())[33m.[39mtoHaveLength([35m0[39m)[0m[22m
+[2m    [0m[31m[1m>[2m[39m[90m 150 | [39m  expect(universalizer(result[33m.[39mcss))[33m.[39mtoEqual(universalizer(output))[0m[22m
+[2m    [0m [90m     | [39m                                    [31m[1m^[2m[39m[0m[22m
+[2m    [0m [90m 151 | [39m}[0m[22m
+[2m    [0m [90m 152 | [39m[0m[22m
+[2m    [0m [90m 153 | [39m[36mconst[39m [33mCOMMONS[39m [33m=[39m [[0m[22m
+[2m[22m
+[2m      [2mat toEqual ([2m[0m[36mtest/autoprefixer.test.js[39m[0m[2m:150:37)[2m[22m
+[2m      [2mat Object.check ([2m[0m[36mtest/autoprefixer.test.js[39m[0m[2m:238:40)

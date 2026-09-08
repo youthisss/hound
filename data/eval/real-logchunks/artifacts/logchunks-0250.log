@@ -1,0 +1,6 @@
+1) Check challenges
+       Check challenges (english)
+         Search and Replace
+           Check tests syntax
+             Check for: code>myReplace("His name is Tom", "Tom", "John") /code> should return "His name is John".:
+[0m[31m     expected [Function] to not throw an error but 'SyntaxError: Unexpected token )' was thrown

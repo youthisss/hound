@@ -1,0 +1,5 @@
+/home/travis/build/purescript/purescript/sdist-test/[;1msrc/Language/PureScript/TypeChecker/Types.hs:40:1: [;1m[31merror:[0m[0m[;1m [[;1m[31m-Wunused-imports, -Werror=unused-imports[0m[0m[;1m][0m[0m[;1m[0m
+[0m    The import of ‘!!’ from module ‘Data.List’ is redundant[0m[0m[0m
+[0m[;1m[34m   |[0m[0m[0m
+[0m[;1m[34m40 |[0m[0m [;1m[31mimport Data.List (transpose, (\\), partition, delete, (!!))[0m[0m[0m
+[0m[;1m[34m   |[0m[0m[;1m[31m ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

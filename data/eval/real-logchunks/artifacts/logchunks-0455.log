@@ -1,0 +1,2 @@
+[0m[[0m[0minfo[0m] [0m[0m- Requests exceeding limit should increase dropped_request count *** FAILED ***[0m
+[0m[[0m[0minfo[0m] [0m[0m  11 did not equal 10 (ConcurrencyEndToEndTest.scala:72)[0m

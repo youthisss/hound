@@ -1,0 +1,4 @@
+Error: Invalid CSS after "2.3em": expected expression (e.g. 1px, bold), was ";"
+        on line 86 of sass/components/dropdown.sass
+        from line 5 of sass/components/_all.sass
+        from line 6 of bulma.sass

@@ -1,0 +1,18 @@
+error[0m] [0m[0m * class akka.cluster.protobuf.msg.ClusterMessages#IncompatibleConfig does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingClassProblem]("akka.cluster.protobuf.msg.ClusterMessages$IncompatibleConfig")[0m
+[0m[[0m[31merror[0m] [0m[0m * class akka.cluster.protobuf.msg.ClusterMessages#UncheckedConfig does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingClassProblem]("akka.cluster.protobuf.msg.ClusterMessages$UncheckedConfig")[0m
+[0m[[0m[31merror[0m] [0m[0m * class akka.cluster.protobuf.msg.ClusterMessages#CompatibleConfig does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingClassProblem]("akka.cluster.protobuf.msg.ClusterMessages$CompatibleConfig")[0m
+[0m[[0m[31merror[0m] [0m[0m * class akka.cluster.protobuf.msg.ClusterMessages#CompatibleConfig#Builder does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingClassProblem]("akka.cluster.protobuf.msg.ClusterMessages$CompatibleConfig$Builder")[0m
+[0m[[0m[31merror[0m] [0m[0m * interface akka.cluster.protobuf.msg.ClusterMessages#IncompatibleConfigOrBuilder does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingClassProblem]("akka.cluster.protobuf.msg.ClusterMessages$IncompatibleConfigOrBuilder")[0m
+[0m[[0m[31merror[0m] [0m[0m * interface akka.cluster.protobuf.msg.ClusterMessages#CompatibleConfigOrBuilder does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingClassProblem]("akka.cluster.protobuf.msg.ClusterMessages$CompatibleConfigOrBuilder")[0m
+[0m[[0m[31merror[0m] [0m[0m * class akka.cluster.protobuf.msg.ClusterMessages#IncompatibleConfig#Builder does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingClassProblem]("akka.cluster.protobuf.msg.ClusterMessages$IncompatibleConfig$Builder")[0m
+[0m[[0m[31merror[0m] [0m[0m * interface akka.cluster.protobuf.msg.ClusterMessages#UncheckedConfigOrBuilder does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingClassProblem]("akka.cluster.protobuf.msg.ClusterMessages$UncheckedConfigOrBuilder")[0m
+[0m[[0m[31merror[0m] [0m[0m * class akka.cluster.protobuf.msg.ClusterMessages#UncheckedConfig#Builder does not have a correspondent in current version[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingClassProblem]("akka.cluster.protobuf.msg.ClusterMessages$UncheckedConfig$Builder")[0m

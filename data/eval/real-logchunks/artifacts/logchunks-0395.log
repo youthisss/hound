@@ -1,0 +1,18 @@
+1) DistributedMutex executions should not allow critical sections to overlap
+     [31mFailure/Error: [0m[32myield[0m[0m
+     [31m[0m
+     [31mLocalJumpError:[0m
+     [31m  no block given (yield)[0m
+     [36m# ./lib/tasks/scheduler.rake:23:in `time'[0m
+     [36m# ./spec/support/concurrency.rb:211:in `block in method_missing'[0m
+     [36m# ./spec/support/concurrency.rb:242:in `with_possible_failure'[0m
+     [36m# ./spec/support/concurrency.rb:210:in `method_missing'[0m
+     [36m# ./lib/distributed_mutex.rb:79:in `try_to_get_lock'[0m
+     [36m# ./lib/distributed_mutex.rb:59:in `get_lock'[0m
+     [36m# ./lib/distributed_mutex.rb:28:in `block in synchronize'[0m
+     [36m# ./lib/distributed_mutex.rb:27:in `synchronize'[0m
+     [36m# ./lib/distributed_mutex.rb:27:in `synchronize'[0m
+     [36m# ./lib/distributed_mutex.rb:12:in `synchronize'[0m
+     [36m# ./spec/components/distributed_mutex_spec.rb:125:in `block (7 levels) in main>'[0m
+     [36m# ./spec/components/distributed_mutex_spec.rb:124:in `times'[0m
+     [36m# ./spec/components/distributed_mutex_spec.rb:124:in `block (6 levels) in main>'

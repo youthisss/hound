@@ -1,0 +1,2 @@
+FAIL: TestClientNotificationStorm (2.33s)
+    client_test.go:378: didn't get expected error

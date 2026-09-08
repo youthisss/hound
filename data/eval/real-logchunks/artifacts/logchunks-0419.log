@@ -1,0 +1,3 @@
+note[0m[0m: /target/i686-unknown-linux-musl/debug/deps/libjemalloc_sys-efcf9f5425698221.rlib(arena.pic.o): In function `ffs_llu':[0m
+[0m          /target/i686-unknown-linux-musl/debug/build/jemalloc-sys-8599e81d749c60c3/out/build/../jemalloc/include/jemalloc/internal/bit_util.h:17: undefined reference to `__ffsdi2'[0m
+[0m          collect2: error: ld returned 1 exit status

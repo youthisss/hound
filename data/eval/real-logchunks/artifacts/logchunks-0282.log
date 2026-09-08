@@ -1,0 +1,29 @@
+# Starting Test: [1;36;44mdns - resolveTxtTCP[0m
+
+  [1;31m/Users/travis/build/luvit/luvit/tests/libs/tap.lua:85: Missing 1 expected call
+
+  stack traceback:
+
+  	[C]: in function 'error'
+
+  	/Users/travis/build/luvit/luvit/tests/libs/tap.lua:85: in function /Users/travis/build/luvit/luvit/tests/libs/tap.lua:66>
+
+  	[C]: in function 'xpcall'
+
+  	/Users/travis/build/luvit/luvit/tests/libs/tap.lua:66: in function 'run'
+
+  	/Users/travis/build/luvit/luvit/tests/libs/tap.lua:167: in function 'tap'
+
+  	/Users/travis/build/luvit/luvit/tests/run.lua:42: in main chunk
+
+  	[C]: in function 'dofile'
+
+  	[string "bundle:main.lua"]:120: in function 'main'
+
+  	[string "bundle:init.lua"]:51: in function [string "bundle:init.lua"]:49>
+
+  	[C]: in function 'xpcall'
+
+  	[string "bundle:init.lua"]:49: in function [string "bundle:init.lua"]:20>[0m
+
+not ok 23 [1;33;41mdns - resolveTxtTCP

@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from hound.fsio import atomic_write
 from hound.ingest.git import gather
+from hound.pathutil import path_has_symlink
 from hound.ingest.redact import redact_text
 
 
@@ -170,6 +171,8 @@ class _StreamingRedactor:
 def _output_paths(output: str | Path | None, name: str) -> tuple[Path, Path]:
     if output:
         log_file = Path(output).expanduser()
+        if path_has_symlink(log_file) or log_file.is_symlink():
+            raise CollectionInputError("--output must not contain symlinked path components")
         if log_file.exists() and log_file.is_dir():
             log_file = _unique_path(log_file, name)
         elif log_file.suffix.lower() != ".log":
@@ -177,13 +180,19 @@ def _output_paths(output: str | Path | None, name: str) -> tuple[Path, Path]:
         elif log_file.exists() or log_file.with_suffix(".json").exists():
             raise CollectionInputError(f"output already exists: {log_file}")
         log_file.parent.mkdir(parents=True, exist_ok=True)
+        if path_has_symlink(log_file.parent) or log_file.parent.is_symlink():
+            raise CollectionInputError("--output parent must not contain symlinked path components")
     else:
         log_file = _unique_path(DEFAULT_LOG_DIR, name)
     return log_file, log_file.with_suffix(".json")
 
 
 def _unique_path(directory: Path, name: str) -> Path:
+    if path_has_symlink(directory) or directory.is_symlink():
+        raise CollectionInputError("log directory must not contain symlinked path components")
     directory.mkdir(parents=True, exist_ok=True)
+    if path_has_symlink(directory) or directory.is_symlink():
+        raise CollectionInputError("log directory must not contain symlinked path components")
     clean_name = _SAFE_NAME.sub("-", redact_text(name)[0]).strip("-._") or "log"
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     candidate = directory / f"{timestamp}-{clean_name}.log"

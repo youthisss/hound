@@ -1,0 +1,34 @@
+-> ReactiveCocoa
+[31m -> [0mReactiveCocoa (10.0.0)
+
+    - WARN  | file patterns: The `public_header_files` pattern did not match any file.
+
+    - ERROR | xcodebuild: Returned an unsuccessful exit code. You can use `--verbose` for more information.
+
+    - NOTE  | xcodebuild:  note: Using new build system
+
+    - NOTE  | xcodebuild:  note: Planning build
+
+    - NOTE  | xcodebuild:  note: Constructing build description
+
+    - ERROR | xcodebuild:  /Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveCocoa/NSObject+Association.swift:134:2: error: use of unresolved identifier '_rac_objc_setAssociatedObject'
+
+    - NOTE  | xcodebuild:  ObjectiveC.objc_setAssociatedObject:2:13: note: did you mean 'objc_setAssociatedObject'?
+
+    - NOTE  | xcodebuild:  ObjectiveC.objc_getAssociatedObject:2:13: note: did you mean 'objc_getAssociatedObject'?
+
+    - ERROR | xcodebuild:  /Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveCocoa/NSObject+Intercepting.swift:120:24: error: use of unresolved identifier '_rac_objc_msgForward'; did you mean '_objc_msgForward'?
+
+    - NOTE  | xcodebuild:  ObjectiveC._objc_msgForward:3:13: note: '_objc_msgForward' declared here
+
+    - ERROR | xcodebuild:  /Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveCocoa/NSObject+Intercepting.swift:133:48: error: use of unresolved identifier '_rac_objc_msgForward'; did you mean '_objc_msgForward'?
+
+    - ERROR | xcodebuild:  /Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveCocoa/NSObject+Intercepting.swift:210:52: error: use of unresolved identifier '_rac_objc_msgForward'; did you mean '_objc_msgForward'?
+
+    - ERROR | xcodebuild:  /Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveCocoa/NSObject+Intercepting.swift:220:59: error: use of unresolved identifier '_rac_objc_msgForward'; did you mean '_objc_msgForward'?
+
+    - ERROR | xcodebuild:  /Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveCocoa/NSObject+Intercepting.swift:221:14: error: use of unresolved identifier '_rac_objc_msgForward'; did you mean '_objc_msgForward'?
+
+    - ERROR | xcodebuild:  /Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveCocoa/ObjC+RuntimeSubclassing.swift:40:45: error: use of unresolved identifier '_rac_objc_msgForward'; did you mean '_objc_msgForward'?
+
+    - NOTE  | xcodebuild:  warning: Capabilities for App may not function correctly because its entitlements use a placeholder team ID. To resolve this, select a development team in the build settings editor. (in target 'App')

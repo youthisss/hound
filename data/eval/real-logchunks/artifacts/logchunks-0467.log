@@ -1,0 +1,20 @@
+[1m[31m_____________________ test_http_redirects_to_https[1-True] _____________________[0m
+
+docker_compose = docker.client.DockerClient object at 0x7f402adeca90>
+nginxproxy = conftest.requests_for_docker object at 0x7f402aca0450>
+subdomain = 1, should_redirect_to_https = True
+
+[1m    @pytest.mark.parametrize("subdomain,should_redirect_to_https", [[0m
+[1m        (1, True),[0m
+[1m        (2, True),[0m
+[1m        (3, False),[0m
+[1m    ])[0m
+[1m    def test_http_redirects_to_https(docker_compose, nginxproxy, subdomain, should_redirect_to_https):[0m
+[1m        r = nginxproxy.get("http://%s.web.nginx-proxy.tld/port" % subdomain)[0m
+[1m        if should_redirect_to_https:[0m
+[1m>           assert len(r.history) > 0[0m
+[1m[31mE           assert 0 > 0[0m
+[1m[31mE            +  where 0 = len([])[0m
+[1m[31mE            +    where [] = Response [404]>.history[0m
+
+[1m[31mtest_ssl/wildcard_cert_and_nohttps/test_wildcard_cert_nohttps.py[0m:14: AssertionError

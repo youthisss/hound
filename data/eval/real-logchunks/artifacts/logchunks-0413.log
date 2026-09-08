@@ -1,0 +1,3 @@
+1) Failure:
+MemCacheStoreTest#test_two_classes_autoloading [/home/travis/build/rails/rails/activesupport/test/caching_test.rb:665]:
+Expected #<E:0x000000030acd48> to be a kind of E, not E.

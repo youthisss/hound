@@ -1,0 +1,2 @@
+[info] - Single client and rejecting server results in both sides TLS connections at 0 *** FAILED ***
+[info]   Expected exception com.twitter.finagle.SslException to be thrown, but com.twitter.finagle.Failure was thrown (ThriftSmuxSslTest.scala:151)

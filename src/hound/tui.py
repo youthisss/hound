@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json as _json
 import math
+import os
 import re
 import shutil
 from collections.abc import Callable
@@ -21,7 +22,7 @@ from textual.containers import Grid, Horizontal, ItemGrid, Vertical, VerticalScr
 from rich.markup import escape as rich_escape
 from rich.text import Text
 from textual.screen import ModalScreen
-from textual import work
+from textual import events, work
 from textual.widgets import (
     Button,
     Input,
@@ -49,17 +50,61 @@ try:
 except Exception:
     pass
 
-from hound.config import PROVIDERS
+if not hasattr(Static, "renderable"):
+    Static.renderable = property(lambda self: getattr(self, "_Static__content", self.render()))
+
+try:
+    from textual.widgets.markdown import MarkdownBlock
+
+    def _get_markdown_block_text(self):
+        if "_text" in self.__dict__:
+            return self.__dict__["_text"]
+        return getattr(self, "_content", getattr(self, "_Static__content", self.render()))
+
+    def _set_markdown_block_text(self, value):
+        self.__dict__["_text"] = value
+
+    MarkdownBlock._text = property(_get_markdown_block_text, _set_markdown_block_text)
+except Exception:
+    pass
+
+try:
+    import inspect
+    _orig_list_view_selected_init = ListView.Selected.__init__
+    _selected_has_index = "index" in inspect.signature(_orig_list_view_selected_init).parameters
+
+    def _compat_list_view_selected_init(self, list_view, item, *args, **kwargs):
+        if _selected_has_index and not args and "index" not in kwargs:
+            idx = getattr(list_view, "index", 0)
+            if idx is None:
+                idx = 0
+            return _orig_list_view_selected_init(self, list_view, item, idx, **kwargs)
+        return _orig_list_view_selected_init(self, list_view, item, *args, **kwargs)
+
+    ListView.Selected.__init__ = _compat_list_view_selected_init
+except Exception:
+    pass
+
+from hound.config import MAX_CONFIG_BYTES, PROVIDERS
 from hound.collector import DEFAULT_LOG_DIR
 from hound import service
+from hound.fsio import open_verified_regular, read_bounded_text
 from hound.ingest.logs import parse_log
 from hound.ingest.structured import parse_structured_artifact
 from hound.credentials import delete_api_key, get_api_key, set_api_key
-from hound.providers import cache_models, cached_models, discover_models, load_custom_providers, save_custom_provider
+from hound.providers import (
+    cache_models,
+    cached_models,
+    discover_models,
+    load_custom_providers,
+    provider_supports_model_discovery,
+    save_custom_provider,
+)
 from hound.preferences import load_tui_preferences, save_tui_preferences
 from hound.output.markdown import sanitize_text
+from hound.pathutil import path_has_symlink
 from hound.trust import SOURCE_CLASSES, policy_for
-from hound.models import KINDS, SEVERITIES
+from hound.models import LEGACY_SCHEMA_VERSION, SCHEMA_VERSION, KINDS, SEVERITIES, validate
 
 
 def escape(value: object) -> str:
@@ -67,9 +112,20 @@ def escape(value: object) -> str:
 
 PAGE_SIZE = 100
 RAW_LIMIT = 256 * 1024
+MAX_REPORT_BYTES = 16 * 1024 * 1024
 STRUCTURED_PREVIEW_BYTES = 512 * 1024
 LOG_CLASSIFICATION_BYTES = 16 * 1024
 PROGRESS_UPDATE_SECONDS = 0.25
+
+
+def _read_stored_report(path: Path) -> dict:
+    """Read and validate one persisted RCA report before rendering it."""
+    document = _json.loads(read_bounded_text(path, MAX_REPORT_BYTES, encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise ValueError("stored report must be a JSON object")
+    validate(document)
+    return document
+
 
 def _choose_directory(initial_directory: Path) -> str:
     """Open the platform folder picker without requiring Tk during startup."""
@@ -90,28 +146,28 @@ def _choose_directory(initial_directory: Path) -> str:
         root.destroy()
 
 CSS = """
-Screen { background: #050505; color: #d8d8d8; }
+Screen { background: #000000; color: #ffffff; }
 * {
-    scrollbar-color: #6f6f6f;
-    scrollbar-color-hover: #8a8a8a;
-    scrollbar-color-active: #a0a0a0;
+    scrollbar-color: #ffffff;
+    scrollbar-color-hover: #ffffff;
+    scrollbar-color-active: #ffffff;
 }
 #app-title {
     height: 1;
-    background: #111111;
-    color: #f0f6fc;
+    background: #000000;
+    color: #ffffff;
     content-align: center middle;
     text-style: bold;
-    border-bottom: tall #777777;
+    border-bottom: tall #ffffff;
 }
 #main { height: 1fr; }
 #sidebar {
     width: 27%;
     min-width: 28;
     max-width: 36;
-    border-right: solid #3a3a3a;
+    border-right: solid #ffffff;
     padding: 0 1 1 1;
-    background: #0d0d0d;
+    background: #000000;
     overflow-y: auto;
     scrollbar-size-vertical: 0;
 }
@@ -124,16 +180,16 @@ Screen { background: #050505; color: #d8d8d8; }
     height: 3;
     padding: 0;
     margin: 0;
-    background: #131313;
-    border: tall #3a3a3a;
-    color: #b8b8b8;
+    background: #000000;
+    border: tall #ffffff;
+    color: #ffffff;
 }
 #nav-artifacts, #nav-qa { margin-right: 1; }
 #nav-results, #nav-investigation { margin-right: 0; }
 #workspace-nav Button.is-active {
-    background: #e0e0e0;
+    background: #ffffff;
     border: tall #ffffff;
-    color: #080808;
+    color: #000000;
     text-style: bold;
 }
 #content-actions {
@@ -151,12 +207,12 @@ Screen { background: #050505; color: #d8d8d8; }
     width: 14;
     height: 3;
     margin: 0 1 0 1;
-    background: #191919;
-    color: #dedede;
-    border: tall #4a4a4a;
+    background: #000000;
+    color: #ffffff;
+    border: tall #ffffff;
 }
 #back-button:hover {
-    background: #2b2b2b;
+    background: #000000;
     color: #ffffff;
 }
 #back-button:focus {
@@ -171,48 +227,48 @@ Screen { background: #050505; color: #d8d8d8; }
 .sidebar-collapsed #show-sidebar { display: block; }
 #workflow-title {
     height: 3;
-    color: #8f8f8f;
+    color: #ffffff;
     text-style: bold;
     text-align: center;
     content-align: center middle;
     margin: 1 0 0 0;
 }
-.field-label { height: 2; color: #dedede; margin: 1 0 0 0; text-style: bold; }
-Input { border: tall #454545; background: #080808; color: #f0f6fc; padding: 0 1; }
-Input:focus { border: tall #eeeeee; color: #ffffff; }
-Input .input--placeholder { color: #6e7681; }
+.field-label { height: 2; color: #ffffff; margin: 1 0 0 0; text-style: bold; }
+Input { border: tall #ffffff; background: #000000; color: #ffffff; padding: 0 1; }
+Input:focus { border: tall #ffffff; color: #ffffff; }
+Input .input--placeholder { color: #ffffff; }
 Select { border: none; background: transparent; height: 3; }
 Select:focus { border: none; }
-SelectCurrent { border: tall #454545; background: #080808; color: #f0f6fc; height: 3; }
-SelectCurrent Static#label { color: #f0f6fc; text-style: bold; }
-SelectCurrent .arrow { color: #8b949e; }
-Select:focus > SelectCurrent, SelectCurrent:focus { border: tall #eeeeee; }
+SelectCurrent { border: tall #ffffff; background: #000000; color: #ffffff; height: 3; }
+SelectCurrent Static#label { color: #ffffff; text-style: bold; }
+SelectCurrent .arrow { color: #ffffff; }
+Select:focus > SelectCurrent, SelectCurrent:focus { border: tall #ffffff; }
 Select:focus > SelectCurrent Static#label, SelectCurrent:focus Static#label { color: #ffffff; text-style: bold; }
 Select:focus > SelectCurrent .arrow, SelectCurrent:focus .arrow { color: #ffffff; }
-Button { background: #191919; color: #dedede; border: tall #4a4a4a; padding: 0 1; }
-Button:hover { background: #2b2b2b; color: #ffffff; }
+Button { background: #000000; color: #ffffff; border: tall #ffffff; padding: 0 1; }
+Button:hover { background: #000000; color: #ffffff; }
 Button:focus { border: tall #ffffff; text-style: bold; }
-Button:disabled { background: #101010; border: tall #2c2c2c; color: #6f6f6f; }
-Button.-primary { background: #b8b8b8; border: tall #d8d8d8; color: #080808; text-style: bold; }
-Button.-primary:hover { background: #d8d8d8; }
-Button.-warning { background: #303030; border: tall #888888; color: #ffffff; }
-#open-settings { background: #191919; color: #dedede; margin: 1 0 0 0; }
-#browse-dir { background: #191919; color: #dedede; margin-right: 1; }
+Button:disabled { background: #000000; border: tall #ffffff; color: #ffffff; }
+Button.-primary { background: #ffffff; border: tall #ffffff; color: #000000; text-style: bold; }
+Button.-primary:hover { background: #ffffff; }
+Button.-warning { background: #000000; border: tall #ffffff; color: #ffffff; }
+#open-settings { background: #000000; color: #ffffff; margin: 1 0 0 0; }
+#browse-dir { background: #000000; color: #ffffff; margin-right: 1; }
 #load-dir { margin-right: 0; }
 .sidebar-button { width: 100%; height: 3; margin: 1 0 0 0; }
 #directory-actions { width: 100%; height: 3; margin-top: 1; }
 #directory-actions Button { width: 1fr; min-width: 0; height: 3; margin: 0; }
 #directory-actions Button:last-of-type { margin-right: 0; }
 .sidebar-input { margin: 0; }
-#dir-meta { height: auto; color: #8b949e; margin: 1 0 0 0; }
+#dir-meta { height: auto; color: #ffffff; margin: 1 0 0 0; }
 #log-list { margin: 1 0 0 0; }
 #workflow-status { margin: 1 0 0 0; }
 #analyze:focus, #browse-dir:focus, #load-dir:focus, #retry:focus { border: tall #ffffff; text-style: bold; }
 #stop-analysis { display: none; }
-#workflow-status { height: 2; color: #b8b8b8; padding: 0 1; background: #080808; border-left: tall #777777; }
+#workflow-status { height: 2; color: #ffffff; padding: 0 1; background: #000000; border-left: tall #ffffff; }
 #log-list, #run-list {
     height: 1fr;
-    min-height: 5;
+    min-height: 10;
     margin: 1 0 0 0;
     border: solid #ffffff;
     background: #000000;
@@ -241,12 +297,12 @@ ListItem.-highlight { background: #ffffff; color: #000000; text-style: bold; }
 #content { width: 1fr; height: 1fr; }
 #tabs { width: 1fr; height: 1fr; padding: 0 1 1 1; display: none; }
 #home { width: 1fr; height: 1fr; padding: 1 2; overflow-y: auto; scrollbar-size-vertical: 0; }
-#home-logo { width: 100%; height: auto; color: #f0f6fc; content-align: center top; text-style: bold; overflow-x: hidden; }
-#home-subtitle { height: auto; color: #f0f6fc; text-align: center; text-style: bold; margin-top: 1; }
-#home-tagline { height: auto; color: #8f8f8f; text-align: center; margin-bottom: 1; }
+#home-logo { width: 100%; height: auto; color: #ffffff; content-align: center top; text-style: bold; overflow-x: hidden; }
+#home-subtitle { height: auto; color: #ffffff; text-align: center; text-style: bold; margin-top: 1; }
+#home-tagline { height: auto; color: #ffffff; text-align: center; margin-bottom: 1; }
 #home-body { height: auto; width: 100%; padding: 0; }
 #home-body Static { height: auto; }
-#home-next { padding: 1 2; margin-bottom: 1; background: #101010; border: solid #333333; }
+#home-next { padding: 1 2; margin-bottom: 1; background: #000000; border: solid #ffffff; }
 #home-status { width: 100%; height: auto; margin-bottom: 1; }
 .home-status-row {
     width: 100%;
@@ -257,7 +313,7 @@ ListItem.-highlight { background: #ffffff; color: #000000; text-style: bold; }
     grid-gutter: 0 1;
 }
 .home-status-row:last-of-type { margin-bottom: 0; }
-.home-card { width: 100%; height: auto; min-height: 5; padding: 1 2; background: #0d0d0d; border: solid #333333; }
+.home-card { width: 100%; height: auto; min-height: 5; padding: 1 2; background: #000000; border: solid #ffffff; }
 #home-guides {
     width: 100%;
     height: 21;
@@ -267,18 +323,18 @@ ListItem.-highlight { background: #ffffff; color: #000000; text-style: bold; }
     grid-rows: 10 10;
     grid-gutter: 1 1;
 }
-#home-guides .home-guide { width: 100%; height: 10; padding: 1 2; background: #0d0d0d; border: solid #333333; }
-#home-formats { padding: 1 2; color: #8f8f8f; background: #0d0d0d; border: solid #333333; margin-bottom: 1; }
-Tabs { height: 3; width: 100%; background: #080808; border-bottom: solid #454545; padding: 0 1; }
-Tab { width: 1fr; color: #8f8f8f; margin: 0 1; padding: 0 1; content-align: center middle; text-style: bold; }
-Tab:hover { color: #ffffff; background: #202020; }
-Tab.-active { color: #ffffff; background: #292929; text-style: bold; }
-Underline > .underline--bar { color: #6f6f6f; background: #6f6f6f; }
+#home-guides .home-guide { width: 100%; height: 10; padding: 1 2; background: #000000; border: solid #ffffff; }
+#home-formats { padding: 1 2; color: #ffffff; background: #000000; border: solid #ffffff; margin-bottom: 1; }
+Tabs { height: 3; width: 100%; background: #000000; border-bottom: solid #ffffff; padding: 0 1; }
+Tab { width: 1fr; color: #ffffff; margin: 0 1; padding: 0 1; content-align: center middle; text-style: bold; }
+Tab:hover { color: #ffffff; background: #000000; }
+Tab.-active { color: #ffffff; background: #000000; text-style: bold; }
+Underline > .underline--bar { color: #ffffff; background: #ffffff; }
 .result-scroll {
     overflow-y: auto;
     overflow-x: auto;
     padding: 1 2;
-    background: #080808;
+    background: #000000;
     scrollbar-size-vertical: 0;
     scrollbar-size-horizontal: 0;
 }
@@ -286,16 +342,16 @@ Underline > .underline--bar { color: #6f6f6f; background: #6f6f6f; }
     height: auto;
     padding: 1 0;
     margin-bottom: 1;
-    color: #f0f6fc;
-    border-bottom: solid #454545;
+    color: #ffffff;
+    border-bottom: solid #ffffff;
 }
-.pane-content { height: auto; color: #d8d8d8; }
-Markdown { background: #080808; color: #d8d8d8; }
-MarkdownH1 { color: #f0f6fc; text-style: bold; }
-MarkdownH2 { color: #b8b8b8; text-style: bold; }
-MarkdownH3 { color: #8f8f8f; text-style: bold; }
-MarkdownBlockQuote { color: #b8b8b8; background: #111111; border-left: tall #6f6f6f; }
-MarkdownFence { background: #111111; color: #d8d8d8; }
+.pane-content { height: auto; color: #ffffff; }
+Markdown { background: #000000; color: #ffffff; }
+MarkdownH1 { color: #ffffff; text-style: bold; }
+MarkdownH2 { color: #ffffff; text-style: bold; }
+MarkdownH3 { color: #ffffff; text-style: bold; }
+MarkdownBlockQuote { color: #ffffff; background: #000000; border-left: tall #ffffff; }
+MarkdownFence { background: #000000; color: #ffffff; }
 #overview-shell { height: 1fr; }
 #overview-scroll { height: 1fr; }
 #retry { width: 24; margin: 0 2 1 2; display: none; }
@@ -305,14 +361,19 @@ MarkdownFence { background: #111111; color: #d8d8d8; }
 #result-position { width: 1fr; height: 3; color: #ffffff; content-align: center middle; }
 #artifact-workspace, #results-workspace { height: 1fr; padding: 1 2; display: none; }
 #qa-workspace, #investigation-workspace { height: 1fr; padding: 1 2; display: none; }
-.workspace-title { height: auto; color: #f0f6fc; text-style: bold; padding-bottom: 1; border-bottom: tall #777777; }
-.workspace-meta { height: auto; color: #8f8f8f; margin: 1 0; }
+.workspace-title { height: auto; color: #ffffff; text-style: bold; padding-bottom: 1; border-bottom: tall #ffffff; }
+.workspace-meta { height: auto; color: #ffffff; margin: 1 0; }
 .workspace-filter-bar { width: 100%; height: 3; margin-bottom: 1; }
 .workspace-filter-input { width: 2fr; height: 3; margin-right: 1; }
 .workspace-filter-select { width: 1fr; height: 3; margin-right: 1; }
 .workspace-filter-select:last-of-type { margin-right: 0; }
 #artifact-workspace-list, #results-workspace-list { height: 1fr; border: solid #ffffff; background: #000000; }
 #artifact-workspace-list:focus, #results-workspace-list:focus { border: solid #ffffff; }
+.workspace-data-panel {
+    height: 1fr;
+    border: solid #ffffff;
+    background: #000000;
+}
 .workspace-actions { height: 7; margin-top: 1; }
 .workspace-action-row { height: 3; margin-bottom: 1; }
 .workspace-action-row:last-of-type { margin-bottom: 0; }
@@ -329,7 +390,7 @@ MarkdownFence { background: #111111; color: #d8d8d8; }
     height: 3;
     width: auto;
     min-width: 16;
-    color: #8f8f8f;
+    color: #ffffff;
     content-align: center middle;
     padding: 0 1;
 }
@@ -339,35 +400,66 @@ MarkdownFence { background: #111111; color: #d8d8d8; }
     height: 3;
     margin: 0 1;
 }
-#clear-selected, #clear-all { background: #191919; border: tall #777777; color: #d8d8d8; }
+#clear-selected, #clear-all { background: #000000; border: tall #ffffff; color: #ffffff; }
 #qa-scroll, #investigation-scroll { height: 1fr; }
-.qa-section-title { height: 3; color: #f0f6fc; text-style: bold; margin-top: 1; padding-top: 1; border-top: tall #555555; }
-.qa-description { height: auto; color: #8f8f8f; margin-bottom: 1; padding: 0 1; border-left: tall #3a3a3a; }
+.qa-status-row, .context-status-row {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+    grid-size: 3 1;
+    grid-columns: 1fr 1fr 1fr;
+    grid-gutter: 0 1;
+}
+.qa-card, .context-card {
+    width: 100%;
+    height: auto;
+    min-height: 5;
+    padding: 1 2;
+    background: #000000;
+    border: solid #ffffff;
+}
+#context-validation-summary {
+    width: 100%;
+    height: auto;
+    padding: 1 2;
+    background: #000000;
+    border: solid #ffffff;
+    margin-bottom: 1;
+}
+.qa-section-title { height: auto; color: #ffffff; text-style: bold; margin: 0 0 1 0; padding: 0 0 1 0; border-bottom: solid #ffffff; }
+.qa-description { height: auto; color: #ffffff; margin-bottom: 1; padding: 0; }
+.qa-policy-preview { height: auto; color: #ffffff; padding: 1; background: #000000; border: solid #ffffff; margin-bottom: 1; }
 .qa-form-row { width: 100%; height: auto; }
 .qa-field { width: 1fr; height: auto; margin: 0 1 1 0; }
 .qa-field:last-of-type { margin-right: 0; }
 .qa-field .field-label { height: 2; margin: 0; }
 .qa-field Input { width: 100%; height: 3; }
 .qa-field Select { width: 100%; height: 3; }
-#qa-actions { width: 100%; height: 3; margin: 1 0; }
+#qa-actions { width: 100%; height: 7; margin-top: 1; }
 #qa-actions Button { width: 1fr; margin-right: 1; }
 #qa-actions Button:last-of-type { margin-right: 0; }
-#qa-status { height: auto; color: #b8b8b8; padding: 1; background: #0d0d0d; border-left: tall #777777; margin-bottom: 1; }
-#qa-result { height: auto; padding: 1; color: #d8d8d8; background: #0b0b0b; border: solid #252525; margin-bottom: 1; }
+#qa-status { height: auto; color: #ffffff; padding: 1; background: #000000; border-left: tall #ffffff; margin-bottom: 1; }
+#qa-result { height: auto; padding: 1; color: #ffffff; background: #000000; border: solid #ffffff; margin-bottom: 1; }
 #qa-history-list { height: 10; min-height: 4; border: solid #ffffff; background: #000000; margin: 0 0 1 0; }
-#investigation { height: auto; color: #d8d8d8; padding: 1; background: #0b0b0b; border: solid #252525; }
-ClearResultsScreen { align: center middle; background: rgba(1, 4, 9, 0.82); }
-#clear-dialog { width: 70; max-width: 100%; height: auto; border: solid #eeeeee; background: #0d0d0d; padding: 1 2; }
-#clear-title { height: auto; color: #f0f6fc; text-style: bold; }
-#clear-description { height: auto; color: #b8b8b8; margin: 1 0; }
+#context-actions { height: auto; min-height: 3; margin: 1 0 0 0; }
+#context-validate { width: 24; min-width: 24; margin-right: 1; }
+#context-feedback { min-width: 20; margin-right: 1; }
+#context-copy-summary { min-width: 18; margin-right: 1; }
+#context-status { height: auto; min-height: 3; width: 1fr; color: #ffffff; padding: 1; background: #000000; border-left: tall #ffffff; }
+#investigation { height: auto; color: #ffffff; padding: 0; background: #000000; border: none; }
+ClearResultsScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
+#clear-dialog { width: 70; max-width: 100%; height: auto; border: solid #ffffff; background: #000000; padding: 1 2; }
+#clear-title { height: auto; color: #ffffff; text-style: bold; }
+#clear-description { height: auto; color: #ffffff; margin: 1 0; }
 #clear-confirmation { width: 100%; display: none; margin-bottom: 1; }
 #clear-actions { height: 4; align-horizontal: right; margin-top: 1; }
 #clear-cancel { min-width: 14; margin-right: 1; }
 #clear-confirm { min-width: 18; }
-FeedbackScreen { align: center middle; background: rgba(1, 4, 9, 0.82); }
-#feedback-dialog { width: 76; max-width: 100%; height: auto; max-height: 100%; border: solid #eeeeee; background: #0d0d0d; padding: 1 2; overflow-y: auto; scrollbar-size-vertical: 0; }
-#feedback-title { height: auto; color: #f0f6fc; text-style: bold; }
-#feedback-description { height: auto; color: #b8b8b8; margin: 1 0; }
+FeedbackScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
+#feedback-dialog { width: 76; max-width: 100%; height: auto; max-height: 100%; border: solid #ffffff; background: #000000; padding: 1 2; overflow-y: auto; scrollbar-size-vertical: 0; }
+#feedback-title { height: auto; color: #ffffff; text-style: bold; }
+#feedback-validation-banner { width: 100%; height: auto; padding: 1; background: #000000; border: solid #ffffff; margin-bottom: 1; }
+#feedback-description { height: auto; color: #ffffff; margin: 1 0; }
 .feedback-form-row { width: 100%; height: auto; margin-bottom: 1; }
 .feedback-form-row.feedback-last-row { margin-bottom: 0; }
 .feedback-field { width: 1fr; height: auto; margin: 0 1 1 0; }
@@ -376,15 +468,15 @@ FeedbackScreen { align: center middle; background: rgba(1, 4, 9, 0.82); }
 .feedback-field .field-label { height: 1; margin: 0; }
 .feedback-field Input { width: 100%; height: 3; }
 .feedback-field Select { width: 100%; height: 3; }
-#feedback-actions { height: 4; align-horizontal: right; margin-top: 1; padding-top: 1; border-top: solid #3a3a3a; }
+#feedback-actions { height: 4; align-horizontal: right; margin-top: 1; padding-top: 1; border-top: solid #ffffff; }
 #feedback-cancel { width: 20; margin-right: 1; }
 #feedback-save { width: 20; }
-#shortcutbar { height: 1; background: #0d0d0d; color: #b0b0b0; padding: 0 1; }
-#statusbar { height: 1; background: #202020; color: #eeeeee; padding: 0 1; }
-HelpScreen { align: center middle; background: rgba(1, 4, 9, 0.82); }
-#help-dialog { width: 64; max-width: 100%; height: auto; border: solid #eeeeee; background: #0d0d0d; padding: 1 2; }
+#shortcutbar { height: 1; background: #000000; color: #ffffff; padding: 0 1; }
+#statusbar { height: 1; background: #000000; color: #ffffff; padding: 0 1; }
+HelpScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
+#help-dialog { width: 64; max-width: 100%; height: auto; border: solid #ffffff; background: #000000; padding: 1 2; }
 #help-close { width: 100%; margin: 1 0 0 0; }
-SettingsScreen { background: #050505; }
+SettingsScreen { background: #000000; }
 #settings-page {
     width: 100%;
     height: 100%;
@@ -399,33 +491,67 @@ SettingsScreen { background: #050505; }
     height: auto;
     max-height: 100%;
     padding: 1 2;
-    border: solid #555555;
-    background: #0d0d0d;
+    border: solid #ffffff;
+    background: #000000;
     overflow-y: auto;
     scrollbar-size-vertical: 0;
 }
-#settings-title { height: 2; color: #f0f6fc; text-style: bold; }
-#settings-description { color: #aaaaaa; margin-bottom: 1; }
-#provider-hint { height: auto; color: #8f8f8f; margin: 0; }
-#settings-offline { width: 100%; margin: 0 0 1 0; background: #191919; border: tall #555555; color: #d8d8d8; }
-#settings-offline.is-llm { background: #e6e6e6; border: tall #ffffff; color: #080808; text-style: bold; }
+#settings-title { height: 2; color: #ffffff; text-style: bold; }
+#settings-description { color: #ffffff; margin-bottom: 1; }
+#settings-session-summary, #settings-session-paths {
+    height: auto;
+    color: #ffffff;
+    padding: 1;
+    margin: 0 0 1 0;
+    background: #000000;
+    border: solid #ffffff;
+}
+#settings-provider-title, #settings-context-title, #settings-execution-title, #custom-provider-title {
+    height: 3;
+    color: #ffffff;
+    text-style: bold;
+    margin: 1 0 1 0;
+    padding-top: 1;
+    border-top: solid #ffffff;
+}
+#settings-execution-hint {
+    height: auto;
+    color: #ffffff;
+    padding: 0 1;
+    margin: 0 0 1 0;
+    border-left: tall #ffffff;
+}
+#provider-hint, #settings-context-hint, #auth-status, #settings-trust {
+    height: auto;
+    color: #ffffff;
+    padding: 1;
+    margin: 0 0 1 0;
+    background: #000000;
+    border: solid #ffffff;
+}
+#settings-offline { width: 100%; margin: 0 0 1 0; background: #000000; border: tall #ffffff; color: #ffffff; }
+#settings-offline.is-llm { background: #ffffff; border: tall #ffffff; color: #000000; text-style: bold; }
 #settings-page Input { width: 100%; height: 3; }
 #settings-page Select { width: 100%; height: 5; }
 #settings-page .settings-field { height: auto; margin: 0 0 1 0; }
-#settings-page .settings-label { height: 1; color: #c9d1d9; margin-bottom: 1; }
-#settings-context-title { height: 3; color: #8f8f8f; text-style: bold; margin-top: 1; padding-top: 1; border-top: solid #3a3a3a; }
-#settings-context-hint { height: auto; color: #8f8f8f; margin-bottom: 1; }
+#settings-page .settings-label { height: 1; color: #ffffff; margin-bottom: 1; }
+#settings-context-title { height: 3; color: #ffffff; text-style: bold; margin-top: 1; padding-top: 1; border-top: solid #ffffff; }
 .settings-toggle-row { width: 100%; height: 3; margin: 0 0 1 0; }
-.settings-toggle-row Button { width: 1fr; margin-right: 1; }
+.settings-toggle-row Button {
+    width: 1fr;
+    height: 3;
+    min-height: 3;
+    max-height: 3;
+    margin-right: 1;
+    content-align: center middle;
+}
 .settings-toggle-row Button:last-of-type { margin-right: 0; }
 #settings-page .settings-toggle { width: 1fr; margin: 0; min-width: 0; }
-#settings-trust { height: auto; color: #d8d8d8; padding: 1; margin: 0 0 1 0; background: #080808; border-left: tall #555555; }
-#auth-status { height: auto; margin: 0 0 1 0; color: #aaaaaa; }
 #connection-actions { width: 100%; height: 3; margin: 1 0 1 0; }
 #connection-actions Button { width: 1fr; margin-right: 1; }
 #connection-actions Button:last-of-type { margin-right: 0; }
-#custom-provider-title { height: 3; color: #8f8f8f; text-style: bold; margin: 1 0 1 0; padding-top: 1; border-top: solid #3a3a3a; }
-#settings-actions { width: 100%; height: 5; align-horizontal: right; margin-top: 1; padding-top: 1; border-top: solid #3a3a3a; }
+#custom-provider-title { height: 3; color: #ffffff; text-style: bold; margin: 1 0 1 0; padding-top: 1; border-top: solid #ffffff; }
+#settings-actions { width: 100%; height: 5; align-horizontal: right; margin-top: 1; padding-top: 1; border-top: solid #ffffff; }
 #settings-add-provider { width: 100%; margin: 0 0 1 0; }
 .custom-field { margin: 0 0 1 0; }
 #settings-save { width: 20; }
@@ -434,8 +560,8 @@ SettingsScreen { background: #050505; }
 .compact #tabs { padding: 0; }
 .compact #home { padding: 1 1 0 1; }
 .compact #home-body { padding: 0; }
-.compact #home-status, .compact .home-status-row { layout: vertical; }
-.compact .home-card { width: 100%; height: auto; min-height: 3; margin: 0 0 1 0; padding: 1; }
+.compact #home-status, .compact .home-status-row, .compact .qa-status-row, .compact .context-status-row { layout: vertical; }
+.compact .home-card, .compact .qa-card, .compact .context-card { width: 100%; height: auto; min-height: 3; margin: 0 0 1 0; padding: 1; }
 .compact #home-guides { height: auto; layout: vertical; }
 .compact #home-guides .home-guide { width: 100%; height: auto; min-height: 3; margin: 0 0 1 0; padding: 1; }
 .compact #home-formats { padding: 1; margin-bottom: 1; }
@@ -457,6 +583,8 @@ SettingsScreen { background: #050505; }
 .compact #qa-workspace, .compact #investigation-workspace { padding: 1 1; overflow-y: auto; }
 .compact .qa-form-row { layout: vertical; }
 .compact .qa-field { width: 100%; margin: 0 0 1 0; }
+.compact #context-actions { height: auto; }
+.compact #context-status { width: 100%; height: auto; margin: 0 0 1 0; }
 .compact .feedback-form-row { layout: vertical; margin-bottom: 0; }
 .compact .feedback-field { width: 100%; margin: 0 0 1 0; }
 .compact .feedback-form-row .feedback-field:last-of-type { margin-bottom: 0; }
@@ -537,12 +665,12 @@ Button:disabled, Button.-primary:disabled, Button.-warning:disabled {
     text-opacity: 1;
 }
 #home-next, .home-card, #home-guides .home-guide, #home-formats,
-#qa-result, #investigation, #clear-dialog, #feedback-dialog, #help-dialog,
+#qa-result, #clear-dialog, #feedback-dialog, #help-dialog,
 #settings-panel { border: solid #ffffff; }
 Tabs, .result-header { border-bottom: solid #ffffff; }
 .workspace-title { border-bottom: tall #ffffff; }
-MarkdownBlockQuote, .qa-description, #qa-status, #settings-trust { border-left: tall #ffffff; }
-.qa-section-title { border-top: tall #ffffff; }
+MarkdownBlockQuote, #qa-status { border-left: tall #ffffff; }
+#provider-hint, #settings-context-hint, #auth-status, #settings-trust { border: solid #ffffff; }
 #feedback-actions, #settings-context-title, #custom-provider-title, #settings-actions { border-top: solid #ffffff; }
 Tab:hover, Tab.-active { background: #ffffff; color: #000000; }
 Underline > .underline--bar { color: #ffffff; background: #ffffff; }
@@ -830,7 +958,7 @@ def _trust_profile_text(
             f"[bold #f0f6fc]Enrich[/bold #f0f6fc]    {enrich_val}\n"
             f"[bold #f0f6fc]Delivery[/bold #f0f6fc]  {deliv_val}\n"
             f"[bold #f0f6fc]Policy[/bold #f0f6fc]    {policy_val}\n"
-            "[dim]TUI operates read-only[/dim]"
+            "[dim]Infrastructure and delivery are read-only; bounded local QA/feedback state may be written.[/dim]"
         )
     return (
         f"[bold #8f8f8f]TRUST PROFILE: {escape(source_class)}[/bold #8f8f8f]\n"
@@ -878,6 +1006,158 @@ def _qa_classification_text(classifications: list[dict], *, title: str = "QA cla
     return "\n".join(lines)
 
 
+def _context_readiness(doc: dict | None) -> dict[str, object]:
+    """Build a bounded, read-only readiness summary for one stored report.
+
+    This deliberately reports evidence already present in the report and local
+    executable availability. It never invokes a connector, mutates a
+    repository, or sends a network request from the TUI.
+    """
+    if not isinstance(doc, dict):
+        return {
+            "valid": False,
+            "validation": "no report selected",
+            "schema": "unknown",
+            "migration": "not applicable",
+            "trust": "not evaluated",
+            "connector": "not evaluated",
+            "observability": "not evaluated",
+            "static_severity": "unknown",
+            "effective_severity": "unknown",
+            "customer_impact": "unknown",
+            "missing": ["stored report"],
+        }
+
+    validation_error = ""
+    try:
+        validate(doc)
+    except (TypeError, ValueError) as exc:
+        validation_error = str(exc)
+
+    schema = str(doc.get("schema_version") or "unknown")
+    if schema == SCHEMA_VERSION:
+        migration = f"current {SCHEMA_VERSION}; migration not required"
+    elif schema == LEGACY_SCHEMA_VERSION:
+        migration = (
+            f"legacy {LEGACY_SCHEMA_VERSION} accepted; compatibility view only, "
+            "report is not rewritten"
+        )
+    else:
+        migration = "unsupported schema; fail closed"
+
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    trust = meta.get("trust") if isinstance(meta.get("trust"), dict) else {}
+    source_class = str(trust.get("source_class") or "unknown")
+    try:
+        trust_policy = policy_for(source_class)
+    except ValueError:
+        trust_policy = None
+    if trust_policy is None:
+        trust_status = "invalid; optional collection blocked"
+    elif source_class == "fork_pr":
+        trust_status = "BLOCKED (fork_pr fail-closed)"
+    elif not trust_policy.allow_enrichment:
+        trust_status = "BLOCKED (enrichment disallowed)"
+    else:
+        trust_status = f"{source_class}; read-only enrichment allowed"
+
+    context = doc.get("context") if isinstance(doc.get("context"), dict) else {}
+    deployment = context.get("deployment") if isinstance(context.get("deployment"), dict) else {}
+    platform = str(deployment.get("platform") or "").strip().lower()
+    target = str(
+        deployment.get("workload")
+        or deployment.get("target")
+        or deployment.get("service")
+        or deployment.get("release")
+        or ""
+    ).strip()
+    audits = context.get("connector_audits")
+    audits = audits if isinstance(audits, list) else []
+    audit_records = [item for item in audits if isinstance(item, dict)]
+    collected = sum(1 for item in audit_records if item.get("status") == "collected")
+    failed = len(audit_records) - collected
+    if trust_policy is None or not trust_policy.allow_enrichment or source_class == "fork_pr":
+        connector_status = "blocked (fail-closed)"
+    elif not platform or not target:
+        connector_status = "not configured"
+    elif audit_records:
+        connector_name = "helm" if platform == "helm" else "kubectl" if platform in {"kubernetes", "argo-cd"} else platform
+        executable_state = "available" if shutil.which(connector_name) else "unavailable"
+        connector_status = (
+            f"{connector_name} {executable_state}; {collected}/{len(audit_records)} audit(s) collected"
+            + (f", {failed} not collected" if failed else "")
+            + "; no command run by TUI"
+        )
+    else:
+        connector_status = "configured; no connector audit stored"
+
+    devops = doc.get("devops") if isinstance(doc.get("devops"), dict) else {}
+    metric_samples = devops.get("metric_samples") if isinstance(devops.get("metric_samples"), list) else []
+    trace_spans = devops.get("trace_spans") if isinstance(devops.get("trace_spans"), list) else []
+    if metric_samples or trace_spans:
+        observability_status = f"present ({len(metric_samples)} metric sample(s), {len(trace_spans)} trace span(s))"
+    else:
+        observability_status = "missing (no metric or trace evidence stored)"
+
+    triage = doc.get("triage") if isinstance(doc.get("triage"), dict) else {}
+    static_severity = str(devops.get("static_severity") or triage.get("severity") or "unknown")
+    effective_severity = str(devops.get("effective_severity") or static_severity)
+    slo = devops.get("slo") if isinstance(devops.get("slo"), dict) else {}
+    timeline = doc.get("timeline") if isinstance(doc.get("timeline"), dict) else {}
+    customer_impact = str(
+        deployment.get("customer_impact")
+        or slo.get("customer_impact")
+        or timeline.get("customer_impact")
+        or "unknown"
+    )
+
+    missing: list[str] = []
+    if not platform or not target:
+        missing.append("deployment context")
+    if trust_policy is not None and trust_policy.allow_enrichment and platform and target and not audit_records:
+        missing.append("connector audit")
+    if not metric_samples and not trace_spans:
+        missing.append("observability correlation")
+    if not isinstance(devops.get("release_changes"), list) or not devops.get("release_changes"):
+        missing.append("previous release identity")
+    source_evidence = context.get("source_evidence")
+    if not isinstance(source_evidence, list) or not source_evidence:
+        missing.append("source evidence (opt-in)")
+    entries = timeline.get("entries") if isinstance(timeline.get("entries"), list) else []
+    if not entries:
+        missing.append("timeline events")
+    if validation_error:
+        missing.insert(0, "valid report schema")
+
+    return {
+        "valid": not validation_error,
+        "validation": "invalid: " + validation_error if validation_error else "valid",
+        "schema": schema,
+        "migration": migration,
+        "trust": trust_status,
+        "connector": connector_status,
+        "observability": observability_status,
+        "static_severity": static_severity,
+        "effective_severity": effective_severity,
+        "customer_impact": customer_impact,
+        "missing": missing,
+    }
+
+
+def _context_status_text(doc: dict | None) -> str:
+    """Render the short status line used by the explicit Context validation action."""
+    readiness = _context_readiness(doc)
+    if doc is None:
+        return "[dim]No report selected. Open a stored run to validate context.[/dim]"
+    if readiness["valid"]:
+        return (
+            "[green][PASS][/green] report valid  •  "
+            f"schema {escape(readiness['schema'])}  •  "
+            f"trust: {escape(readiness['trust'])}"
+        )
+    return f"[red][FAIL][/red] {escape(readiness['validation'])}"
+
+
 def _investigation_text(
     doc: dict | None,
     *,
@@ -887,9 +1167,9 @@ def _investigation_text(
     """Render structured deployment, timeline, source, and impact evidence."""
     if not doc:
         return (
-            "[bold #f0f6fc]No investigation selected[/bold #f0f6fc]\n\n"
-            "Open a recent run to inspect deployment context, timeline, ownership, "
-            "observability, and advisory test impact."
+            "[bold #f0f6fc]No report selected[/bold #f0f6fc]\n\n"
+            "Open a recent run to inspect its deployment context, timeline, ownership, "
+            "observability, and advisory test impact. This view only renders stored evidence."
         )
 
     context = doc.get("context") if isinstance(doc.get("context"), dict) else {}
@@ -904,9 +1184,20 @@ def _investigation_text(
     audits = audits if isinstance(audits, list) else []
     test_impact = doc.get("test_impact") if isinstance(doc.get("test_impact"), dict) else {}
 
+    readiness = _context_readiness(doc)
     lines = [
         "[bold #f0f6fc]STRUCTURED INVESTIGATION[/bold #f0f6fc]",
         f"[dim]artifact: {escape(Path(str(doc.get('meta', {}).get('log_file', 'unknown'))).name)}[/dim]",
+        "",
+        "[bold #b8b8b8]Context validation & readiness[/bold #b8b8b8]",
+        f"  validation: {escape(readiness['validation'])}",
+        f"  schema: {escape(readiness['schema'])}  •  {escape(readiness['migration'])}",
+        f"  trust: {escape(readiness['trust'])}",
+        f"  connector readiness: {escape(readiness['connector'])}",
+        f"  observability: {escape(readiness['observability'])}",
+        f"  severity: static={escape(readiness['static_severity'])}  effective={escape(readiness['effective_severity'])}",
+        f"  customer impact: {escape(readiness['customer_impact'])}",
+        "  missing evidence: " + (", ".join(escape(item) for item in readiness["missing"]) if readiness["missing"] else "none"),
         "",
         "[bold #b8b8b8]Deployment & impact[/bold #b8b8b8]",
     ]
@@ -925,9 +1216,14 @@ def _investigation_text(
         lines.append("  [dim]No deployment context supplied[/dim]")
     if devops:
         lines.append(
-            f"  effective severity: [{_outcome_color(devops.get('effective_severity'))}]"
-            f"{escape(devops.get('effective_severity') or 'unknown')}[/"
-            f"{_outcome_color(devops.get('effective_severity'))}]"
+            f"  static severity: [{_outcome_color(readiness['static_severity'])}]"
+            f"{escape(readiness['static_severity'])}[/"
+            f"{_outcome_color(readiness['static_severity'])}]"
+        )
+        lines.append(
+            f"  effective severity: [{_outcome_color(readiness['effective_severity'])}]"
+            f"{escape(readiness['effective_severity'])}[/"
+            f"{_outcome_color(readiness['effective_severity'])}]"
         )
         for reason in devops.get("severity_reasons") or []:
             lines.append(f"    severity evidence: {escape(reason)}")
@@ -1138,19 +1434,23 @@ class HelpScreen(ModalScreen[None]):
             yield Static(
                 "[bold #f0f6fc]Hound Tracer Keyboard Shortcuts[/bold #f0f6fc]\n\n"
                 "[bold #8f8f8f]WORKSPACES & VIEWS[/bold #8f8f8f]\n"
-                "  [bold #f0f6fc]h[/bold #f0f6fc]      Home tab           [bold #f0f6fc]f[/bold #f0f6fc]      Artifacts workspace\n"
-                "  [bold #f0f6fc]l[/bold #f0f6fc]      Results workspace  [bold #f0f6fc]y[/bold #f0f6fc]      Quality & gates\n"
-                "  [bold #f0f6fc]i[/bold #f0f6fc]      Context & review   [bold #f0f6fc]m[/bold #f0f6fc]      Toggle sidebar\n\n"
+                "  [bold #f0f6fc]h[/bold #f0f6fc]      Home                [bold #f0f6fc]f[/bold #f0f6fc]      Artifacts\n"
+                "  [bold #f0f6fc]l[/bold #f0f6fc]      Results             [bold #f0f6fc]y[/bold #f0f6fc]      Quality & gates\n"
+                "  [bold #f0f6fc]i[/bold #f0f6fc]      Context (read-only) [bold #f0f6fc]m[/bold #f0f6fc]      Toggle sidebar\n"
+                "  Result tabs after open: Overview · Report · Ticket · Raw log\n\n"
                 "[bold #8f8f8f]ACTIONS & ANALYSIS[/bold #8f8f8f]\n"
-                "  [bold #f0f6fc]a[/bold #f0f6fc]      Analyze selected   [bold #f0f6fc]A[/bold #f0f6fc]      Analyze all visible\n"
-                "  [bold #f0f6fc]space[/bold #f0f6fc]  Select / deselect  [bold #f0f6fc]enter[/bold #f0f6fc]  Open / view details\n"
+                "  [bold #f0f6fc]a[/bold #f0f6fc]      Analyze selected   [bold #f0f6fc]A[/bold #f0f6fc]      Analyze all filtered\n"
+                "  [bold #f0f6fc]z / d[/bold #f0f6fc]  Select / deselect all  [bold #f0f6fc]space[/bold #f0f6fc]  Select / deselect one\n"
+                "  [bold #f0f6fc]enter[/bold #f0f6fc]  Open selected result  [bold #f0f6fc]v[/bold #f0f6fc]      Record feedback\n"
+                "  [bold #f0f6fc]x / X[/bold #f0f6fc]  Clear selected / all results (Results; confirmation)\n"
                 "  [bold #f0f6fc]c[/bold #f0f6fc]      Copy report (md)   [bold #f0f6fc]e[/bold #f0f6fc]      Copy ticket (md)\n"
-                "  [bold #f0f6fc]r[/bold #f0f6fc]      Refresh directory  [bold #f0f6fc]x[/bold #f0f6fc]      Stop active run\n\n"
+                "  [bold #f0f6fc]r[/bold #f0f6fc]      Reload / refresh   [bold #f0f6fc]x[/bold #f0f6fc]      Stop analysis elsewhere\n\n"
                 "[bold #8f8f8f]NAVIGATION & CONTROLS[/bold #8f8f8f]\n"
-                "  [bold #f0f6fc]esc[/bold #f0f6fc]    Unfocus / Back     [bold #f0f6fc]p / n[/bold #f0f6fc]  Previous / next\n"
+                 "  [bold #f0f6fc]esc[/bold #f0f6fc]    Back                [bold #f0f6fc]k[/bold #f0f6fc]      Unfocus\n"
+                "  [bold #f0f6fc]p / n[/bold #f0f6fc]  Page or result prev/next\n"
                 "  [bold #f0f6fc]b[/bold #f0f6fc]      Browse folder      [bold #f0f6fc]s[/bold #f0f6fc]      Settings overlay\n"
-                "  [bold #f0f6fc]o[/bold #f0f6fc]      Toggle offline     [bold #f0f6fc]v[/bold #f0f6fc]      Record feedback\n"
-                "  [bold #f0f6fc]g[/bold #f0f6fc]      Focus list         [bold #f0f6fc]bkspc[/bold #f0f6fc]  Back / Unfocus\n"
+                "  [bold #f0f6fc]o[/bold #f0f6fc]      Toggle offline     [bold #f0f6fc]u[/bold #f0f6fc]      Validate Context\n"
+                "  [bold #f0f6fc]g[/bold #f0f6fc]      Focus active list\n"
                 "  [bold #f0f6fc]q[/bold #f0f6fc]      Quit Hound Tracer"
             )
             yield Button("Close", id="help-close", variant="primary")
@@ -1187,6 +1487,9 @@ class SettingsScreen(ModalScreen[None]):
         self._jobs = app.jobs
         self._max_llm_calls = app.max_llm_calls
         self._max_cost_usd = app.max_cost_usd
+        self._redact = app.redact
+        self._no_dedup = app.no_dedup
+        self._max_retries = app.max_retries
         try:
             custom_providers = load_custom_providers()
         except ValueError as exc:
@@ -1203,11 +1506,24 @@ class SettingsScreen(ModalScreen[None]):
             else "LLM mode | uses provider and model"
         )
 
+    def _redaction_label(self) -> str:
+        if self._source_class == "fork_pr":
+            return "Redaction: ON | required by trust policy"
+        return "Redaction: ON" if self._redact else "Redaction: OFF | exposes secrets and PII"
+
+    def _dedup_label(self) -> str:
+        return "Dedup: OFF | no reuse" if self._no_dedup else "Dedup: ON | reuse"
+
     def compose(self) -> ComposeResult:
         with Vertical(id="settings-page"):
             with Vertical(id="settings-panel"):
-                yield Static("Settings", id="settings-title")
-                yield Static("Choose an analysis mode and safety capabilities, then configure the online provider if needed.", id="settings-description")
+                yield Static("SETTINGS", id="settings-title")
+                yield Static(
+                    "Configure the active session. Changes apply to the next analysis and are saved as local, non-secret preferences.",
+                    id="settings-description",
+                )
+                yield Static(id="settings-session-summary")
+                yield Static("ANALYSIS MODE & PROVIDER", id="settings-provider-title")
                 yield Button(
                     self._offline_label(),
                     id="settings-offline",
@@ -1240,7 +1556,7 @@ class SettingsScreen(ModalScreen[None]):
                 with Horizontal(id="connection-actions"):
                     yield Button("Disconnect", id="settings-disconnect")
                     yield Button("Connect & discover", id="settings-connect", variant="primary")
-                yield Static("ANALYSIS CONTEXT & SAFETY", id="settings-context-title")
+                yield Static("EVIDENCE & TRUST", id="settings-context-title")
                 yield Static(
                     "These controls only enable bounded, read-only evidence collection. Trust policy can still block a capability.",
                     id="settings-context-hint",
@@ -1258,6 +1574,7 @@ class SettingsScreen(ModalScreen[None]):
                         value=self._source_class if self._source_class in SOURCE_CLASSES else "local_artifact",
                         id="settings-source-class",
                     )
+                yield Static("Evidence collection options", id="settings-evidence-options", classes="settings-label")
                 with Horizontal(classes="settings-toggle-row"):
                     yield Button("Source context: OFF", id="settings-source-context", classes="settings-toggle")
                     yield Button("Read-only enrichment: OFF", id="settings-enrich", classes="settings-toggle")
@@ -1272,6 +1589,18 @@ class SettingsScreen(ModalScreen[None]):
                         yield Static("Max cost USD (optional)", classes="settings-label")
                         yield Input(value="" if self._max_cost_usd is None else str(self._max_cost_usd), placeholder="unlimited", id="settings-max-cost")
                 yield Static(id="settings-trust")
+                yield Static("EXECUTION & DATA HANDLING", id="settings-execution-title")
+                yield Static(
+                    "Redaction protects reports and provider payloads. Deduplication reuses matching prior analysis from this output directory.",
+                    id="settings-execution-hint",
+                )
+                with Horizontal(classes="settings-toggle-row"):
+                    yield Button(self._redaction_label(), id="settings-redact", classes="settings-toggle")
+                    yield Button(self._dedup_label(), id="settings-dedup", classes="settings-toggle")
+                with Vertical(classes="settings-field"):
+                    yield Static("LLM retries per request (0-10)", classes="settings-label")
+                    yield Input(value=str(self._max_retries), placeholder="3", id="settings-max-retries")
+                yield Static(id="settings-session-paths")
                 yield Static("ADD CUSTOM PROVIDER", id="custom-provider-title")
                 yield Input(placeholder="provider-id", id="custom-provider-id", classes="custom-field")
                 yield Input(placeholder="Display name", id="custom-provider-name", classes="custom-field")
@@ -1293,12 +1622,27 @@ class SettingsScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         self._refresh_capability_controls()
 
+    def _refresh_session_summary(self) -> None:
+        config_source = self._app.config_path or "built-in defaults and local preferences"
+        self.query_one("#settings-session-summary", Static).update(
+            f"Active mode: {'offline' if self._offline else 'LLM'}\n"
+            f"Configuration source: {config_source}"
+        )
+        self.query_one("#settings-session-paths", Static).update(
+            f"SESSION LOCATIONS\n"
+            f"Logs: {self._app.logs_dir}\n"
+            f"Output: {self._app.out_dir}\n"
+            "Change logs from the sidebar. Output location is fixed for this session."
+        )
+
     def _refresh_capability_controls(self) -> None:
         try:
             policy = policy_for(self._source_class)
             offline_button = self.query_one("#settings-offline", Button)
             source_button = self.query_one("#settings-source-context", Button)
             enrich_button = self.query_one("#settings-enrich", Button)
+            redact_button = self.query_one("#settings-redact", Button)
+            dedup_button = self.query_one("#settings-dedup", Button)
             offline_button.disabled = not policy.allow_llm
             offline_button.label = self._offline_label()
             offline_button.set_class(policy.allow_llm and not self._offline, "is-llm")
@@ -1314,6 +1658,11 @@ class SettingsScreen(ModalScreen[None]):
                 else "Read-only enrichment: BLOCKED" if not policy.allow_enrichment
                 else "Read-only enrichment: OFF"
             )
+            self._redact = True if self._source_class == "fork_pr" else self._redact
+            redact_button.disabled = self._source_class == "fork_pr"
+            redact_button.label = self._redaction_label()
+            dedup_button.label = self._dedup_label()
+            self._refresh_session_summary()
             self.query_one("#settings-trust", Static).update(
                 _trust_profile_text(
                     self._source_class,
@@ -1343,6 +1692,15 @@ class SettingsScreen(ModalScreen[None]):
             if not event.button.disabled:
                 self._enrich = not self._enrich
                 self._refresh_capability_controls()
+            return
+        if event.button.id == "settings-redact":
+            if not event.button.disabled:
+                self._redact = not self._redact
+                self._refresh_capability_controls()
+            return
+        if event.button.id == "settings-dedup":
+            self._no_dedup = not self._no_dedup
+            self._refresh_capability_controls()
             return
         if event.button.id == "settings-cancel":
             self.dismiss()
@@ -1388,12 +1746,15 @@ class SettingsScreen(ModalScreen[None]):
             max_calls = int(max_calls_text) if max_calls_text else None
             max_cost_text = self.query_one("#settings-max-cost", Input).value.strip()
             max_cost = float(max_cost_text) if max_cost_text else None
+            max_retries = int(self.query_one("#settings-max-retries", Input).value.strip() or "3")
             if jobs < 1:
                 raise ValueError("batch workers must be at least 1")
             if max_calls is not None and max_calls < 0:
                 raise ValueError("max LLM calls must be non-negative")
             if max_cost is not None and max_cost <= 0:
                 raise ValueError("max cost USD must be greater than 0")
+            if not 0 <= max_retries <= 10:
+                raise ValueError("LLM retries must be between 0 and 10")
         except ValueError as exc:
             self._app.notify(f"Invalid analysis budget: {exc}", severity="error")
             return
@@ -1408,8 +1769,8 @@ class SettingsScreen(ModalScreen[None]):
                 model=model,
                 base_url=base_url,
                 api_key=api_key,
-                redact=self._app.redact,
-                max_retries=self._app.max_retries,
+                redact=self._redact,
+                max_retries=max_retries,
                 source_class=self._source_class,
             )
         except (OSError, ValueError) as exc:
@@ -1435,6 +1796,9 @@ class SettingsScreen(ModalScreen[None]):
                 jobs=jobs,
                 max_llm_calls=max_calls,
                 max_cost_usd=max_cost,
+                redact=config.redact,
+                no_dedup=self._no_dedup,
+                max_retries=config.max_retries,
             )
         except OSError as exc:
             self._app.notify(f"Settings were not saved: {exc}", severity="error")
@@ -1446,6 +1810,9 @@ class SettingsScreen(ModalScreen[None]):
         self._app.jobs = jobs
         self._app.max_llm_calls = max_calls
         self._app.max_cost_usd = max_cost
+        self._app.redact = config.redact
+        self._app.no_dedup = self._no_dedup
+        self._app.max_retries = config.max_retries
         self._app._apply_analysis_config(config, api_key=api_key)
         self._app.notify(f"Settings saved: {saved_path}", timeout=3)
         self.dismiss()
@@ -1472,6 +1839,11 @@ class SettingsScreen(ModalScreen[None]):
     @work(thread=True, exclusive=True, group="provider-connection")
     def _connect_provider(self, provider: str, base_url: str, key: str) -> None:
         try:
+            if not provider_supports_model_discovery(provider):
+                raise ValueError(
+                    f"provider {provider!r} does not support generic model discovery; "
+                    "configure a model/deployment"
+                )
             models = discover_models(base_url, key)
             if key:
                 set_api_key(provider, key)
@@ -1520,10 +1892,26 @@ class FeedbackScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         run_label = self._run_dir.name
+        from hound.validation import default_validation_store, get_latest_validation, validate_report
+        v_store = default_validation_store(self._app.out_dir)
+        report_file = self._run_dir / "report.json"
+        val = get_latest_validation(v_store, self._run_dir.name) if v_store.is_file() else None
+        if val is None or val.is_stale(report_file):
+            val = validate_report(report_file, persist=False)
+        self._val_record = val
+
+        if val.status == "PASS":
+            val_banner = f"[green]VALIDATION: PASS[/green] · {val.validation_id} · SHA: [dim]{val.report_sha256[:12]}[/dim] · Ready for reviewed status"
+        elif val.status == "WARN":
+            val_banner = f"[yellow]VALIDATION: WARN[/yellow] · {val.validation_id} · SHA: [dim]{val.report_sha256[:12]}[/dim] · Advisory warnings present"
+        else:
+            val_banner = f"[red]VALIDATION: FAIL[/red] · {val.validation_id} · [red]Blocked: report must pass validation before marking reviewed[/red]"
+
         with Vertical(id="feedback-dialog"):
             yield Static(f"Review feedback · {escape(run_label)}", id="feedback-title")
+            yield Static(val_banner, id="feedback-validation-banner")
             yield Static(
-                "Feedback is stored separately from deduplication state. It is sanitized and can be marked reviewed for future QA correlation.",
+                "Feedback is stored separately from deduplication state. Only reports passing validation can be marked reviewed.",
                 id="feedback-description",
             )
             with Vertical(id="feedback-form"):
@@ -1581,6 +1969,13 @@ class FeedbackScreen(ModalScreen[None]):
                     with Vertical(classes="feedback-field"):
                         yield Static("Actual owner", classes="field-label")
                         yield Input(placeholder="team or owner", id="feedback-actual-owner")
+                with Horizontal(classes="qa-form-row feedback-form-row"):
+                    with Vertical(classes="feedback-field"):
+                        yield Static("Root cause correction (optional)", classes="field-label")
+                        yield Input(placeholder="corrected root cause or explanation", id="feedback-root-cause-correction")
+                    with Vertical(classes="feedback-field"):
+                        yield Static("Review notes (optional)", classes="field-label")
+                        yield Input(placeholder="audit notes for future QA correlation", id="feedback-notes")
                 with Horizontal(classes="qa-form-row feedback-form-row feedback-last-row"):
                     with Vertical(classes="feedback-field"):
                         yield Static("Reviewer", classes="field-label")
@@ -1599,6 +1994,21 @@ class FeedbackScreen(ModalScreen[None]):
             return
         if event.button.id != "feedback-save":
             return
+        review_status = self._value("#feedback-review-status")
+        if review_status == "reviewed":
+            val = getattr(self, "_val_record", None)
+            if val is None:
+                from hound.validation import validate_report
+                val = validate_report(self._run_dir / "report.json", persist=False)
+                self._val_record = val
+            if val.status == "FAIL":
+                self._app.notify(
+                    f"Blocked: cannot mark feedback as 'reviewed' for invalid report ({val.summary})",
+                    severity="error",
+                    timeout=8,
+                )
+                return
+
         values = {
             "usefulness": self._value("#feedback-usefulness"),
             "kind_correct": self._value("#feedback-kind-correct"),
@@ -1609,8 +2019,11 @@ class FeedbackScreen(ModalScreen[None]):
             "actual_severity": self._value("#feedback-actual-severity") or None,
             "actual_owner": self.query_one("#feedback-actual-owner", Input).value.strip(),
             "actual_outcome": self._value("#feedback-outcome"),
-            "review_status": self._value("#feedback-review-status"),
+            "review_status": review_status,
             "reviewer": self.query_one("#feedback-reviewer", Input).value.strip(),
+            "root_cause_correction": self.query_one("#feedback-root-cause-correction", Input).value.strip(),
+            "notes": self.query_one("#feedback-notes", Input).value.strip(),
+            "validation_id": getattr(self, "_val_record", None).validation_id if getattr(self, "_val_record", None) else None,
         }
         save = self.query_one("#feedback-save", Button)
         save.disabled = True
@@ -1699,7 +2112,7 @@ class RcaTui(App):
     BINDINGS = [
         Binding("a", "analyze", "Analyze", show=False),
         Binding("A", "analyze_all", "Analyze all", show=False),
-        Binding("x", "stop_analysis", "Stop analysis", show=False),
+        Binding("x", "stop_or_clear_selected", "Stop/Clear selected", show=False),
         Binding("r", "refresh", "Refresh", show=False),
         Binding("o", "toggle_offline", "Toggle Offline", show=False),
         Binding("c", "copy_report", "Copy Report", show=False),
@@ -1712,18 +2125,28 @@ class RcaTui(App):
         Binding("l", "show_results", "Results", show=False),
         Binding("y", "show_qa", "Quality", show=False),
         Binding("i", "show_investigation", "Investigation", show=False),
+        Binding("u", "validate_context", "Validate Context", show=False),
         Binding("v", "open_feedback", "Feedback", show=False),
+        Binding("z", "select_all_workspace", "Select all", show=False),
+        Binding("d", "deselect_all_workspace", "Deselect all", show=False),
+        Binding("X", "clear_all_workspace", "Clear all", show=False),
         Binding("p", "prev_page", "Previous", show=False),
         Binding("n", "next_page", "Next", show=False),
         Binding("space", "toggle_selection", "Select/Deselect", show=False),
         Binding("enter", "select_log", "Open", show=False),
         Binding("g", "focus_file_list", "Focus List", show=False),
         Binding("?", "show_help", "Help", show=False),
-        Binding("backspace", "back", "Back", show=False),
+        Binding("k", "unfocus", "Unfocus", show=False, priority=True),
         Binding("B", "back", "Back", show=False),
-        Binding("escape", "unfocus", "Unfocus", show=False),
+        Binding("escape", "back", "Back", show=False),
         Binding("q", "quit", "Quit", show=False),
     ]
+
+    async def on_event(self, event: events.Event) -> None:
+        if isinstance(event, events.Key) and not event.is_forwarded and event.key == "k":
+            await self.run_action("unfocus")
+            return
+        await super().on_event(event)
 
     def __init__(
         self,
@@ -1737,13 +2160,13 @@ class RcaTui(App):
         base_url: str | None = None,
         api_key: str | None = None,
         redact: bool | None = None,
-        no_dedup: bool = False,
+        no_dedup: bool | None = None,
         max_retries: int | None = None,
-        source_context: bool = False,
+        source_context: bool | None = None,
         context_path: str | None = None,
-        enrich: bool = False,
+        enrich: bool | None = None,
         source_class: str | None = None,
-        jobs: int = 1,
+        jobs: int | None = None,
         max_llm_calls: int | None = None,
         max_cost_usd: float | None = None,
     ):
@@ -1761,12 +2184,12 @@ class RcaTui(App):
         yaml_trust: dict = {}
         if config_path:
             try:
-                config_data = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
+                config_data = yaml.safe_load(read_bounded_text(config_path, MAX_CONFIG_BYTES, encoding="utf-8")) or {}
                 if isinstance(config_data, dict) and isinstance(config_data.get("llm"), dict):
                     yaml_llm = config_data["llm"]
                 if isinstance(config_data, dict) and isinstance(config_data.get("trust"), dict):
                     yaml_trust = config_data["trust"]
-            except (OSError, yaml.YAMLError):
+            except (OSError, ValueError, yaml.YAMLError):
                 # load_config below owns validation and the user-facing error.
                 pass
         has_explicit_provider = bool(provider or yaml_llm.get("provider"))
@@ -1779,6 +2202,9 @@ class RcaTui(App):
             None if has_explicit_provider or yaml_llm.get("base_url") else preferences["base_url"]
         )
         resolved_source_class = source_class or yaml_trust.get("source_class") or preferences["source_class"]
+        resolved_redact = redact if redact is not None else preferences.get("redact")
+        resolved_max_retries = max_retries if max_retries is not None else preferences.get("max_retries")
+        resolved_no_dedup = no_dedup if no_dedup is not None else preferences.get("no_dedup", False)
         analysis_config = load_config(
             offline=resolved_offline,
             config_path=config_path,
@@ -1786,26 +2212,26 @@ class RcaTui(App):
             model=resolved_model,
             base_url=resolved_base_url,
             api_key=api_key,
-            redact=redact,
-            max_retries=max_retries,
+            redact=resolved_redact,
+            max_retries=resolved_max_retries,
             source_class=resolved_source_class,
         )
-        self.state_path = default_state_path(self.out_dir, analysis_config.state_file, no_dedup, backend=analysis_config.state_backend)
+        self.state_path = default_state_path(self.out_dir, analysis_config.state_file, resolved_no_dedup, backend=analysis_config.state_backend)
         self.offline = analysis_config.offline
         self.config_path = config_path
         self.provider = analysis_config.provider
         self.model = analysis_config.model
         self.base_url = analysis_config.base_url
         self.api_key = api_key
-        self.redact = redact
-        self.no_dedup = no_dedup
-        self.max_retries = max_retries
-        self.repo_dir = repo_dir or preferences["repo_dir"]
-        self.source_context = source_context or preferences["source_context"]
-        self.context_path = context_path or preferences["context_path"]
-        self.enrich = enrich or preferences["enrich"]
+        self.redact = analysis_config.redact
+        self.no_dedup = bool(resolved_no_dedup)
+        self.max_retries = analysis_config.max_retries
+        self.repo_dir = (repo_dir or None) if repo_dir is not None else preferences["repo_dir"]
+        self.source_context = source_context if source_context is not None else preferences["source_context"]
+        self.context_path = (context_path or None) if context_path is not None else preferences["context_path"]
+        self.enrich = enrich if enrich is not None else preferences["enrich"]
         self.source_class = analysis_config.source_class
-        self.jobs = max(1, jobs if jobs != 1 else preferences["jobs"])
+        self.jobs = max(1, jobs if jobs is not None else preferences["jobs"])
         self.max_llm_calls = max_llm_calls
         self.max_cost_usd = max_cost_usd
         self._analysis_config = analysis_config
@@ -1934,18 +2360,18 @@ class RcaTui(App):
                         )
                     yield ListView(id="artifact-workspace-list")
                     with Horizontal(classes="pagination-controls"):
-                        yield Button("Prev", id="artifact-prev", disabled=True)
+                        yield Button("Prev (p)", id="artifact-prev", disabled=True)
                         yield Static("Page 1/1", id="artifact-pagination-label", classes="pagination-label")
-                        yield Button("Next", id="artifact-next", disabled=True)
+                        yield Button("Next (n)", id="artifact-next", disabled=True)
                     with Vertical(classes="workspace-actions"):
                         with Horizontal(classes="workspace-action-row"):
-                            yield Button("Analyze selected", id="workspace-analyze", variant="primary")
-                            yield Button("Analyze all filtered", id="workspace-analyze-all", variant="warning")
-                            yield Button("Select all", id="workspace-select-all")
+                            yield Button("Analyze selected (a)", id="workspace-analyze", variant="primary", disabled=True)
+                            yield Button("Analyze filtered (A)", id="workspace-analyze-all", variant="warning", disabled=True)
+                            yield Button("Select all (z)", id="workspace-select-all", disabled=True)
                         with Horizontal(classes="workspace-action-row"):
-                            yield Button("Deselect all", id="workspace-deselect-all")
-                            yield Button("Browse folder", id="workspace-browse")
-                            yield Button("Reload directory", id="workspace-refresh")
+                            yield Button("Deselect all (d)", id="workspace-deselect-all", disabled=True)
+                            yield Button("Browse (b)", id="workspace-browse")
+                            yield Button("Reload (r)", id="workspace-refresh")
                 with Vertical(id="results-workspace"):
                     yield Static("ANALYSIS RESULTS", classes="workspace-title")
                     yield Static(id="results-workspace-meta", classes="workspace-meta")
@@ -1963,26 +2389,31 @@ class RcaTui(App):
                         )
                     yield ResultsListView(id="results-workspace-list", on_item_clicked=self._toggle_result_selection)
                     with Horizontal(classes="pagination-controls"):
-                        yield Button("Prev", id="results-prev", disabled=True)
+                        yield Button("Prev (p)", id="results-prev", disabled=True)
                         yield Static("Page 1/1", id="results-pagination-label", classes="pagination-label")
-                        yield Button("Next", id="results-next", disabled=True)
+                        yield Button("Next (n)", id="results-next", disabled=True)
                     with Vertical(classes="workspace-actions"):
                         with Horizontal(classes="workspace-action-row"):
-                            yield Button("Open result", id="open-workspace-result", variant="primary")
-                            yield Button("Record feedback", id="results-feedback")
-                            yield Button("Select all", id="results-select-all")
+                            yield Button("Open result (enter)", id="open-workspace-result", variant="primary", disabled=True)
+                            yield Button("Record feedback (v)", id="results-feedback", disabled=True)
+                            yield Button("Select all (z)", id="results-select-all", disabled=True)
                         with Horizontal(classes="workspace-action-row"):
-                            yield Button("Deselect all", id="results-deselect-all")
-                            yield Button("Clear selected", id="clear-selected")
-                            yield Button("Clear all", id="clear-all")
+                            yield Button("Deselect all (d)", id="results-deselect-all", disabled=True)
+                            yield Button("Clear selected (x)", id="clear-selected", disabled=True)
+                            yield Button("Clear all (X)", id="clear-all", disabled=True)
                 with Vertical(id="qa-workspace"):
                     yield Static("QUALITY & GATES", classes="workspace-title")
                     yield Static(
-                        "Normalize test evidence, compare it with read-only history, and evaluate a deterministic quality gate. History import, retention, and export remain CLI-only.",
+                        "Deterministic release quality gates and test history. Evaluate release thresholds, track flakiness across runs, and inspect regression signals.",
                         id="qa-workspace-meta",
                         classes="workspace-meta",
                     )
-                    with ResultScroll(id="qa-scroll", classes="result-scroll"):
+                    with ItemGrid(classes="qa-status-row"):
+                        yield Static(id="qa-card-history", classes="qa-card")
+                        yield Static(id="qa-card-gate", classes="qa-card")
+                        yield Static(id="qa-card-signal", classes="qa-card")
+                    yield Static("Ready. Choose an operation below.", id="qa-status", classes="workspace-status")
+                    with ResultScroll(id="qa-scroll", classes="result-scroll workspace-data-panel"):
                         yield Static("EVIDENCE SOURCE", classes="qa-section-title")
                         yield Static(
                             "Test reports are used by Insights. SARIF is handled separately as quality-gate evidence; the same SARIF file may also be analyzed as an RCA artifact from Artifacts.",
@@ -1992,7 +2423,7 @@ class RcaTui(App):
                             yield Static("Artifacts path (file or directory)", classes="field-label")
                             yield Input(value=str(self.logs_dir), placeholder="/path/to/test-artifacts", id="qa-source-path")
                         with Vertical(classes="qa-field"):
-                            yield Static("Read-only history database (populate with CLI)", classes="field-label")
+                            yield Static("History database (TUI import writes; CLI handles export/administration)", classes="field-label")
                             from hound.qa.history import default_history_store
                             yield Input(value=str(default_history_store(self.out_dir)), id="qa-history-store")
                         with Horizontal(classes="qa-form-row"):
@@ -2017,6 +2448,13 @@ class RcaTui(App):
                                 yield Input(placeholder="all history", id="qa-window-days")
                         with Horizontal(classes="qa-form-row"):
                             with Vertical(classes="qa-field"):
+                                yield Static("History run ID", classes="field-label")
+                                yield Input(value="tui-import", placeholder="CI run identifier", id="qa-run-id")
+                            with Vertical(classes="qa-field"):
+                                yield Static("Retention days (import)", classes="field-label")
+                                yield Input(placeholder="keep all history", id="qa-retention-days")
+                        with Horizontal(classes="qa-form-row"):
+                            with Vertical(classes="qa-field"):
                                 yield Static("Candidate commit (optional)", classes="field-label")
                                 yield Input(placeholder="optional commit SHA", id="qa-commit")
                             with Vertical(classes="qa-field"):
@@ -2026,6 +2464,11 @@ class RcaTui(App):
                         with Vertical(classes="qa-field"):
                             yield Static("Policy file (required for gate)", classes="field-label")
                             yield Input(placeholder="quality.yml or quality.json", id="qa-policy")
+                        yield Static(
+                            "No policy loaded. Enter a policy path to preview validated active rules before running the gate.",
+                            id="qa-policy-preview",
+                            classes="qa-policy-preview",
+                        )
                         with Vertical(classes="qa-field"):
                             yield Static("Coverage files (comma/newline separated)", classes="field-label")
                             yield Input(placeholder="candidate coverage artifacts", id="qa-coverage")
@@ -2038,22 +2481,34 @@ class RcaTui(App):
                         with Vertical(classes="qa-field"):
                             yield Static("History suite prefix (optional)", classes="field-label")
                             yield Input(placeholder="filter tracked suites", id="qa-suite-prefix")
-                        with Horizontal(id="qa-actions"):
-                            yield Button("Analyze test evidence", id="qa-analyze", variant="primary")
-                            yield Button("Run quality gate", id="qa-gate", variant="warning")
-                            yield Button("Load history", id="qa-load-history")
-                        yield Static("Ready. Choose an operation above.", id="qa-status")
                         yield ListView(id="qa-history-list")
                         yield Static("", id="qa-result")
+                    with Vertical(id="qa-actions", classes="workspace-actions"):
+                        with Horizontal(classes="workspace-action-row"):
+                            yield Button("Analyze test evidence", id="qa-analyze", variant="primary")
+                            yield Button("Import to history", id="qa-import-history")
+                        with Horizontal(classes="workspace-action-row"):
+                            yield Button("Run quality gate", id="qa-gate", variant="warning")
+                            yield Button("Load history", id="qa-load-history")
                 with Vertical(id="investigation-workspace"):
-                    yield Static("INVESTIGATION CONTEXT", classes="workspace-title")
+                    yield Static("CONTEXT (READ-ONLY)", classes="workspace-title")
                     yield Static(
-                        "Structured, read-only view of deployment impact, timeline, observability, source ownership, and advisory test impact.",
+                        "Validates stored report context and renders deployment impact, timeline, observability, source ownership, and advisory test impact. Readiness is read-only; connector collection remains in the CLI/pipeline.",
                         id="investigation-workspace-meta",
                         classes="workspace-meta",
                     )
-                    with ResultScroll(id="investigation-scroll", classes="result-scroll"):
+                    with ItemGrid(classes="context-status-row"):
+                        yield Static(id="context-card-integrity", classes="context-card")
+                        yield Static(id="context-card-trust", classes="context-card")
+                        yield Static(id="context-card-impact", classes="context-card")
+                    with ResultScroll(id="investigation-scroll", classes="result-scroll workspace-data-panel"):
+                        yield Static(id="context-validation-summary")
                         yield Static(_investigation_text(None), id="investigation")
+                    with Horizontal(id="context-actions", classes="workspace-action-row"):
+                        yield Button("Validate report (u)", id="context-validate", variant="primary", disabled=True)
+                        yield Button("Record feedback (v)", id="context-feedback", disabled=True)
+                        yield Button("Copy summary", id="context-copy-summary", disabled=True)
+                        yield Static("No report selected. Open a stored run to validate context.", id="context-status")
                 with TabbedContent(initial="pane-overview", id="tabs"):
                     with TabPane("Overview", id="pane-overview"):
                         with Vertical(id="overview-shell"):
@@ -2242,13 +2697,19 @@ class RcaTui(App):
             # Tab activation can arrive while sibling workspaces are still mounting.
             artifacts_ws = None
         if artifacts_ws is not None and artifacts_ws.display:
-            contextual = f"[{key}]space[/{key}] select  [{key}]p / n[/{key}] prev/next page  "
+            contextual = (
+                f"[{key}]a[/{key}] analyze  [{key}]A[/{key}] all  [{key}]z / d[/{key}] select/deselect all  "
+                f"[{key}]space[/{key}] toggle  [{key}]p / n[/{key}] prev/next page  "
+            )
         try:
             results_ws: Vertical | None = self.query_one("#results-workspace", Vertical)
         except Exception:
             results_ws = None
         if results_ws is not None and results_ws.display:
-            contextual = f"[{key}]enter[/{key}] open  [{key}]space[/{key}] select  [{key}]p / n[/{key}] prev/next page  "
+            contextual = (
+                f"[{key}]enter[/{key}] open  [{key}]v[/{key}] feedback  [{key}]z / d[/{key}] select/deselect all  "
+                f"[{key}]space[/{key}] toggle  [{key}]x / X[/{key}] clear  [{key}]p / n[/{key}] prev/next page  "
+            )
         try:
             qa_ws: Vertical | None = self.query_one("#qa-workspace", Vertical)
         except Exception:
@@ -2260,7 +2721,7 @@ class RcaTui(App):
         except Exception:
             investigation_ws = None
         if investigation_ws is not None and investigation_ws.display:
-            contextual = f"[{key}]v[/{key}] feedback  [{key}]g[/{key}] focus context  "
+            contextual = f"[{key}]u[/{key}] validate  [{key}]v[/{key}] feedback  [{key}]c[/{key}] copy summary  [{key}]g[/{key}] focus context  "
         separator = "  [dim]|[/dim]  " if contextual.strip() else ""
         try:
             self.query_one("#shortcutbar", Static).update(contextual.rstrip() + separator + common)
@@ -2319,6 +2780,8 @@ class RcaTui(App):
             self._render_runs(force_workspace=True)
             self._focus_workspace_list("results-workspace-list")
         elif workspace == "qa":
+            self._update_qa_status_cards()
+            self._refresh_qa_policy_preview()
             self._render_qa_result()
         elif workspace == "investigation":
             self._refresh_current_context()
@@ -2441,7 +2904,10 @@ class RcaTui(App):
                 "[bold #f0f6fc]y / i[/bold #f0f6fc]   quality / context\n"
                 "[bold #f0f6fc]b / r[/bold #f0f6fc]   browse / refresh\n"
                 "[bold #f0f6fc]m / s[/bold #f0f6fc]   sidebar / settings\n"
-                "[bold #f0f6fc]o / v[/bold #f0f6fc]   offline / feedback\n"
+                "[bold #f0f6fc]z / d / space[/bold #f0f6fc] select / deselect\n"
+                "[bold #f0f6fc]p / n / g[/bold #f0f6fc] page / focus list\n"
+                "[bold #f0f6fc]o / u / v[/bold #f0f6fc] offline / validate Context / feedback\n"
+                "[bold #f0f6fc]x / X[/bold #f0f6fc] clear selected / all results\n"
                 "[bold #f0f6fc]esc / ?[/bold #f0f6fc] back / help guide"
             )
             self.query_one("#home-formats", Static).update(
@@ -2494,12 +2960,40 @@ class RcaTui(App):
         git_str = "git:[green]yes[/green]" if git_ok else "git:[dim]no[/dim]"
         kube_str = "kubectl:[green]yes[/green]" if kube_ok else "kubectl:[dim]no[/dim]"
 
+        try:
+            from hound.validation import count_validations, default_validation_store
+
+            val_counts = count_validations(default_validation_store(self.out_dir))
+            val_total = val_counts.get("total", 0)
+            val_pass = val_counts.get("pass", 0)
+            val_fail = val_counts.get("fail", 0)
+            if val_total > 0:
+                val_color = "green" if val_fail == 0 else "yellow"
+                val_str = f"[{val_color}]{val_pass}/{val_total} valid[/{val_color}]"
+            else:
+                val_str = "[dim]0 verified[/dim]"
+        except Exception:
+            val_str = "[dim]none[/dim]"
+
+        try:
+            from hound.feedback import default_feedback_store, read_feedback
+
+            fb_file = default_feedback_store(self.out_dir)
+            if fb_file.is_file():
+                fb_records = read_feedback(fb_file)
+                fb_rev = sum(1 for r in fb_records if r.get("review_status") == "reviewed")
+                fb_str = f"[green]{fb_rev} rev[/green] · [dim]{len(fb_records)} tot[/dim]"
+            else:
+                fb_str = "[dim]none[/dim]"
+        except Exception:
+            fb_str = "[dim]none[/dim]"
+
         return (
             "[bold #8f8f8f]DIAGNOSTICS[/bold #8f8f8f]\n"
             f"[bold #f0f6fc]Output[/bold #f0f6fc]    {escape(out_name)}\n"
             f"[bold #f0f6fc]History[/bold #f0f6fc]   [{history_color}]{history_state}[/{history_color}]\n"
-            f"[bold #f0f6fc]Dedup[/bold #f0f6fc]     [{dedup_color}]{state}[/{dedup_color}]\n"
-            f"[bold #f0f6fc]Delivery[/bold #f0f6fc]  [{deliv_color}]{deliv_str}[/{deliv_color}]\n"
+            f"[bold #f0f6fc]Dedup[/bold #f0f6fc]     [{dedup_color}]{state}[/{dedup_color}]  [{deliv_color}]deliv:{deliv_str}[/{deliv_color}]\n"
+            f"[bold #f0f6fc]Audit[/bold #f0f6fc]     val:{val_str}  fb:{fb_str}\n"
             f"[bold #f0f6fc]Repo[/bold #f0f6fc]      [{repo_color}]{escape(repo)}[/{repo_color}]\n"
             f"[bold #f0f6fc]Runs[/bold #f0f6fc]      {runs_str}\n"
             f"[bold #f0f6fc]Tools[/bold #f0f6fc]     {git_str}  {kube_str}"
@@ -2571,6 +3065,9 @@ class RcaTui(App):
         jobs: int,
         max_llm_calls: int | None,
         max_cost_usd: float | None,
+        redact: bool,
+        no_dedup: bool,
+        max_retries: int,
     ) -> Path:
         """Write and read back Settings before mutating active TUI state."""
         expected = {
@@ -2586,6 +3083,9 @@ class RcaTui(App):
             "jobs": jobs,
             "max_llm_calls": max_llm_calls,
             "max_cost_usd": max_cost_usd,
+            "redact": redact,
+            "no_dedup": no_dedup,
+            "max_retries": max_retries,
         }
         previous_key = get_api_key(provider) if api_key else ""
         key_changed = False
@@ -2608,6 +3108,9 @@ class RcaTui(App):
                 jobs=jobs,
                 max_llm_calls=max_llm_calls,
                 max_cost_usd=max_cost_usd,
+                redact=redact,
+                no_dedup=no_dedup,
+                max_retries=max_retries,
             )
             persisted = load_tui_preferences(path)
             if any(persisted[key] != value for key, value in expected.items()):
@@ -2647,22 +3150,44 @@ class RcaTui(App):
                 stop_btn.display = self._analyzing
             ws_analyze = self.query("#workspace-analyze").first(Button)
             if ws_analyze is not None:
-                ws_analyze.disabled = self._analyzing or not valid
+                ws_analyze.disabled = self._analyzing or not self._selected_artifacts
             ws_analyze_all = self.query("#workspace-analyze-all").first(Button)
             if ws_analyze_all is not None:
                 ws_analyze_all.disabled = self._analyzing or not self._visible_log_files
+            select_all_artifacts = self.query("#workspace-select-all").first(Button)
+            if select_all_artifacts is not None:
+                select_all_artifacts.disabled = self._analyzing or not (
+                    set(self._visible_log_files) - self._selected_artifacts
+                )
+            deselect_all_artifacts = self.query("#workspace-deselect-all").first(Button)
+            if deselect_all_artifacts is not None:
+                deselect_all_artifacts.disabled = self._analyzing or not self._selected_artifacts
             refresh_btn = self.query("#workspace-refresh").first(Button)
             if refresh_btn is not None:
                 refresh_btn.disabled = self._analyzing
+            open_result = self.query("#open-workspace-result").first(Button)
+            if open_result is not None:
+                open_result.disabled = self._analyzing or not self._selected_runs
+            select_all_results = self.query("#results-select-all").first(Button)
+            if select_all_results is not None:
+                select_all_results.disabled = self._analyzing or not (
+                    {Path(item["path"]) for item in self._filtered_runs} - self._selected_runs
+                )
+            deselect_all_results = self.query("#results-deselect-all").first(Button)
+            if deselect_all_results is not None:
+                deselect_all_results.disabled = self._analyzing or not self._selected_runs
             clear_sel = self.query("#clear-selected").first(Button)
             if clear_sel is not None:
-                clear_sel.disabled = self._analyzing or not (self._selected_runs or self._filtered_runs)
+                clear_sel.disabled = self._analyzing or not self._selected_runs
             clear_all = self.query("#clear-all").first(Button)
             if clear_all is not None:
                 clear_all.disabled = self._analyzing or not self._run_index
             feedback = self.query("#results-feedback").first(Button)
             if feedback is not None:
-                feedback.disabled = self._analyzing or self._current_run_dir is None
+                feedback.disabled = self._analyzing or not (self._current_run_dir or len(self._selected_runs) == 1)
+            context_validate = self.query("#context-validate").first(Button)
+            if context_validate is not None:
+                context_validate.disabled = self._analyzing or self._current_doc is None
         except Exception:
             pass
         finally:
@@ -2690,14 +3215,14 @@ class RcaTui(App):
                 target.value = event.value
             if self._filter_timer is not None:
                 self._filter_timer.stop()
-            self._filter_timer = self.set_timer(0.2, lambda: self._scan_logs(event.value))
+            self._filter_timer = self.set_timer(0.2, self._scan_logs_from_filter)
         elif event.input.id == "workspace-artifact-filter":
             target = self.query("#log-filter").first(Input)
             if target is not None:
                 target.value = event.value
             if self._filter_timer is not None:
                 self._filter_timer.stop()
-            self._filter_timer = self.set_timer(0.2, lambda: self._scan_logs(event.value))
+            self._filter_timer = self.set_timer(0.2, self._scan_logs_from_filter)
         elif event.input.id == "run-filter":
             target = self.query("#workspace-run-filter").first(Input)
             if target is not None:
@@ -2712,6 +3237,13 @@ class RcaTui(App):
             if self._run_filter_timer is not None:
                 self._run_filter_timer.stop()
             self._run_filter_timer = self.set_timer(0.2, self._render_runs)
+        elif event.input.id in {"qa-policy", "qa-environment"}:
+            self._refresh_qa_policy_preview()
+
+    def _scan_logs_from_filter(self) -> None:
+        """Apply the current mirrored filter, not a stale intermediate event value."""
+        filter_input = self.query("#log-filter").first(Input)
+        self._scan_logs(filter_input.value if filter_input is not None else "")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "dir-input":
@@ -2888,7 +3420,8 @@ class RcaTui(App):
         selected_text = f"  •  {selected_count} selected" if selected_count else ""
         try:
             self.query_one("#artifact-workspace-meta", Static).update(
-                f"{total_items} filtered artifacts{selected_text}  •  {escape(str(self.logs_dir))}"
+                f"{total_items} filtered artifacts{selected_text}  •  {escape(str(self.logs_dir))}\n"
+                "Select a row to preview it in Raw log; use space to toggle batch selection."
             )
 
             # Update pagination controls
@@ -2904,9 +3437,9 @@ class RcaTui(App):
             # Update analyze selected button label
             analyze_btn = self.query_one("#workspace-analyze", Button)
             if selected_count > 1:
-                analyze_btn.label = f"Analyze {selected_count} selected"
+                analyze_btn.label = f"Analyze {selected_count} selected (a)"
             else:
-                analyze_btn.label = "Analyze selected"
+                analyze_btn.label = "Analyze selected (a)"
 
             if not force and not self.query_one("#artifact-workspace", Vertical).display:
                 return
@@ -2955,20 +3488,28 @@ class RcaTui(App):
 
     def _refresh_artifact_selection(self, changed: list[Path] | None = None) -> None:
         """Update selection in place so ListView retains focus and scrolling."""
+        meta = self.query("#artifact-workspace-meta").first(Static)
+        button = self.query("#workspace-analyze").first(Button)
+        list_view = self.query("#artifact-workspace-list").first(ListView)
+        if meta is None or button is None or list_view is None:
+            # Classification workers can finish after the workspace was
+            # unmounted. The sidebar state remains useful; there is no mounted
+            # artifact view to refresh in that lifecycle window.
+            return
         selected_count = len(self._selected_artifacts)
         selected_text = f"  •  {selected_count} selected" if selected_count else ""
-        self.query_one("#artifact-workspace-meta", Static).update(
-            f"{len(self._visible_log_files)} filtered artifacts{selected_text}  •  {escape(str(self.logs_dir))}"
+        meta.update(
+            f"{len(self._visible_log_files)} filtered artifacts{selected_text}  •  {escape(str(self.logs_dir))}\n"
+            "Select a row to preview it in Raw log; use space to toggle batch selection."
         )
-        button = self.query_one("#workspace-analyze", Button)
-        button.label = f"Analyze {selected_count} selected" if selected_count > 1 else "Analyze selected"
-        list_view = self.query_one("#artifact-workspace-list", ListView)
+        button.label = f"Analyze {selected_count} selected (a)" if selected_count > 1 else "Analyze selected (a)"
         page_start = (self._artifact_page - 1) * PAGE_SIZE
         page_files = self._visible_log_files[page_start:page_start + PAGE_SIZE]
         changed_paths = set(changed) if changed is not None else set(page_files)
         for index, path in enumerate(page_files):
             if path in changed_paths and index < len(list_view.children):
                 self._replace_list_item_label(list_view.children[index], self._artifact_workspace_label(path))
+        self._set_analysis_enabled()
 
     def _sidebar_log_label(self, path: Path) -> str:
         try:
@@ -3029,11 +3570,17 @@ class RcaTui(App):
                 stage, kind = parsed[0], parsed[1]
                 return stage, kind
             # Limit pre-analysis work to keep directory browsing responsive.
-            with path.open("r", encoding="utf-8", errors="replace") as log_file:
-                preview = log_file.read(LOG_CLASSIFICATION_BYTES)
+            fd = open_verified_regular(path)
+            try:
+                with os.fdopen(fd, "rb") as log_file:
+                    fd = -1
+                    preview = log_file.read(LOG_CLASSIFICATION_BYTES).decode("utf-8", errors="replace")
+            finally:
+                if fd >= 0:
+                    os.close(fd)
             stage, kind, _, _ = parse_log(preview)
             return stage, kind
-        except OSError:
+        except (OSError, RuntimeError, ValueError):
             return "unknown", "unavailable"
 
     def _scan_runs(self) -> None:
@@ -3048,8 +3595,8 @@ class RcaTui(App):
         index = []
         for report in reports:
             try:
+                doc = _read_stored_report(report)
                 modified = report.stat().st_mtime
-                doc = _json.loads(report.read_text(encoding="utf-8"))
                 failure = doc["failure"]
                 root_cause = doc["root_cause"]
                 triage = doc["triage"]
@@ -3065,7 +3612,7 @@ class RcaTui(App):
                     "hypothesis": str(root_cause.get("hypothesis", "")),
                     "invalid": False,
                 })
-            except (OSError, ValueError, KeyError, TypeError):
+            except (OSError, RuntimeError, ValueError, KeyError, TypeError):
                 index.append({
                     "path": report.parent, "report": report, "modified": 0,
                     "artifact": report.parent.name, "stage": "unknown", "severity": "info",
@@ -3154,9 +3701,9 @@ class RcaTui(App):
 
             clear_sel_btn = self.query_one("#clear-selected", Button)
             if selected_count > 1:
-                clear_sel_btn.label = f"Clear {selected_count} selected"
+                clear_sel_btn.label = f"Clear {selected_count} selected (x)"
             else:
-                clear_sel_btn.label = "Clear selected"
+                clear_sel_btn.label = "Clear selected (x)"
 
             if not force and not self.query_one("#results-workspace", Vertical).display:
                 return
@@ -3209,7 +3756,7 @@ class RcaTui(App):
             f"{len(self._filtered_runs)} matching{selected_text}  •  {len(self._run_index)} total  •  {escape(str(self.out_dir))}"
         )
         clear_button = self.query_one("#clear-selected", Button)
-        clear_button.label = f"Clear {selected_count} selected" if selected_count > 1 else "Clear selected"
+        clear_button.label = f"Clear {selected_count} selected (x)" if selected_count > 1 else "Clear selected (x)"
         list_view = self.query_one("#results-workspace-list", ListView)
         page_start = (self._results_page - 1) * PAGE_SIZE
         page_runs = self._filtered_runs[page_start:page_start + PAGE_SIZE]
@@ -3217,6 +3764,7 @@ class RcaTui(App):
         for index, item in enumerate(page_runs):
             if Path(item["path"]) in changed_paths and index < len(list_view.children):
                 self._replace_list_item_label(list_view.children[index], self._result_workspace_label(item))
+        self._set_analysis_enabled()
 
     def _qa_input(self, selector: str) -> str:
         return self.query_one(selector, Input).value.strip()
@@ -3235,7 +3783,7 @@ class RcaTui(App):
             raise ValueError(f"invalid history window: {exc}") from exc
         history_text = self._qa_input("#qa-history-store")
         repo_text = self._qa_input("#qa-repo-dir")
-        return {
+        values = {
             "source": Path(self._qa_input("#qa-source-path")).expanduser(),
             "history": Path(history_text).expanduser() if history_text else None,
             "repo": Path(repo_text).expanduser() if repo_text else None,
@@ -3244,15 +3792,187 @@ class RcaTui(App):
             "runner": self._qa_input("#qa-runner") or None,
             "environment": self._qa_input("#qa-environment"),
             "days": window_days,
-            "run_id": "tui-readonly-analysis",
+            "run_id": self._qa_input("#qa-run-id") or "tui-import",
             "commit": self._qa_input("#qa-commit"),
             "branch": self._qa_input("#qa-branch"),
+            "retention_days": None,
             "policy": Path(self._qa_input("#qa-policy")).expanduser() if self._qa_input("#qa-policy") else None,
             "coverage": self._qa_path_list(self._qa_input("#qa-coverage")),
             "baseline_coverage": self._qa_path_list(self._qa_input("#qa-baseline-coverage")),
             "sarif": self._qa_path_list(self._qa_input("#qa-sarif")),
             "suite_prefix": self._qa_input("#qa-suite-prefix"),
         }
+        retention_text = self._qa_input("#qa-retention-days")
+        if retention_text:
+            try:
+                values["retention_days"] = int(retention_text)
+            except ValueError as exc:
+                raise ValueError("retention days must be an integer") from exc
+            if values["retention_days"] < 1:
+                raise ValueError("retention days must be at least 1")
+        if not values["run_id"]:
+            raise ValueError("history run ID must not be empty")
+        return values
+
+    @staticmethod
+    def _effective_qa_policy(policy: dict, environment: str) -> dict:
+        """Return the validated rules that the gate will actually evaluate."""
+        environments = policy.get("environments") or {}
+        if environment and environment not in environments:
+            raise ValueError(f"quality-gate policy has no environment named {environment!r}")
+        rules = dict(policy.get("rules") or {})
+        if environment:
+            rules.update(environments[environment])
+        return {
+            "version": policy.get("version", "unknown"),
+            "environment": environment or "default",
+            "rules": rules,
+        }
+
+    def _render_qa_policy_preview(
+        self,
+        policy: dict | None = None,
+        environment: str = "",
+        error: Exception | None = None,
+    ) -> None:
+        """Show the policy accepted by the same validator used by the gate."""
+        try:
+            preview = self.query_one("#qa-policy-preview", Static)
+        except Exception:
+            return
+        if error is not None:
+            preview.update(
+                "[bold red]ACTIVE QUALITY POLICY[/bold red]\n"
+                f"[red]Invalid policy: {escape(error)}[/red]"
+            )
+            return
+        if policy is None:
+            preview.update(
+                "[dim]Gate policy: No policy loaded. Enter a policy path to preview validated active rules "
+                "before running the gate.[/dim]"
+            )
+            return
+        effective = self._effective_qa_policy(policy, environment)
+        lines = [
+            "[bold #f0f6fc]ACTIVE QUALITY POLICY[/bold #f0f6fc]",
+            f"version: {escape(effective['version'])}  •  environment: {escape(effective['environment'])}",
+            "rules:",
+        ]
+        for name, value in sorted(effective["rules"].items()):
+            if isinstance(value, dict):
+                details = ", ".join(
+                    f"{escape(key)}={escape(item)}" for key, item in sorted(value.items())
+                )
+            else:
+                details = escape(value)
+            lines.append(f"  {escape(name)}: {details}")
+        preview.update("\n".join(lines))
+
+    def _update_qa_status_cards(self) -> None:
+        try:
+            card_hist = self.query_one("#qa-card-history", Static)
+            card_gate = self.query_one("#qa-card-gate", Static)
+            card_sig = self.query_one("#qa-card-signal", Static)
+        except Exception:
+            return
+
+        from hound.qa.history import default_history_store, count_by_status
+        hist_file = default_history_store(self.out_dir)
+        if hist_file.is_file():
+            try:
+                counts = count_by_status(hist_file)
+                total = sum(counts.values())
+                passed = counts.get("passed", 0)
+                failed = counts.get("failed", 0)
+                card_hist.update(
+                    "[bold #8f8f8f]TEST HISTORY DATABASE[/bold #8f8f8f]\n"
+                    f"[green]ready[/green] · [b]{total}[/b] run(s)\n"
+                    f"[dim]{passed} passed, {failed} failed · 90d window[/dim]"
+                )
+            except Exception:
+                card_hist.update(
+                    "[bold #8f8f8f]TEST HISTORY DATABASE[/bold #8f8f8f]\n"
+                    "[green]ready[/green] (active)\n"
+                    "[dim]default 90d window[/dim]"
+                )
+        else:
+            card_hist.update(
+                "[bold #8f8f8f]TEST HISTORY DATABASE[/bold #8f8f8f]\n"
+                "[dim]empty (not initialized)[/dim]\n"
+                "[dim]run 'Import to history' to seed[/dim]"
+            )
+
+        payload = getattr(self, "_qa_result", None)
+        if payload and payload.get("type") == "gate":
+            gate_res = payload.get("result", {})
+            outcome = gate_res.get("policy_outcome", "unknown").upper()
+            status_color = "green" if outcome == "PASS" else "red" if outcome == "BLOCK" else "yellow"
+            card_gate.update(
+                "[bold #8f8f8f]RELEASE QUALITY GATE[/bold #8f8f8f]\n"
+                f"[{status_color}]{outcome}[/{status_color}] · {'enforced' if gate_res.get('enforced', True) else 'advisory'}\n"
+                f"[dim]{len(gate_res.get('violations', []))} violation(s)[/dim]"
+            )
+        else:
+            policy_input = self.query("#qa-policy").first(Input)
+            policy_val = policy_input.value.strip() if policy_input else ""
+            if policy_val and Path(policy_val).is_file():
+                card_gate.update(
+                    "[bold #8f8f8f]RELEASE QUALITY GATE[/bold #8f8f8f]\n"
+                    "[yellow]policy ready[/yellow]\n"
+                    "[dim]ready to evaluate candidate ref[/dim]"
+                )
+            else:
+                card_gate.update(
+                    "[bold #8f8f8f]RELEASE QUALITY GATE[/bold #8f8f8f]\n"
+                    "[dim]no policy loaded[/dim]\n"
+                    "[dim]specify policy file to run gate[/dim]"
+                )
+
+        if payload and payload.get("type") == "insights":
+            classifications = payload.get("classifications") or []
+            flaky_cnt = sum(1 for c in classifications if c.get("category") == "flaky")
+            regress_cnt = sum(1 for c in classifications if c.get("category") == "regression")
+            sig_color = "yellow" if flaky_cnt > 0 else "green"
+            card_sig.update(
+                "[bold #8f8f8f]REGRESSION SIGNAL[/bold #8f8f8f]\n"
+                f"[{sig_color}]{len(classifications)} test(s) analyzed[/{sig_color}]\n"
+                f"[dim]{flaky_cnt} flaky · {regress_cnt} regression(s)[/dim]"
+            )
+        elif self._current_qa_classifications:
+            classifications = self._current_qa_classifications
+            flaky_cnt = sum(1 for c in classifications if c.get("category") == "flaky")
+            regress_cnt = sum(1 for c in classifications if c.get("category") == "regression")
+            card_sig.update(
+                "[bold #8f8f8f]REGRESSION SIGNAL[/bold #8f8f8f]\n"
+                f"[green]{len(classifications)} active run test(s)[/green]\n"
+                f"[dim]{flaky_cnt} flaky · {regress_cnt} regression(s)[/dim]"
+            )
+        else:
+            card_sig.update(
+                "[bold #8f8f8f]REGRESSION SIGNAL[/bold #8f8f8f]\n"
+                "[dim]idle[/dim]\n"
+                "[dim]run 'Analyze test evidence' for signals[/dim]"
+            )
+
+    def _refresh_qa_policy_preview(self) -> None:
+        """Validate and render the current policy without starting a gate."""
+        try:
+            policy_text = self._qa_input("#qa-policy")
+            environment = self._qa_input("#qa-environment")
+        except Exception:
+            return
+        if not policy_text:
+            self._render_qa_policy_preview()
+            return
+        try:
+            from hound.qa.gate import load_gate_policy
+
+            policy = load_gate_policy(Path(policy_text).expanduser())
+            self._effective_qa_policy(policy, environment)
+        except Exception as exc:  # noqa: BLE001 - validation text is rendered in the QA surface
+            self._render_qa_policy_preview(error=exc)
+            return
+        self._render_qa_policy_preview(policy, environment)
 
     @staticmethod
     def _collect_qa_results(values: dict) -> tuple[list, list[str]]:
@@ -3314,7 +4034,7 @@ class RcaTui(App):
             return
 
     def _set_qa_buttons(self, disabled: bool) -> None:
-        for selector in ("#qa-analyze", "#qa-gate", "#qa-load-history"):
+        for selector in ("#qa-analyze", "#qa-import-history", "#qa-gate", "#qa-load-history"):
             button = self.query(selector).first(Button)
             if button is not None:
                 button.disabled = disabled
@@ -3334,6 +4054,18 @@ class RcaTui(App):
             self._set_qa_status("error", message)
             self.notify(message, severity="error")
             return
+        if operation == "gate":
+            try:
+                from hound.qa.gate import load_gate_policy
+
+                policy = load_gate_policy(values["policy"])
+                self._effective_qa_policy(policy, values["environment"])
+                self._render_qa_policy_preview(policy, values["environment"])
+            except Exception as exc:  # noqa: BLE001 - fail before evidence processing and show the validation error
+                self._render_qa_policy_preview(error=exc)
+                self._set_qa_status("error", f"Quality gate policy is invalid: {exc}")
+                self.notify(f"Quality gate policy is invalid: {exc}", severity="error")
+                return
         self._qa_busy = True
         self._qa_result = None
         self._set_qa_buttons(True)
@@ -3368,6 +4100,24 @@ class RcaTui(App):
                     "history": str(store) if store else None,
                     "skipped": skipped,
                     "classifications": [item.to_dict() for item in classifications],
+                }
+            elif operation == "import":
+                results, skipped = self._collect_qa_results(values)
+                from hound.qa.history import default_history_store, retain, upsert_results
+
+                store = values["history"] or default_history_store(self.out_dir)
+                imported = upsert_results(store, results)
+                retained = 0
+                if values.get("retention_days") is not None:
+                    retained = retain(store, int(values["retention_days"]))
+                payload = {
+                    "type": "import",
+                    "source": str(values["source"]),
+                    "store": str(store),
+                    "run_id": values["run_id"],
+                    "imported": imported,
+                    "retained": retained,
+                    "skipped": skipped,
                 }
             elif operation == "gate":
                 from hound.qa.service import run_quality_gate
@@ -3423,11 +4173,17 @@ class RcaTui(App):
             count = len(payload.get("classifications") or [])
             self._set_qa_status("success", f"Classified {count} test(s)")
             self._apply_qa_classifications_to_overview(payload.get("classifications") or [], payload.get("source"))
+        elif payload and payload.get("type") == "import":
+            self._set_qa_status(
+                "success",
+                f"Imported {payload.get('imported', 0)} test result(s) into history",
+            )
         elif payload and payload.get("type") == "history":
             self._set_qa_status("success", f"Loaded {len(payload.get('tests') or [])} tracked test(s)")
         elif payload and payload.get("type") == "stats":
             stats = payload.get("stats") or {}
             self._set_qa_status("success", f"Loaded statistics for {stats.get('suite', '')}::{stats.get('test', '')}")
+        self._update_qa_status_cards()
         self._render_qa_result()
 
     def _render_qa_result(self) -> None:
@@ -3460,6 +4216,22 @@ class RcaTui(App):
             if payload.get("skipped"):
                 lines.append(f"skipped: {len(payload['skipped'])} unsupported artifact(s)")
             lines += ["", _qa_classification_text(payload.get("classifications") or [], title="Historical regression / flaky signal")]
+            result.update("\n".join(lines))
+            return
+        if kind == "import":
+            self._qa_history_tests = []
+            history_list.clear()
+            skipped = payload.get("skipped") or []
+            lines = [
+                "[bold #f0f6fc]HISTORY IMPORT COMPLETE[/bold #f0f6fc]",
+                f"source: {escape(payload.get('source') or '')}",
+                f"store: {escape(payload.get('store') or '')}",
+                f"run ID: {escape(payload.get('run_id') or '')}",
+                f"imported: {escape(payload.get('imported', 0))}",
+                f"retained: {escape(payload.get('retained', 0))}",
+            ]
+            if skipped:
+                lines.append(f"skipped: {len(skipped)} unsupported artifact(s)")
             result.update("\n".join(lines))
             return
         if kind == "gate":
@@ -3590,12 +4362,9 @@ class RcaTui(App):
     def _apply_qa_classifications_to_overview(self, classifications: list[dict], source: str | None) -> None:
         if not self._current_doc or not source:
             return
-        try:
-            current = Path(source).resolve()
-            raw = self._resolve_raw_path(self._current_doc).resolve()
-        except OSError:
-            return
-        if current != raw:
+        current = self._safe_raw_path(Path(source))
+        raw = self._resolve_raw_path(self._current_doc)
+        if current is None or raw is None or current != raw:
             return
         self._current_qa_classifications = classifications
         self._render_current_overview()
@@ -3625,7 +4394,7 @@ class RcaTui(App):
                 self._refresh_artifact_selection([target])
         elif list_view.id == "results-workspace-list":
             if not isinstance(list_view, ResultsListView) or not list_view.consume_mouse_click(event.item):
-                self._open_workspace_result()
+                self.action_open_selected_result()
         elif list_view.id == "qa-history-list" and index < len(self._qa_history_tests):
             self._load_qa_stats(self._qa_history_tests[index])
 
@@ -3645,11 +4414,9 @@ class RcaTui(App):
         elif event.button.id == "stop-analysis":
             self.action_stop_analysis()
         elif event.button.id == "workspace-select-all":
-            self._set_selected_artifacts(self._visible_log_files)
-            self._refresh_artifact_selection()
+            self.action_select_all_workspace()
         elif event.button.id == "workspace-deselect-all":
-            self._clear_selected_artifacts()
-            self._refresh_artifact_selection()
+            self.action_deselect_all_workspace()
         elif event.button.id == "artifact-prev":
             self.action_prev_page()
         elif event.button.id == "artifact-next":
@@ -3665,16 +4432,7 @@ class RcaTui(App):
         elif event.button.id == "results-feedback":
             self.action_open_feedback()
         elif event.button.id == "workspace-analyze":
-            if self._selected_artifacts:
-                self._analyze_batch_targets(self._selected_artifact_order)
-            else:
-                workspace = self.query_one("#artifact-workspace-list", ListView)
-                if workspace.index is not None:
-                    page_start = (self._artifact_page - 1) * PAGE_SIZE
-                    idx = page_start + workspace.index
-                    if idx < len(self._visible_log_files):
-                        self._selected_log = self._visible_log_files[idx]
-                self.action_analyze()
+            self.action_analyze()
         elif event.button.id == "workspace-browse":
             self.action_browse_directory()
         elif event.button.id in {"workspace-refresh", "workspace-reload"}:
@@ -3682,13 +4440,11 @@ class RcaTui(App):
         elif event.button.id == "workspace-analyze-all":
             self.action_analyze_all()
         elif event.button.id == "results-select-all":
-            self._set_selected_runs([Path(item["path"]) for item in self._filtered_runs])
-            self._refresh_results_selection()
+            self.action_select_all_workspace()
         elif event.button.id == "results-deselect-all":
-            self._clear_selected_runs()
-            self._refresh_results_selection()
+            self.action_deselect_all_workspace()
         elif event.button.id == "open-workspace-result":
-            self._open_workspace_result(use_selection=True)
+            self.action_open_selected_result()
         elif event.button.id == "clear-selected":
             self.action_clear_selected_result()
         elif event.button.id == "clear-all":
@@ -3703,8 +4459,16 @@ class RcaTui(App):
             self._show_workspace("qa")
         elif event.button.id == "nav-investigation":
             self._show_workspace("investigation")
+        elif event.button.id == "context-validate":
+            self.action_validate_context()
+        elif event.button.id == "context-feedback":
+            self.action_open_feedback()
+        elif event.button.id == "context-copy-summary":
+            self.action_copy_validation_summary()
         elif event.button.id == "qa-analyze":
             self._start_qa_operation("analyze")
+        elif event.button.id == "qa-import-history":
+            self._start_qa_operation("import")
         elif event.button.id == "qa-gate":
             self._start_qa_operation("gate")
         elif event.button.id == "qa-load-history":
@@ -3731,6 +4495,65 @@ class RcaTui(App):
 
     def action_show_investigation(self) -> None:
         self._show_workspace("investigation")
+
+    def action_validate_context(self) -> None:
+        """Revalidate the selected report on disk and persist to validation store."""
+        if self._current_doc is None:
+            self.notify("Open a stored run before validating Context", severity="warning")
+            return
+        if self._current_run_dir is None:
+            self._refresh_current_context()
+            readiness = _context_readiness(self._current_doc)
+            if readiness["valid"]:
+                self.notify("Context validated; readiness refreshed", timeout=3)
+            else:
+                self.notify(f"Context validation failed: {readiness['validation']}", severity="error", timeout=6)
+            return
+
+        report_path = self._current_run_dir / "report.json"
+        if not report_path.is_file():
+            self.notify(f"Report file not found: {report_path}", severity="error", timeout=6)
+            return
+
+        from hound.validation import validate_report
+        record = validate_report(report_path, output_root=self.out_dir, persist=True)
+        self._current_validation = record
+
+        try:
+            from hound.output.report import load_report
+            self._current_doc = load_report(self._current_run_dir)
+        except Exception:
+            pass
+
+        self._refresh_current_context()
+
+        if record.status == "PASS":
+            self.notify(f"Report validation PASS ({record.validation_id})", timeout=4)
+        elif record.status == "WARN":
+            self.notify(f"Report validation WARN: {record.summary}", severity="warning", timeout=6)
+        else:
+            self.notify(f"Report validation FAIL: {record.summary}", severity="error", timeout=8)
+
+    def action_copy_validation_summary(self) -> None:
+        """Copy formatted validation summary markdown to clipboard."""
+        val = getattr(self, "_current_validation", None)
+        if val is None and self._current_run_dir:
+            from hound.validation import default_validation_store, get_latest_validation, validate_report
+            v_store = default_validation_store(self.out_dir)
+            val = get_latest_validation(v_store, self._current_run_dir.name) if v_store.is_file() else None
+            if val is None:
+                rep = self._current_run_dir / "report.json"
+                if rep.is_file():
+                    val = validate_report(rep, output_root=self.out_dir, persist=True)
+        if val is None:
+            self.notify("No validation record to copy", severity="warning")
+            return
+        from hound.validation import format_validation_markdown
+        rep_path = self._current_run_dir / "report.json" if self._current_run_dir else None
+        is_stale = val.is_stale(rep_path) if rep_path else False
+        content = format_validation_markdown(val, is_stale=is_stale)
+        self.copy_to_clipboard(content)
+        self.notify("Validation summary copied", timeout=3)
 
     def action_open_feedback(self) -> None:
         run_dir = self._current_run_dir
@@ -3843,8 +4666,40 @@ class RcaTui(App):
     def action_unfocus(self) -> None:
         if self.focused is not None:
             self.set_focus(None)
-        else:
-            self.action_back()
+
+    def action_select_all_workspace(self) -> None:
+        artifacts_ws = self.query("#artifact-workspace").first(Vertical)
+        if artifacts_ws is not None and artifacts_ws.display:
+            self._set_selected_artifacts(self._visible_log_files)
+            self._refresh_artifact_selection()
+            return
+        results_ws = self.query("#results-workspace").first(Vertical)
+        if results_ws is not None and results_ws.display:
+            self._set_selected_runs([Path(item["path"]) for item in self._filtered_runs])
+            self._refresh_results_selection()
+
+    def action_deselect_all_workspace(self) -> None:
+        artifacts_ws = self.query("#artifact-workspace").first(Vertical)
+        if artifacts_ws is not None and artifacts_ws.display:
+            self._clear_selected_artifacts()
+            self._refresh_artifact_selection()
+            return
+        results_ws = self.query("#results-workspace").first(Vertical)
+        if results_ws is not None and results_ws.display:
+            self._clear_selected_runs()
+            self._refresh_results_selection()
+
+    def action_stop_or_clear_selected(self) -> None:
+        results_ws = self.query("#results-workspace").first(Vertical)
+        if results_ws is not None and results_ws.display:
+            self.action_clear_selected_result()
+            return
+        self.action_stop_analysis()
+
+    def action_clear_all_workspace(self) -> None:
+        results_ws = self.query("#results-workspace").first(Vertical)
+        if results_ws is not None and results_ws.display:
+            self.action_clear_all_results()
 
     def action_focus_file_list(self) -> None:
         # If in artifacts workspace, focus artifact list
@@ -3918,6 +4773,9 @@ class RcaTui(App):
                 jobs=self.jobs,
                 max_llm_calls=self.max_llm_calls,
                 max_cost_usd=self.max_cost_usd,
+                redact=self.redact,
+                no_dedup=self.no_dedup,
+                max_retries=self.max_retries,
             )
         except OSError as exc:
             self.notify(f"Mode was not saved: {exc}", severity="error", timeout=5)
@@ -3930,7 +4788,18 @@ class RcaTui(App):
         self.notify(f"Mode set to {mode}", timeout=2)
 
     def action_copy_report(self) -> None:
+        inv_ws = self.query("#investigation-workspace").first(Vertical)
+        if inv_ws is not None and inv_ws.display:
+            self.action_copy_validation_summary()
+            return
         self._copy_markdown("#report", "report")
+
+    def copy_to_clipboard(self, text: str) -> None:
+        self._clipboard = text
+        try:
+            super().copy_to_clipboard(text)
+        except Exception:
+            pass
 
     def action_copy_ticket(self) -> None:
         self._copy_markdown("#ticket", "ticket")
@@ -3947,6 +4816,11 @@ class RcaTui(App):
             self.notify(f"Copy failed: {exc}", severity="error")
 
     def action_refresh(self) -> None:
+        artifacts_ws = self.query("#artifact-workspace").first(Vertical)
+        if artifacts_ws is not None and artifacts_ws.display:
+            self._load_directory()
+            self.notify("Directory reloaded", timeout=2)
+            return
         query = self.query_one("#log-filter", Input).value
         self._scan_logs(query)
         self._scan_runs()
@@ -3974,6 +4848,12 @@ class RcaTui(App):
             target = opened_runs[0]
         self._load_run(target, navigation_runs=opened_runs)
 
+    def action_open_selected_result(self) -> None:
+        if not self._selected_runs:
+            self.notify("Select a result to open", severity="warning")
+            return
+        self._open_workspace_result(use_selection=True)
+
     def action_clear_selected_result(self) -> None:
         if self._analyzing:
             self.notify("Stop analysis before clearing results", severity="warning")
@@ -3981,14 +4861,7 @@ class RcaTui(App):
         if self._selected_runs:
             self.push_screen(ClearResultsScreen(self, self._selected_run_order))
             return
-        list_view = self.query_one("#results-workspace-list", ListView)
-        idx = list_view.index if list_view.index is not None else 0
-        page_start = (self._results_page - 1) * PAGE_SIZE
-        target_idx = page_start + idx
-        if target_idx >= len(self._filtered_runs):
-            self.notify("Select a result to clear", severity="warning")
-            return
-        self.push_screen(ClearResultsScreen(self, [Path(self._filtered_runs[target_idx]["path"])]))
+        self.notify("Select a result to clear", severity="warning")
 
     def action_clear_all_results(self) -> None:
         if self._analyzing:
@@ -4024,7 +4897,7 @@ class RcaTui(App):
         # If in results workspace, open selected result
         results_ws = self.query("#results-workspace").first(Vertical)
         if results_ws is not None and results_ws.display:
-            self._open_workspace_result()
+            self.action_open_selected_result()
             return
 
         # If in artifacts workspace, toggle selection
@@ -4049,12 +4922,21 @@ class RcaTui(App):
         self._set_state("loading", f"Analyzing {self._selected_log.name if self._selected_log else 'log'} • {stage}")
 
     def action_analyze(self) -> None:
+        artifacts_ws = self.query("#artifact-workspace").first(Vertical)
+        if artifacts_ws is not None and artifacts_ws.display:
+            if not self._selected_artifacts:
+                self.notify("Select at least one artifact to analyze", severity="warning")
+                return
+            self._analyze_batch_targets(self._selected_artifact_order)
+            return
         if self._analyzing:
             self.notify("Analysis already in progress", severity="warning")
             return
-        if not self._selected_log or not self._selected_log.is_file():
+        selected_log = self._safe_raw_path(self._selected_log) if self._selected_log is not None else None
+        if selected_log is None:
             self._set_state("empty", "Select a valid .log file first")
             return
+        self._selected_log = selected_log
         self._stop_requested.clear()
         self._analyzing = True
         self._current_doc = None
@@ -4081,7 +4963,7 @@ class RcaTui(App):
             "source_class": self.source_class,
             "out_dir": self.out_dir / f"run-{uuid4().hex[:12]}",
         }
-        coro = self._analyze(self._selected_log, request)
+        coro = self._analyze(selected_log, request)
         try:
             self.run_worker(coro, thread=False, name="analyze-coroutine")
         except Exception as exc:
@@ -4175,8 +5057,8 @@ class RcaTui(App):
                 if self.is_mounted:
                     if analyze_button is not None:
                         analyze_button.label = "Analyze selected log"
-                    stop_button = self.query("#stop-analysis").first(Button)
-                    if stop_button is not None:
+                    stop_button = next(iter(self.query("#stop-analysis")), None)
+                    if isinstance(stop_button, Button):
                         stop_button.disabled = False
                     self._set_analysis_enabled()
             finally:
@@ -4199,11 +5081,10 @@ class RcaTui(App):
         self._scan_runs()
         self._set_state("success", f"Analysis complete in {self._last_duration:.2f}s")
         self.notify("Analysis complete", timeout=3)
-        self.notify("Analysis complete", timeout=3)
 
     def action_analyze_all(self) -> None:
         """Analyze every visible artifact through a bounded worker pool."""
-        targets = [path for path in self._visible_log_files if path.is_file()]
+        targets = [safe for path in self._visible_log_files if (safe := self._safe_raw_path(path)) is not None]
         self._analyze_batch_targets(targets)
 
     def _analyze_batch_targets(self, targets: list[Path]) -> None:
@@ -4211,7 +5092,7 @@ class RcaTui(App):
         if self._analyzing:
             self.notify("Analysis already in progress", severity="warning")
             return
-        targets = [path for path in targets if path.is_file()]
+        targets = [safe for path in targets if (safe := self._safe_raw_path(path)) is not None]
         if not targets:
             self._set_state("empty", "No visible logs to analyze")
             return
@@ -4515,6 +5396,7 @@ class RcaTui(App):
 
     def _refresh_current_context(self) -> None:
         try:
+            self.query_one("#context-status", Static).update(_context_status_text(self._current_doc))
             self.query_one("#investigation", Static).update(
                 _investigation_text(
                     self._current_doc,
@@ -4522,10 +5404,157 @@ class RcaTui(App):
                     feedback=self._feedback_records(self._current_run_dir),
                 )
             )
+
+            from hound.validation import (
+                default_validation_store,
+                get_latest_validation,
+                validate_report,
+                ValidationRecord,
+                ValidationCheck,
+            )
+            v_store = default_validation_store(self.out_dir)
+            val: ValidationRecord | None = None
+            is_stale = False
+
+            if self._current_run_dir:
+                report_file = self._current_run_dir / "report.json"
+                if report_file.is_file():
+                    if v_store.is_file():
+                        val = get_latest_validation(v_store, self._current_run_dir.name)
+                    if val is None or val.is_stale(report_file):
+                        is_stale = val is not None and val.is_stale(report_file)
+                        val = validate_report(report_file, persist=False)
+                    else:
+                        is_stale = False
+            elif self._current_doc:
+                readiness = _context_readiness(self._current_doc)
+                pass_status = "PASS" if readiness["valid"] else "WARN" if "legacy" in readiness["schema"] else "FAIL"
+                val = ValidationRecord(
+                    validation_id="val-inmemory",
+                    run_id="current-run",
+                    report_path="",
+                    report_sha256="",
+                    schema_version=str(self._current_doc.get("schema_version", "2.0")),
+                    status=pass_status,
+                    summary=f"Readiness: {readiness['validation']}",
+                    checks=[
+                        ValidationCheck(name="schema", status=pass_status, message=readiness["schema"]),
+                        ValidationCheck(
+                            name="connector",
+                            status="PASS" if "ready" in readiness["connector"] or "audit(s)" in readiness["connector"] else "WARN",
+                            message=readiness["connector"],
+                        ),
+                        ValidationCheck(
+                            name="observability",
+                            status="PASS" if "present" in readiness["observability"] else "WARN",
+                            message=readiness["observability"],
+                        ),
+                    ],
+                    created_at="",
+                )
+
+            self._current_validation = val
+
+            card_integrity = self.query("#context-card-integrity").first(Static)
+            card_trust = self.query("#context-card-trust").first(Static)
+            card_impact = self.query("#context-card-impact").first(Static)
+            val_summary = self.query("#context-validation-summary").first(Static)
+
+            if card_integrity is not None:
+                if val is not None:
+                    if is_stale:
+                        stat_color = "yellow"
+                        status_label = "STALE"
+                        sub_text = "[yellow]Report modified since last validation run[/yellow]"
+                    else:
+                        stat_color = "green" if val.status == "PASS" else "yellow" if val.status == "WARN" else "red"
+                        status_label = val.status
+                        sub_text = f"schema v{val.schema_version} · SHA: {val.report_sha256[:10]}…" if val.report_sha256 else f"schema v{val.schema_version}"
+                    card_integrity.update(
+                        "[bold #8f8f8f]REPORT INTEGRITY[/bold #8f8f8f]\n"
+                        f"[{stat_color}][{status_label}][/{stat_color}] {val.validation_id}\n"
+                        f"[dim]{sub_text}[/dim]"
+                    )
+                else:
+                    card_integrity.update(
+                        "[bold #8f8f8f]REPORT INTEGRITY[/bold #8f8f8f]\n"
+                        "[dim]NOT VALIDATED[/dim]\n"
+                        "[dim]press 'u' to validate stored report[/dim]"
+                    )
+
+            if card_trust is not None:
+                if self._current_doc:
+                    trust_meta = self._current_doc.get("meta", {}).get("trust", {})
+                    src_class = trust_meta.get("source_class", "unknown") if isinstance(trust_meta, dict) else "unknown"
+                    if src_class == "fork_pr":
+                        trust_str = "[red]fork_pr[/red] (fail-closed, external blocked)"
+                    elif src_class in {"trusted_branch", "local_artifact"}:
+                        trust_str = f"[green]{src_class}[/green] (read-only allowed)"
+                    else:
+                        trust_str = f"[yellow]{src_class}[/yellow] (unspecified)"
+                    card_trust.update(
+                        "[bold #8f8f8f]TRUST & CAPABILITIES[/bold #8f8f8f]\n"
+                        f"{trust_str}\n"
+                        "[dim]Fail-closed boundary verified[/dim]"
+                    )
+                else:
+                    card_trust.update(
+                        "[bold #8f8f8f]TRUST & CAPABILITIES[/bold #8f8f8f]\n"
+                        "[dim]not loaded[/dim]"
+                    )
+
+            if card_impact is not None:
+                if self._current_doc:
+                    devops = self._current_doc.get("devops", {}) if isinstance(self._current_doc.get("devops"), dict) else {}
+                    triage = self._current_doc.get("triage", {}) if isinstance(self._current_doc.get("triage"), dict) else {}
+                    timeline = self._current_doc.get("timeline", {}) if isinstance(self._current_doc.get("timeline"), dict) else {}
+                    sev = str(devops.get("effective_severity") or triage.get("severity") or "unknown")
+                    impact = str(timeline.get("customer_impact") or "unknown")
+                    slo = devops.get("slo", {}) if isinstance(devops.get("slo"), dict) else {}
+                    budget = slo.get("error_budget_remaining", "n/a")
+                    sev_color = "red" if sev in {"critical", "high"} else "yellow" if sev == "medium" else "dim"
+                    card_impact.update(
+                        "[bold #8f8f8f]OPERATIONAL IMPACT[/bold #8f8f8f]\n"
+                        f"[{sev_color}]severity: {sev}[/{sev_color}] · impact: {impact}\n"
+                        f"[dim]SLO error budget: {budget}[/dim]"
+                    )
+                else:
+                    card_impact.update(
+                        "[bold #8f8f8f]OPERATIONAL IMPACT[/bold #8f8f8f]\n"
+                        "[dim]not loaded[/dim]"
+                    )
+
+            if val_summary is not None:
+                if val is not None and val.checks:
+                    checks_lines = [
+                        "[bold #b8b8b8]Integrity Checks & Audit Breakdown[/bold #b8b8b8]",
+                    ]
+                    for chk in val.checks:
+                        c_color = "green" if chk.status == "PASS" else "yellow" if chk.status == "WARN" else "red"
+                        symbol = "✓" if chk.status == "PASS" else "!" if chk.status == "WARN" else "✗"
+                        checks_lines.append(
+                            f"  [{c_color}][{symbol}] {chk.name} ({chk.status})[/{c_color}] — [dim]{chk.message}[/dim]"
+                        )
+                    val_summary.update("\n".join(checks_lines))
+                    val_summary.display = True
+                else:
+                    val_summary.display = False
+
+            context_validate = self.query("#context-validate").first(Button)
+            if context_validate is not None:
+                context_validate.disabled = self._analyzing or self._current_doc is None
+
+            context_feedback = self.query("#context-feedback").first(Button)
+            if context_feedback is not None:
+                context_feedback.disabled = self._analyzing or self._current_doc is None
+
+            context_copy = self.query("#context-copy-summary").first(Button)
+            if context_copy is not None:
+                context_copy.disabled = self._analyzing or val is None
         except Exception:
             return
 
-    def _start_historical_qa(self, doc: dict, raw_path: Path) -> None:
+    def _start_historical_qa(self, doc: dict, raw_path: Path | None) -> None:
         failed_tests = doc.get("failure", {}).get("failed_tests", [])
         if not isinstance(failed_tests, list) or not failed_tests:
             self._current_qa_classifications = None
@@ -4554,7 +5583,7 @@ class RcaTui(App):
                 from hound.qa.normalize import import_artifact
 
                 results = []
-                if raw_path.is_file() and not raw_path.is_symlink():
+                if raw_path is not None:
                     try:
                         results = import_artifact(raw_path, run_id, commit, branch, "")
                     except ValueError:
@@ -4630,10 +5659,13 @@ class RcaTui(App):
         ticket_file = target_dir / "ticket.md"
         if not ticket_file.exists():
             ticket_file = self.out_dir / "ticket.md"
-        ticket_content = ticket_file.read_text(encoding="utf-8", errors="replace") if ticket_file.exists() else "_Ticket draft unavailable._"
+        try:
+            ticket_content = read_bounded_text(ticket_file, MAX_REPORT_BYTES, encoding="utf-8", errors="replace")
+        except (OSError, RuntimeError, ValueError):
+            ticket_content = "_Ticket draft unavailable._"
         self._update_markdown("#ticket", _markdown_without_fences(ticket_content))
         raw_path = self._resolve_raw_path(doc)
-        self._selected_log = raw_path if raw_path.is_file() else self._selected_log
+        self._selected_log = raw_path
         self._show_raw(raw_path)
         self._refresh_current_context()
         self._set_analysis_enabled()
@@ -4646,22 +5678,52 @@ class RcaTui(App):
             self._ticket_markdown = content
         self.query_one(selector, Markdown).update(content)
 
-    def _show_raw(self, path: Path) -> None:
-        self.query_one("#raw-header", Static).update(
-            _result_header("Raw log", path.name or "Source output", "Original artifact used for this investigation.")
-        )
-        self.query_one("#raw", Static).update(self._read_raw(path))
+    def _safe_raw_path(self, path: Path) -> Path | None:
+        """Return a regular log below ``logs_dir`` or reject it fail-closed."""
+        try:
+            root = self.logs_dir.expanduser()
+            candidate = Path(path).expanduser()
+            if (
+                path_has_symlink(root)
+                or root.is_symlink()
+                or not root.is_dir()
+                or path_has_symlink(candidate)
+                or candidate.is_symlink()
+            ):
+                return None
+            resolved_root = root.resolve(strict=True)
+            resolved = candidate.resolve(strict=True)
+            if resolved == resolved_root or resolved_root not in resolved.parents or not resolved.is_file():
+                return None
+            return resolved
+        except (OSError, RuntimeError):
+            return None
 
-    def _resolve_raw_path(self, doc: dict) -> Path:
+    def _show_raw(self, path: Path | None) -> None:
+        safe_path = self._safe_raw_path(path) if path is not None else None
+        display_name = safe_path.name if safe_path is not None else "Source output"
+        self.query_one("#raw-header", Static).update(
+            _result_header("Raw log", display_name, "Original artifact used for this investigation.")
+        )
+        self.query_one("#raw", Static).update(
+            self._read_raw(safe_path) if safe_path is not None else "[dim](raw log unavailable)[/dim]"
+        )
+
+    def _resolve_raw_path(self, doc: dict) -> Path | None:
         from hound.ingest.redact import redact_text
 
-        stored = doc["meta"]["log_file"]
+        stored = doc.get("meta", {}).get("log_file") if isinstance(doc.get("meta"), dict) else None
+        if not isinstance(stored, str):
+            return None
         candidates = self._visible_log_files or self._log_files
         for candidate in candidates:
-            resolved = str(candidate.resolve())
+            safe_candidate = self._safe_raw_path(candidate)
+            if safe_candidate is None:
+                continue
+            resolved = str(safe_candidate)
             if resolved == stored or redact_text(resolved)[0] == stored:
-                return candidate
-        return Path(stored)
+                return safe_candidate
+        return None
 
     def _load_run(
         self,
@@ -4672,8 +5734,8 @@ class RcaTui(App):
     ) -> None:
         report = run_dir / "report.json"
         try:
-            doc = _json.loads(report.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            doc = _read_stored_report(report)
+        except (OSError, RuntimeError, ValueError):
             self._set_state("error", "Could not read selected run")
             self.notify("Could not read report.json", severity="error")
             return
@@ -4684,27 +5746,44 @@ class RcaTui(App):
     @staticmethod
     def _read_raw(path: Path) -> str:
         try:
-            size = path.stat().st_size
-            if size > RAW_LIMIT:
-                with path.open("rb") as file:
-                    file.seek(size - RAW_LIMIT)
-                    raw_bytes = file.read()
-                text = raw_bytes.decode("utf-8", errors="replace")
-                return f"[dim][truncated to last {RAW_LIMIT} bytes][/dim]\n" + escape(text)
-            return escape(path.read_text(encoding="utf-8", errors="replace"))
-        except OSError:
+            fd = open_verified_regular(path)
+            try:
+                with os.fdopen(fd, "rb") as file:
+                    fd = -1
+                    size = os.fstat(file.fileno()).st_size
+                    if size > RAW_LIMIT:
+                        file.seek(max(0, size - RAW_LIMIT))
+                        raw_bytes = file.read(RAW_LIMIT)
+                        truncated = True
+                    else:
+                        raw_bytes = file.read(RAW_LIMIT + 1)
+                        truncated = len(raw_bytes) > RAW_LIMIT
+                        if truncated:
+                            size = os.fstat(file.fileno()).st_size
+                            file.seek(max(0, size - RAW_LIMIT))
+                            raw_bytes = file.read(RAW_LIMIT)
+            finally:
+                if fd >= 0:
+                    os.close(fd)
+            text = raw_bytes.decode("utf-8", errors="replace")
+            prefix = f"[dim][truncated to last {RAW_LIMIT} bytes][/dim]\n" if truncated else ""
+            return prefix + escape(text)
+        except (OSError, RuntimeError, ValueError):
             return "[dim](raw log unavailable)[/dim]"
 
 
 def clear_managed_results(output_root: Path, run_dirs: list[Path]) -> tuple[int, int]:
     """Remove validated, immediate managed run directories below an owned output root."""
     from hound.output.report import OUTPUT_MARKER, OUTPUT_MARKER_CONTENT
+    from hound.pathutil import path_has_symlink
 
+    if path_has_symlink(output_root) or output_root.is_symlink():
+        return 0, len(run_dirs)
     root = output_root.resolve()
     cleared = failed = 0
     for candidate in dict.fromkeys(run_dirs):
         try:
-            if candidate.is_symlink() or not candidate.is_dir():
+            if path_has_symlink(candidate) or candidate.is_symlink() or not candidate.is_dir():
                 raise ValueError("result is not a regular directory")
             resolved = candidate.resolve()
             if resolved != root and resolved.parent != root:

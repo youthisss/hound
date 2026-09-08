@@ -1,0 +1,3 @@
+001+ ERROR: No terminating lines
+========DONE========
+FAIL FPM: bug77934 - php-fpm kill -USR2 not working [sapi/fpm/tests/bug77934-reload-process-control.phpt]

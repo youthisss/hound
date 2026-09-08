@@ -1,0 +1,47 @@
+error[E0425][0m[0m[1m: cannot find value `CURSOR` in this scope[0m
+[0m  [0m[0m[1m[38;5;12m--> [0m[0malacritty_terminal/src/cursor.rs:70:26[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m70[0m[0m [0m[0m[1m[38;5;12m| [0m[0m    RasterizedGlyph { c: CURSOR, top: line_width, left: 0, height: line_width, width, buf }[0m
+[0m   [0m[0m[1m[38;5;12m| [0m[0m                         [0m[0m[1m[38;5;9m^^^^^^[0m[0m [0m[0m[1m[38;5;9mdid you mean `CUSOR`?[0m
+
+[0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `CURSOR` in this scope[0m
+[0m  [0m[0m[1m[38;5;12m--> [0m[0malacritty_terminal/src/cursor.rs:79:26[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m79[0m[0m [0m[0m[1m[38;5;12m| [0m[0m    RasterizedGlyph { c: CURSOR, top: height, left: 0, height, width: line_width, buf }[0m
+[0m   [0m[0m[1m[38;5;12m| [0m[0m                         [0m[0m[1m[38;5;9m^^^^^^[0m[0m [0m[0m[1m[38;5;9mdid you mean `CUSOR`?[0m
+
+[0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `CURSOR` in this scope[0m
+[0m   [0m[0m[1m[38;5;12m--> [0m[0malacritty_terminal/src/cursor.rs:101:26[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m101[0m[0m [0m[0m[1m[38;5;12m| [0m[0m    RasterizedGlyph { c: CURSOR, top: height, left: 0, height, width, buf }[0m
+[0m    [0m[0m[1m[38;5;12m| [0m[0m                         [0m[0m[1m[38;5;9m^^^^^^[0m[0m [0m[0m[1m[38;5;9mdid you mean `CUSOR`?[0m
+
+[0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `CURSOR` in this scope[0m
+[0m   [0m[0m[1m[38;5;12m--> [0m[0malacritty_terminal/src/cursor.rs:110:26[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m110[0m[0m [0m[0m[1m[38;5;12m| [0m[0m    RasterizedGlyph { c: CURSOR, top: height, left: 0, height, width, buf }[0m
+[0m    [0m[0m[1m[38;5;12m| [0m[0m                         [0m[0m[1m[38;5;9m^^^^^^[0m[0m [0m[0m[1m[38;5;9mdid you mean `CUSOR`?[0m
+
+[0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `CURSOR` in this scope[0m
+[0m  [0m[0m[1m[38;5;12m--> [0m[0malacritty_terminal/src/cursor.rs:70:26[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m70[0m[0m [0m[0m[1m[38;5;12m| [0m[0m    RasterizedGlyph { c: CURSOR, top: line_width, left: 0, height: line_width, width, buf }[0m
+[0m   [0m[0m[1m[38;5;12m| [0m[0m                         [0m[0m[1m[38;5;9m^^^^^^[0m[0m [0m[0m[1m[38;5;9mdid you mean `CUSOR`?[0m
+
+[0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `CURSOR` in this scope[0m
+[0m  [0m[0m[1m[38;5;12m--> [0m[0malacritty_terminal/src/cursor.rs:79:26[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m79[0m[0m [0m[0m[1m[38;5;12m| [0m[0m    RasterizedGlyph { c: CURSOR, top: height, left: 0, height, width: line_width, buf }[0m
+[0m   [0m[0m[1m[38;5;12m| [0m[0m                         [0m[0m[1m[38;5;9m^^^^^^[0m[0m [0m[0m[1m[38;5;9mdid you mean `CUSOR`?[0m
+
+[0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `CURSOR` in this scope[0m
+[0m   [0m[0m[1m[38;5;12m--> [0m[0malacritty_terminal/src/cursor.rs:101:26[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m101[0m[0m [0m[0m[1m[38;5;12m| [0m[0m    RasterizedGlyph { c: CURSOR, top: height, left: 0, height, width, buf }[0m
+[0m    [0m[0m[1m[38;5;12m| [0m[0m                         [0m[0m[1m[38;5;9m^^^^^^[0m[0m [0m[0m[1m[38;5;9mdid you mean `CUSOR`?[0m
+
+[0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `CURSOR` in this scope[0m
+[0m   [0m[0m[1m[38;5;12m--> [0m[0malacritty_terminal/src/cursor.rs:110:26[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m110[0m[0m [0m[0m[1m[38;5;12m| [0m[0m    RasterizedGlyph { c: CURSOR, top: height, left: 0, height, width, buf }[0m
+[0m    [0m[0m[1m[38;5;12m| [0m[0m                         [0m[0m[1m[38;5;9m^^^^^^[0m[0m [0m[0m[1m[38;5;9mdid you mean `CUSOR`?

@@ -1,0 +1,4 @@
+ M inst/www/shared/shiny.js
+ M inst/www/shared/shiny.min.js
+Please rebuild the JavaScript and commit the changes.
+The above files changed when we built the JavaScript assets. This most often occurs when a user makes changes to the JavaScript sources but doesn't rebuild and commit them.

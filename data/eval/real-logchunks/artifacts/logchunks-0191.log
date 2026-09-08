@@ -1,0 +1,65 @@
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:60:64: error:
+    Not in scope: type variable ‘a’
+   |
+60 | newtype HappyWrap27 = HappyWrap27 (QualifiedName (N.ProperName a))
+   |                                                                ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:67:55: error:
+    Not in scope: type variable ‘a’
+   |
+67 | newtype HappyWrap28 = HappyWrap28 (Name (N.ProperName a))
+   |                                                       ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:88:60: error:
+    Not in scope: type variable ‘a’
+   |
+88 | newtype HappyWrap31 = HappyWrap31 (QualifiedName (N.OpName a))
+   |                                                            ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:95:51: error:
+    Not in scope: type variable ‘a’
+   |
+95 | newtype HappyWrap32 = HappyWrap32 (Name (N.OpName a))
+   |                                                   ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:102:60: error:
+    Not in scope: type variable ‘a’
+    |
+102 | newtype HappyWrap33 = HappyWrap33 (QualifiedName (N.OpName a))
+    |                                                            ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:109:51: error:
+    Not in scope: type variable ‘a’
+    |
+109 | newtype HappyWrap34 = HappyWrap34 (Name (N.OpName a))
+    |                                                   ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:536:50: error:
+    Not in scope: type variable ‘a’
+    |
+536 | newtype HappyWrap95 = HappyWrap95 (TmpModuleDecl a)
+    |                                                  ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:871:65: error:
+    Not in scope: type variable ‘a’
+    |
+871 | newtype HappyWrap143 = HappyWrap143 (NE.NonEmpty (TmpModuleDecl a))
+    |                                                                 ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:941:68: error:
+    Not in scope: type variable ‘a’
+    |
+941 | newtype HappyWrap153 = HappyWrap153 (Separated (Name (N.ProperName a)))
+    |                                                                    ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:1039:65: error:
+    Not in scope: type variable ‘a’
+     |
+1039 | newtype HappyWrap167 = HappyWrap167 (NE.NonEmpty (TmpModuleDecl a))
+     |                                                                 ^
+
+/home/travis/build/purescript/purescript/sdist-test/.stack-work/dist/x86_64-linux/Cabal-[REDACTED:ip_address]/build/Language/PureScript/CST/Parser.hs:1130:73: error:
+    Not in scope: type variable ‘a’
+     |
+1130 | newtype HappyWrap180 = HappyWrap180 ([(SourceToken, (Name (N.ProperName a)))])
+     |                                                                         ^

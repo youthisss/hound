@@ -1,0 +1,10 @@
+CssSyntaxError: /home/travis/build/necolas/normalize.css/normalize.css:11:3: Unknown word
+    at Input.error (/home/travis/build/necolas/normalize.css/node_modules/postcss/lib/input.js:61:22)
+    at Parser.unknownWord (/home/travis/build/necolas/normalize.css/node_modules/postcss/lib/parser.js:457:26)
+    at Parser.word (/home/travis/build/necolas/normalize.css/node_modules/postcss/lib/parser.js:174:14)
+    at Parser.loop (/home/travis/build/necolas/normalize.css/node_modules/postcss/lib/parser.js:60:26)
+    at parse (/home/travis/build/necolas/normalize.css/node_modules/postcss/lib/parse.js:26:12)
+    at new LazyResult (/home/travis/build/necolas/normalize.css/node_modules/postcss/lib/lazy-result.js:61:24)
+    at Processor.process (/home/travis/build/necolas/normalize.css/node_modules/postcss/lib/processor.js:34:16)
+    at lintString (/home/travis/build/necolas/normalize.css/node_modules/stylelint/dist/standalone.js:97:9)
+    at /home/travis/build/necolas/normalize.css/node_modules/stylelint/dist/standalone.js:70:14

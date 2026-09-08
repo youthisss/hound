@@ -1,0 +1,4 @@
+Error: Illegal nesting: Nothing may be nested beneath import directives.
+        on line 2 of sass/base/generic.sass
+        from line 4 of sass/base/_all.sass
+        from line 4 of bulma.sass

@@ -7,7 +7,7 @@ import sys
 import time
 import tracemalloc
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -17,11 +17,17 @@ from hound.ingest.stacktrace import parse_stacktrace
 from hound.ingest.structured import MAX_ARTIFACT_BYTES, parse_structured_artifact
 from hound.ingest.tests import parse_failed_tests
 from hound.analyze.fallback import build_root_cause
+from hound.fsio import read_bounded_bytes, read_bounded_text
 from hound.models import CONFIDENCES, KINDS, SEVERITIES, STAGES, Artifacts, FailedTest, StackFrame, score_confidence
+from hound.pathutil import path_has_symlink
 from hound.triage.dedup import fingerprint
 from hound.triage.severity import classify
 
 CASE_VERSION = "1.0"
+MAX_CASE_JSON_BYTES = 256 * 1024
+MAX_CASE_FILES = 10_000
+MAX_POLICY_BYTES = 1024 * 1024
+MAX_TEST_IMPACT_BYTES = 4 * 1024 * 1024
 DEFAULT_CORPUS = Path("tests/eval/cases")
 BASELINE_PATH = Path("tests/eval/baseline-v1.0.json")
 GATE_POLICY_PATH = Path("tests/eval/gates-v1.0.json")
@@ -31,7 +37,26 @@ _EXPECTED_FIELDS = {
     "stage", "kind", "primary_event", "failed_tests", "stack_frames",
     "severity_range", "duplicate_group", "redactions",
 }
-_OPTIONAL_EXPECTED_FIELDS = {"is_failure"}
+_OPTIONAL_EXPECTED_FIELDS = {
+    "is_failure",
+    # Historical synthetic cases do not carry provenance. Real/private
+    # partitions must provide the fields below and pass their privacy gate.
+    "source_license",
+    "provenance",
+    "evidence_spans",
+    "verified_cause",
+    "recommended_checks",
+    "privacy_audit",
+}
+_EVAL_SPLITS = {"dev", "held_out", "real", "private"}
+_REDISTRIBUTABLE_LICENSES = {
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC-BY-4.0",
+    "CC-BY-SA-4.0",
+}
 
 
 @dataclass
@@ -48,6 +73,12 @@ class EvaluationCase:
     duplicate_group: str | None
     expected_redactions: list[str]
     is_failure: bool | None = None
+    source_license: str | None = None
+    provenance: dict[str, Any] | None = None
+    evidence_spans: list[dict[str, Any]] = field(default_factory=list)
+    verified_cause: dict[str, Any] | None = None
+    recommended_checks: list[str] = field(default_factory=list)
+    privacy_audit: dict[str, Any] | None = None
 
 
 def _strings(value: Any, field: str) -> list[str]:
@@ -57,19 +88,19 @@ def _strings(value: Any, field: str) -> list[str]:
 
 
 def load_case(path: Path, corpus: Path) -> EvaluationCase:
-    if path.is_symlink():
+    if path_has_symlink(path) or path.is_symlink():
         raise ValueError(f"{path}: label must be a regular file, not a symlink")
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        data = json.loads(read_bounded_text(path, MAX_CASE_JSON_BYTES, encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError(f"{path}: invalid JSON: {exc}") from exc
     if not isinstance(data, dict) or data.get("eval_case_version") != CASE_VERSION:
         raise ValueError(f"{path}: eval_case_version must be {CASE_VERSION}")
     if set(data) != _TOP_LEVEL_FIELDS:
         raise ValueError(f"{path}: fields must be exactly {sorted(_TOP_LEVEL_FIELDS)}")
     split = path.relative_to(corpus).parts[0] if path != corpus else ""
-    if split not in {"dev", "held_out"}:
-        raise ValueError(f"{path}: case must be under dev or held_out")
+    if split not in _EVAL_SPLITS:
+        raise ValueError(f"{path}: case must be under one of {sorted(_EVAL_SPLITS)}")
     case_id = data.get("id")
     artifact_name = data.get("artifact")
     expected = data.get("expected")
@@ -82,8 +113,9 @@ def load_case(path: Path, corpus: Path) -> EvaluationCase:
     is_failure = expected.get("is_failure")
     if "is_failure" in expected and not isinstance(is_failure, bool):
         raise ValueError(f"{path}: is_failure must be a boolean")
-    artifact = (path.parent / artifact_name).resolve()
-    if path.parent.resolve() not in artifact.parents or not artifact.is_file() or artifact.is_symlink():
+    raw_artifact = path.parent / artifact_name
+    artifact = raw_artifact.resolve()
+    if path_has_symlink(raw_artifact) or path_has_symlink(artifact) or path.parent.resolve() not in artifact.parents or not artifact.is_file() or artifact.is_symlink():
         raise ValueError(f"{path}: artifact must be a contained regular file")
     stage, kind = expected.get("stage"), expected.get("kind")
     if stage not in STAGES or kind not in KINDS:
@@ -116,10 +148,90 @@ def load_case(path: Path, corpus: Path) -> EvaluationCase:
     redactions = _strings(expected.get("redactions", []), f"{path}: redactions")
     if any(not secret for secret in redactions):
         raise ValueError(f"{path}: expected redactions cannot be empty")
+
+    source_license = expected.get("source_license")
+    if source_license is not None and (
+        not isinstance(source_license, str) or source_license not in _REDISTRIBUTABLE_LICENSES
+    ):
+        raise ValueError(
+            f"{path}: source_license must be one of {sorted(_REDISTRIBUTABLE_LICENSES)}"
+        )
+    provenance = expected.get("provenance")
+    if provenance is not None:
+        if not isinstance(provenance, dict):
+            raise ValueError(f"{path}: provenance must be an object")
+        required_provenance = {"source_id", "source_uri", "source_sha256", "source_locator"}
+        if not required_provenance.issubset(provenance):
+            raise ValueError(f"{path}: provenance is missing required fields")
+        if not all(
+            isinstance(provenance.get(key), str) and provenance[key].strip()
+            for key in required_provenance
+        ):
+            raise ValueError(f"{path}: provenance fields must be non-empty strings")
+        import re
+
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", provenance["source_sha256"]):
+            raise ValueError(f"{path}: provenance.source_sha256 must be a SHA-256 hex digest")
+
+    spans = expected.get("evidence_spans", [])
+    if not isinstance(spans, list):
+        raise ValueError(f"{path}: evidence_spans must be a list")
+    for span in spans:
+        if not isinstance(span, dict):
+            raise ValueError(f"{path}: evidence_spans entries must be objects")
+        start, end = span.get("start"), span.get("end")
+        if type(start) is not int or type(end) is not int or start < 0 or end <= start:
+            raise ValueError(
+                f"{path}: evidence_spans start/end must be increasing non-negative integers"
+            )
+        if not isinstance(span.get("label"), str) or not span["label"].strip():
+            raise ValueError(f"{path}: evidence_spans.label must be a non-empty string")
+        if "verified" in span and type(span["verified"]) is not bool:
+            raise ValueError(f"{path}: evidence_spans.verified must be a boolean")
+        if "text" in span and not isinstance(span["text"], str):
+            raise ValueError(f"{path}: evidence_spans.text must be a string")
+
+    recommended_checks = expected.get("recommended_checks", [])
+    if not isinstance(recommended_checks, list) or not all(
+        isinstance(item, str) and item.strip() for item in recommended_checks
+    ):
+        raise ValueError(f"{path}: recommended_checks must be a list of non-empty strings")
+    verified_cause = expected.get("verified_cause")
+    if verified_cause is not None:
+        if not isinstance(verified_cause, dict):
+            raise ValueError(f"{path}: verified_cause must be an object or null")
+        if not isinstance(verified_cause.get("status"), str) or not verified_cause["status"].strip():
+            raise ValueError(f"{path}: verified_cause.status must be a non-empty string")
+        if "root_cause_verified" in verified_cause and type(verified_cause["root_cause_verified"]) is not bool:
+            raise ValueError(f"{path}: verified_cause.root_cause_verified must be a boolean")
+    privacy_audit = expected.get("privacy_audit")
+    if privacy_audit is not None:
+        if not isinstance(privacy_audit, dict):
+            raise ValueError(f"{path}: privacy_audit must be an object")
+        if type(privacy_audit.get("reviewed")) is not bool:
+            raise ValueError(f"{path}: privacy_audit.reviewed must be a boolean")
+        for key in ("redaction_hits", "residual_matches"):
+            if type(privacy_audit.get(key)) is not int or privacy_audit[key] < 0:
+                raise ValueError(f"{path}: privacy_audit.{key} must be a non-negative integer")
+        if privacy_audit["residual_matches"] != 0:
+            raise ValueError(f"{path}: privacy_audit must have zero residual_matches")
+
+    if split in {"real", "private"}:
+        required_metadata = {
+            "source_license": source_license,
+            "provenance": provenance,
+            "evidence_spans": spans,
+            "verified_cause": verified_cause,
+            "privacy_audit": privacy_audit,
+        }
+        missing = [key for key, value in required_metadata.items() if value is None]
+        if missing:
+            raise ValueError(f"{path}: {split} case missing verified metadata: {', '.join(missing)}")
     return EvaluationCase(
         case_id, split, artifact, stage, kind, primary,
         _strings(expected.get("failed_tests", []), f"{path}: failed_tests"),
         frames, severity_range, duplicate_group, redactions, is_failure,
+        source_license, provenance, spans, verified_cause, recommended_checks, privacy_audit,
     )
 
 
@@ -171,12 +283,12 @@ def _redact_failed_tests(tests: list[FailedTest]) -> list[FailedTest]:
 
 def _analyze_case(case: EvaluationCase) -> tuple[dict[str, Any], Artifacts]:
     try:
-        size = case.artifact.stat().st_size
-    except OSError as exc:
-        raise ValueError(f"{case.case_id}: artifact cannot be inspected: {exc}") from exc
-    if size > MAX_ARTIFACT_BYTES:
-        raise ValueError(f"{case.case_id}: artifact exceeds {MAX_ARTIFACT_BYTES} bytes")
-    raw = case.artifact.read_text(encoding="utf-8", errors="replace")
+        raw_bytes = read_bounded_bytes(case.artifact, MAX_ARTIFACT_BYTES)
+    except (OSError, ValueError) as exc:
+        if isinstance(exc, ValueError) and "exceeds" in str(exc).lower():
+            raise ValueError(f"{case.case_id}: artifact exceeds the {MAX_ARTIFACT_BYTES}-byte limit") from exc
+        raise ValueError(f"{case.case_id}: artifact cannot be read safely: {exc}") from exc
+    raw = raw_bytes.decode("utf-8", errors="replace")
     for secret in case.expected_redactions:
         if secret not in raw:
             raise ValueError(f"{case.case_id}: expected redaction is absent from artifact")
@@ -213,6 +325,13 @@ def _analyze_case(case: EvaluationCase) -> tuple[dict[str, Any], Artifacts]:
         "redactions_expected": len(case.expected_redactions),
         "redactions_leaked": len(leaked),
         "dedup_fingerprint": fingerprint(artifacts),
+        "metadata": {
+            "source_license": case.source_license,
+            "source_id": (case.provenance or {}).get("source_id"),
+            "evidence_span_count": len(case.evidence_spans),
+            "verified_cause_status": (case.verified_cause or {}).get("status"),
+            "privacy_reviewed": (case.privacy_audit or {}).get("reviewed"),
+        },
     }
     return result, artifacts
 
@@ -220,11 +339,13 @@ def _analyze_case(case: EvaluationCase) -> tuple[dict[str, Any], Artifacts]:
 def _case_paths(corpus: Path) -> list[Path]:
     """Find case labels while allowing a case to reference a JSON artifact."""
     paths = sorted(corpus.glob("*/*.json"))
+    if len(paths) > MAX_CASE_FILES:
+        raise ValueError(f"evaluation corpus contains more than {MAX_CASE_FILES} case files")
     referenced_artifacts: set[Path] = set()
     for path in paths:
         try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            value = json.loads(read_bounded_text(path, MAX_CASE_JSON_BYTES, encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError, RecursionError):
             continue
         if isinstance(value, dict) and isinstance(value.get("artifact"), str):
             referenced_artifacts.add((path.parent / value["artifact"]).resolve())
@@ -270,8 +391,8 @@ def evaluate(corpus: Path = DEFAULT_CORPUS, suite: str = "all") -> dict[str, Any
         path = DEFAULT_TEST_IMPACT_CORPUS if corpus == DEFAULT_CORPUS else corpus
         return evaluate_test_impact(path)
     corpus = corpus.resolve()
-    if suite not in {"all", "dev", "held_out"}:
-        raise ValueError("suite must be all, dev, held_out, qa-history, or test-impact")
+    if suite not in {"all", "dev", "held_out", "real", "private"}:
+        raise ValueError("suite must be all, dev, held_out, real, private, qa-history, or test-impact")
     paths = _case_paths(corpus)
     cases = [load_case(path, corpus) for path in paths]
     if suite != "all":
@@ -360,6 +481,17 @@ def evaluate(corpus: Path = DEFAULT_CORPUS, suite: str = "all") -> dict[str, Any
             "peak_memory_bytes": peak,
         },
         "confidence_calibration": _confidence_calibration(results),
+        "coverage": {
+            "expected_kinds": sorted(set(expected_kinds)),
+            "missing_expected_kinds": sorted(KINDS - set(expected_kinds)),
+            "real_case_count": sum(case.split == "real" for case in cases),
+            "private_case_count": sum(case.split == "private" for case in cases),
+            "licensed_case_count": sum(case.source_license is not None for case in cases),
+            "privacy_reviewed_case_count": sum(
+                bool(case.privacy_audit and case.privacy_audit.get("reviewed"))
+                for case in cases
+            ),
+        },
         "cases": results,
     }
     serialized = json.dumps(report, sort_keys=True)
@@ -374,7 +506,7 @@ def check_quality_gate(report: dict[str, Any], policy_path: Path = GATE_POLICY_P
     """Apply explicit regression thresholds; missing measurements cannot pass."""
     import math
 
-    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    policy = json.loads(read_bounded_text(policy_path, MAX_POLICY_BYTES, encoding="utf-8"))
     if not isinstance(policy, dict) or policy.get("version") != "1.0":
         raise ValueError("evaluation gate policy version must be 1.0")
     if set(policy) != {"version", "minimum", "maximum"}:
@@ -405,7 +537,10 @@ def evaluate_test_impact(corpus: Path = DEFAULT_TEST_IMPACT_CORPUS) -> dict[str,
     """Evaluate advisory test recommendations against labeled symbol/test pairs."""
     from hound.source.impact import build_test_impact
 
-    data = json.loads(corpus.resolve().read_text(encoding="utf-8"))
+    corpus_path = corpus.resolve()
+    if path_has_symlink(corpus) or corpus_path.is_symlink():
+        raise ValueError("test-impact corpus must not use symlinked paths")
+    data = json.loads(read_bounded_text(corpus_path, MAX_TEST_IMPACT_BYTES, encoding="utf-8"))
     if not isinstance(data, dict) or data.get("version") != "1.0":
         raise ValueError("test-impact corpus version must be 1.0")
     cases = data.get("cases")
@@ -452,7 +587,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--offline", action="store_true", help="required; evaluation never uses the network")
     parser.add_argument("--format", choices=("json",), default="json")
-    parser.add_argument("--suite", choices=("all", "dev", "held_out", "qa-history", "test-impact"), default="all")
+    parser.add_argument(
+        "--suite",
+        choices=("all", "dev", "held_out", "real", "private", "qa-history", "test-impact"),
+        default="all",
+    )
     parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     parser.add_argument("--check", action="store_true", help="fail when explicit evaluation quality thresholds are not met")
     parser.add_argument("--gate-policy", type=Path, default=GATE_POLICY_PATH)

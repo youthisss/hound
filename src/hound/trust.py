@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+from hound.fsio import read_bounded_bytes
+
 SOURCE_CLASSES = {"trusted_branch", "fork_pr", "local_artifact"}
 MAX_EVENT_BYTES = 1024 * 1024
 
@@ -40,7 +42,14 @@ def resolve_source_class(
     configured: str | None = None,
     environment: Mapping[str, str] | None = None,
 ) -> str:
-    """Resolve explicit/configured policy, then detect untrusted CI forks."""
+    """Resolve a trust policy without allowing a caller to bless a CI fork.
+
+    Explicit and configured values may intentionally choose a *more restrictive*
+    profile, but they can never override provenance detected from the CI event.
+    A missing or malformed pull-request event remains untrusted. This ordering is
+    important because repository-controlled configuration and command-line flags
+    are not trustworthy evidence about where an artifact came from.
+    """
     env = environment if environment is not None else os.environ
     selected = explicit or configured or env.get("HOUND_SOURCE_CLASS")
     if selected is None and "TH_SOURCE_CLASS" in env:
@@ -50,7 +59,22 @@ def resolve_source_class(
         selected = selected.strip().lower()
         if selected not in SOURCE_CLASSES:
             raise ValueError(f"source class must be one of {sorted(SOURCE_CLASSES)}")
+
+    # Provenance detected from the CI control plane wins over any user input.
+    # This prevents a fork-controlled config or an accidentally forwarded CLI
+    # flag from enabling source reads, LLM calls, enrichment, or delivery.
+    detected = _detect_ci_source_class(env)
+    if detected == "fork_pr":
+        return detected
+    if selected:
         return selected
+    if detected:
+        return detected
+    return "local_artifact"
+
+
+def _detect_ci_source_class(env: Mapping[str, str]) -> str | None:
+    """Return only provenance established by a supported CI control plane."""
 
     github_event = env.get("GITHUB_EVENT_NAME", "").lower()
     if github_event in {"pull_request", "pull_request_target"}:
@@ -68,7 +92,7 @@ def resolve_source_class(
     target_project = env.get("CI_PROJECT_ID")
     if source_project and target_project:
         return "fork_pr" if source_project != target_project else "trusted_branch"
-    return "local_artifact"
+    return None
 
 
 def _github_event(value: str) -> dict:
@@ -76,10 +100,10 @@ def _github_event(value: str) -> dict:
         return {}
     path = Path(value)
     try:
-        if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_EVENT_BYTES:
+        if path.is_symlink() or not path.is_file():
             return {}
-        parsed = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        parsed = json.loads(read_bounded_bytes(path, MAX_EVENT_BYTES).decode("utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
 

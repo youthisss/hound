@@ -6,7 +6,10 @@ import os
 import re
 from pathlib import Path
 
+from hound.fsio import read_bounded_bytes
 from hound.models import DeploymentContext, RunContext
+from hound.pathutil import path_has_symlink
+from hound.urlutil import validate_http_url
 
 MAX_CONTEXT_BYTES = 64 * 1024
 MAX_CONTEXT_STRING = 1024
@@ -42,10 +45,10 @@ def load_context(log_path: Path, text: str, explicit_path: str | None = None) ->
 
 def _load_json(path: Path) -> dict:
     try:
-        if path.is_symlink() or path.stat().st_size > MAX_CONTEXT_BYTES:
+        if path_has_symlink(path) or path.is_symlink():
             return {}
-        value = json.loads(path.read_bytes())
-    except (OSError, ValueError):
+        value = json.loads(read_bounded_bytes(path, MAX_CONTEXT_BYTES))
+    except (OSError, ValueError, RecursionError):
         return {}
     return value if isinstance(value, dict) else {}
 
@@ -54,7 +57,10 @@ def _run_from_mapping(data: dict) -> RunContext:
     source = data.get("run") if isinstance(data.get("run"), dict) else data
     git = data.get("git") if isinstance(data.get("git"), dict) else {}
     return RunContext(
-        **{key: _string(source.get(key)) for key in ("provider", "run_id", "run_url", "job_id", "job_name", "workflow", "step_name", "conclusion", "pr_number", "base_sha", "head_sha")},
+        **{
+            key: _url(source.get(key), "context.run_url") if key == "run_url" else _string(source.get(key))
+            for key in ("provider", "run_id", "run_url", "job_id", "job_name", "workflow", "step_name", "conclusion", "pr_number", "base_sha", "head_sha")
+        },
         branch=_string(source.get("branch") or git.get("branch")),
         commit_sha=_string(source.get("commit_sha") or git.get("head")),
         attempt=_positive_int(source.get("attempt")),
@@ -64,14 +70,18 @@ def _run_from_mapping(data: dict) -> RunContext:
 
 def _deployment_from_mapping(data: dict) -> DeploymentContext:
     source = data.get("deployment") if isinstance(data.get("deployment"), dict) else {}
-    return DeploymentContext(**{key: _string(source.get(key)) for key in DeploymentContext.__dataclass_fields__})
+    return DeploymentContext(**{
+        key: _url(source.get(key), "context.deployment.runbook_url") if key == "runbook_url"
+        else _string(source.get(key))
+        for key in DeploymentContext.__dataclass_fields__
+    })
 
 
 def _github_context(existing: RunContext) -> RunContext:
     event = _load_json(Path(os.environ.get("GITHUB_EVENT_PATH", ""))) if os.environ.get("GITHUB_EVENT_PATH") else {}
     pull = event.get("pull_request") if isinstance(event.get("pull_request"), dict) else {}
     repository = event.get("repository") if isinstance(event.get("repository"), dict) else {}
-    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+    server = _url(os.environ.get("GITHUB_SERVER_URL", "https://github.com"), "GITHUB_SERVER_URL") or "https://github.com"
     repo = os.environ.get("GITHUB_REPOSITORY", repository.get("full_name", ""))
     run_id = existing.run_id or os.environ.get("GITHUB_RUN_ID", "")
     return RunContext(
@@ -169,6 +179,16 @@ def _match(pattern: str, text: str) -> str:
 def _string(value: object) -> str:
     text = value if isinstance(value, str) else str(value) if value is not None else ""
     return text[:MAX_CONTEXT_STRING]
+
+
+def _url(value: object, label: str) -> str:
+    text = _string(value)
+    if not text:
+        return ""
+    try:
+        return validate_http_url(text, label=label, allow_query=True)
+    except ValueError:
+        return ""
 
 
 def _positive_int(value: object) -> int | None:

@@ -11,6 +11,7 @@ import socket
 
 from hound.cli import main
 from hound.server import ServerConfig, _Server, _copy_limited
+from hound.server_client import ServerClient, ServerClientError
 
 
 @pytest.fixture
@@ -310,3 +311,39 @@ def test_job_store_preserves_corrupt_database(tmp_path):
         _JobStore(path)
     recovery = next(tmp_path.glob("jobs.sqlite3.corrupt-*"))
     assert (recovery / "jobs.sqlite3").read_bytes() == b"not a sqlite database"
+
+
+def test_server_client_submit_inspect_and_poll(http_server):
+    client = ServerClient(f"http://127.0.0.1:{http_server.server_port}", "secret")
+    accepted = client.submit("run.log", offline=True)
+    assert accepted["accepted"] is True
+    completed = client.wait(accepted["job_id"], poll_seconds=0.01)
+    assert completed["status"] == "completed"
+    inspected = client.inspect(accepted["job_id"])
+    assert inspected["job_id"] == accepted["job_id"]
+
+
+def test_server_client_cancel_job(tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "run.log").write_text("FAILED tests/test_app.py::test_one", encoding="utf-8")
+    config = ServerConfig(
+        "secret", logs, tmp_path / "out", analysis_options={"offline": True}, workers=1, max_queue=8,
+    )
+    server = _Server(("127.0.0.1", 0), config)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = ServerClient(f"http://127.0.0.1:{server.server_port}", "secret")
+        accepted = client.submit("run.log", offline=True)
+        try:
+            result = client.cancel(accepted["job_id"])
+        except ServerClientError as exc:
+            assert "terminal" in str(exc)
+        else:
+            assert result["canceled"] is True
+        assert client.inspect(accepted["job_id"])["status"] in {"canceled", "completed"}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

@@ -1,0 +1,5 @@
+1) Form_validation_test::test_rule_valid_date
+Failed asserting that false is true.
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/libraries/Form_validation_test.php:318
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351

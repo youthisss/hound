@@ -1,0 +1,12 @@
+** gen_event handler cth_log_redirect crashed.
+** Was installed in error_logger
+** Last event was: {info_report,<0.55.0>,
+                                {<0.31.0>,std_info,
+                                 [{application,lager},
+                                  {exited,stopped},
+                                  {type,temporary}]}}
+** When handler state == {eh_state,tc_log_async,undefined,undefined,undefined,
+                                   false,false}
+** Reason == {timeout,{gen_server,call,
+                                  [application_controller,
+                                   which_applications]}}

@@ -1,0 +1,120 @@
+_________________________________ test_readme __________________________________[0m
+
+source_root = PosixPath('/home/travis/build/nvbn/thefuck')
+
+[1m    def test_readme(source_root):[0m
+[1m        with source_root.joinpath('README.md').open() as f:[0m
+[1m            readme = f.read()[0m
+[1m    [0m
+[1m            bundled = source_root.joinpath('thefuck') \[0m
+[1m                                 .joinpath('rules') \[0m
+[1m                                 .glob('*.py')[0m
+[1m    [0m
+[1m            for rule in bundled:[0m
+[1m                if rule.stem != '__init__':[0m
+[1m>                   assert rule.stem in readme,\[0m
+[1m                        'Missing rule "{}" in README.md'.format(rule.stem)[0m
+[1m[31mE                   AssertionError: Missing rule "nixos_cmd_not_found" in README.md[0m
+[1m[31mE                   assert 'nixos_cmd_not_found' in '# The Fuck [![Version][version-badge]][version-link] [![Build Status][travis-badge]][travis-link] [![Windows Build St...efuck/master/example_instant_mode.gif\n[homebrew]:        https://brew.sh/\n[linuxbrew]:       https://linuxbrew.sh/\n'[0m
+[1m[31mE                    +  where 'nixos_cmd_not_found' = PosixPath('/home/travis/build/nvbn/thefuck/thefuck/rules/nixos_cmd_not_found.py').stem[0m
+
+[1m[31mtests/test_readme.py[0m:11: AssertionError
+[31m[1m_____________________________ test_match[command0] _____________________________[0m
+
+mocker = pytest_mock.MockFixture object at 0x7f535b2eac50>
+command = (Command(script=vim, output=nix-env -iA nixos.vim),)
+
+[1m    @pytest.mark.parametrize('command', [[0m
+[1m        (Command('vim', 'nix-env -iA nixos.vim'),)])[0m
+[1m    def test_match(mocker, command):[0m
+[1m        mocker.patch('thefuck.rules.nixos_cmd_not_found', return_value=None)[0m
+[1m>       assert match(command)[0m
+
+[1m[31m/home/travis/build/nvbn/thefuck/tests/rules/test_nixos_cmd_not_found.py[0m:10: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = (Command(script=vim, output=nix-env -iA nixos.vim),)
+
+[1m    def match(command):[0m
+[1m>       return regex.findall(command.output)[0m
+[1m[31mE       AttributeError: 'tuple' object has no attribute 'output'[0m
+
+[1m[31m/home/travis/build/nvbn/thefuck/thefuck/rules/nixos_cmd_not_found.py[0m:10: AttributeError
+[31m[1m___________________________ test_not_match[command0] ___________________________[0m
+
+mocker = pytest_mock.MockFixture object at 0x7f535bc3c9b0>
+command = (Command(script=vim, output=),)
+
+[1m    @pytest.mark.parametrize('command', [[0m
+[1m        (Command('vim', ''),),[0m
+[1m        (Command('', ''),)])[0m
+[1m    def test_not_match(mocker, command):[0m
+[1m        mocker.patch('thefuck.rules.nixos_cmd_not_found', return_value=None)[0m
+[1m>       assert not match(command)[0m
+
+[1m[31m/home/travis/build/nvbn/thefuck/tests/rules/test_nixos_cmd_not_found.py[0m:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = (Command(script=vim, output=),)
+
+[1m    def match(command):[0m
+[1m>       return regex.findall(command.output)[0m
+[1m[31mE       AttributeError: 'tuple' object has no attribute 'output'[0m
+
+[1m[31m/home/travis/build/nvbn/thefuck/thefuck/rules/nixos_cmd_not_found.py[0m:10: AttributeError
+[31m[1m___________________________ test_not_match[command1] ___________________________[0m
+
+mocker = pytest_mock.MockFixture object at 0x7f535b337390>
+command = (Command(script=, output=),)
+
+[1m    @pytest.mark.parametrize('command', [[0m
+[1m        (Command('vim', ''),),[0m
+[1m        (Command('', ''),)])[0m
+[1m    def test_not_match(mocker, command):[0m
+[1m        mocker.patch('thefuck.rules.nixos_cmd_not_found', return_value=None)[0m
+[1m>       assert not match(command)[0m
+
+[1m[31m/home/travis/build/nvbn/thefuck/tests/rules/test_nixos_cmd_not_found.py[0m:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = (Command(script=, output=),)
+
+[1m    def match(command):[0m
+[1m>       return regex.findall(command.output)[0m
+[1m[31mE       AttributeError: 'tuple' object has no attribute 'output'[0m
+
+[1m[31m/home/travis/build/nvbn/thefuck/thefuck/rules/nixos_cmd_not_found.py[0m:10: AttributeError
+[31m[1m_____________ test_get_new_command[command0-nix-env -iA nixos.vim] _____________[0m
+
+mocker = pytest_mock.MockFixture object at 0x7f535b2abbe0>
+command = Command(script=vim, output=nix-env -iA nixos.vim)
+new_command = 'nix-env -iA nixos.vim'
+
+[1m    @pytest.mark.parametrize('command, new_command', [[0m
+[1m        (Command('vim', 'nix-env -iA nixos.vim'), 'nix-env -iA nixos.vim'),[0m
+[1m        (Command('pacman', 'nix-env -iA nixos.pacman'), 'nix-env -iA nixos.pacman')])[0m
+[1m    def test_get_new_command(mocker, command, new_command):[0m
+[1m>       assert get_new_command(command) == new_command[0m
+[1m[31mE       AssertionError: assert 'nix-env -iA nixos.vim  vim' == 'nix-env -iA nixos.vim'[0m
+[1m[31mE         - nix-env -iA nixos.vim  vim[0m
+[1m[31mE         ?                      -------[0m
+[1m[31mE         + nix-env -iA nixos.vim[0m
+
+[1m[31m/home/travis/build/nvbn/thefuck/tests/rules/test_nixos_cmd_not_found.py[0m:25: AssertionError
+[31m[1m___________ test_get_new_command[command1-nix-env -iA nixos.pacman] ____________[0m
+
+mocker = pytest_mock.MockFixture object at 0x7f535b3420b8>
+command = Command(script=pacman, output=nix-env -iA nixos.pacman)
+new_command = 'nix-env -iA nixos.pacman'
+
+[1m    @pytest.mark.parametrize('command, new_command', [[0m
+[1m        (Command('vim', 'nix-env -iA nixos.vim'), 'nix-env -iA nixos.vim'),[0m
+[1m        (Command('pacman', 'nix-env -iA nixos.pacman'), 'nix-env -iA nixos.pacman')])[0m
+[1m    def test_get_new_command(mocker, command, new_command):[0m
+[1m>       assert get_new_command(command) == new_command[0m
+[1m[31mE       AssertionError: assert 'nix-env -iA ...man  pacman' == 'nix-env -iA nixos.pacman'[0m
+[1m[31mE         - nix-env -iA nixos.pacman  pacman[0m
+[1m[31mE         ?                         ----------[0m
+[1m[31mE         + nix-env -iA nixos.pacman[0m
+
+[1m[31m/home/travis/build/nvbn/thefuck/tests/rules/test_nixos_cmd_not_found.py[0m:25: AssertionError

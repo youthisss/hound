@@ -1,0 +1,12 @@
+CMake Error at /usr/share/cmake-3.2/Modules/FindBoost.cmake:1201 (message):
+  Unable to find the requested Boost libraries.
+
+  Boost version: 1.54.0
+
+  Boost include path: /usr/include
+
+  Detected version of Boost is too old.  Requested version was 1.55 (or
+  newer).
+Call Stack (most recent call first):
+  cmake/Dependencies.cmake:8 (find_package)
+  CMakeLists.txt:45 (include)

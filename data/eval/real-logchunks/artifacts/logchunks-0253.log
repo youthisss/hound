@@ -1,0 +1,17 @@
+Error: 
+Invalid or upper case character found in 'knight's-tour', please use '-' for spaces
+and all folder names must be lower case. Valid characters are [a-z0-9\-.].
+
+  Found in:
+    /home/travis/build/freeCodeCamp/freeCodeCamp/guide/english/certifications/coding-interview-prep/rosetta-code/knight's-tour
+
+    at Promise (/home/travis/build/freeCodeCamp/freeCodeCamp/tools/scripts/ci/md-testing-utils.js:42:9)
+    at new Promise (anonymous>)
+    at checkDirName (/home/travis/build/freeCodeCamp/freeCodeCamp/tools/scripts/ci/md-testing-utils.js:39:10)
+    at checkGuideFile (/home/travis/build/freeCodeCamp/freeCodeCamp/tools/scripts/ci/md-testing-utils.js:33:12)
+    at EventEmitter.readdirp.on.file (/home/travis/build/freeCodeCamp/freeCodeCamp/tools/scripts/ci/ensure-guide-formatting.js:26:7)
+    at EventEmitter.emit (/home/travis/build/freeCodeCamp/freeCodeCamp/node_modules/eventemitter3/index.js:181:35)
+    at Object.filter (/home/travis/build/freeCodeCamp/freeCodeCamp/node_modules/readdirp-walk/readdirp.js:72:15)
+    at processFilter (/home/travis/build/freeCodeCamp/freeCodeCamp/node_modules/walk-filtered/index.js:23:91)
+    at /home/travis/build/freeCodeCamp/freeCodeCamp/node_modules/walk-filtered/index.js:34:5
+    at FSReqWrap.oncomplete (fs.js:154:5)

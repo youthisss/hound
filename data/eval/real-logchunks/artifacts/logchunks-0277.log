@@ -1,0 +1,12 @@
+[1mdiff --git a/layers/+music/spotify/README.org b/layers/+music/spotify/README.org[m
+[1mindex 4a61582..c017a58 100644[m
+[1m--- a/layers/+music/spotify/README.org[m
+[1m+++ b/layers/+music/spotify/README.org[m
+[36m@@ -35,6 +35,7 @@[m [mIf [[https://github.com/emacs-helm/helm][Helm]] layer is enabled, you can also u[m
+ | ~SPC a m s g~ | Search for a new track |[m
+ [m
+ If [[https://github.com/abo-abo/swiper][Ivy]] layer is enabled, you can also use the following binding(s):[m
+[32m+[m
+ | Key Binding       | Description                    |[m
+ | ~SPC a m s s a~   | Spotify search artist          |[m
+ | ~SPC a m s s A~   | Spotify search album           |[m

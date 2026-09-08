@@ -1,0 +1,2 @@
+./thefuck/rules/terraform_init.py:8:9: E128 continuation line under-indented for visual indent
+./thefuck/rules/terraform_init.py:9:5: E124 closing bracket does not match visual indentation

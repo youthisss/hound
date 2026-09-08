@@ -1,0 +1,5 @@
+001+ ** ERROR: process timed out **
+
+001- OK.
+========DONE========
+FAIL Bug #60120 (proc_open hangs when data in stdin/out/err is getting larger or equal to 2048) [ext/standard/tests/file/bug60120.phpt]

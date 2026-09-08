@@ -1,0 +1,9 @@
+From test_quotestar.vim:
+	Found errors in Test_quotestar():
+	Run 1:
+	function RunTheTest[40]..Test_quotestar[11]..Do_test_quotestar_for_x11 line 58: Expected 262044 but got 262040
+	Run 2:
+	Caught exception in Test_quotestar(): WaitFor() timed out after 5000 msec @ function RunTheTest[40]..Test_quotestar[11]..Do_test_quotestar_for_x11[56]..WaitFor, line 4
+	Run 3:
+	Caught exception in Test_quotestar(): WaitFor() timed out after 5000 msec @ function RunTheTest[40]..Test_quotestar[11]..Do_test_quotestar_for_x11[56]..WaitFor, line 4
+	Flaky test failed too often, giving up

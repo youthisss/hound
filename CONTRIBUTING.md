@@ -9,7 +9,7 @@ Please be respectful, constructive, and collaborative in all communications and 
 ## Getting Started
 
 ### Prerequisites
-- Python >= 3.10
+- Python >= 3.10, < 3.13
 - [`uv`](https://docs.astral.sh/uv/) (recommended package and project manager)
 - Git
 

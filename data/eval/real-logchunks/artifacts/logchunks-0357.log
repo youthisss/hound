@@ -1,0 +1,15 @@
+__________________________ TestGeneric.test_app_alias __________________________[0m
+
+self = tests.shells.test_generic.TestGeneric object at 0x7f0c5be9cf28>
+shell = thefuck.shells.generic.Generic object at 0x7f0c5bea00f0>
+
+[1m    def test_app_alias(self, shell):[0m
+[1m        assert 'alias fuck' in shell.app_alias('fuck')[0m
+[1m        assert 'alias FUCK' in shell.app_alias('FUCK')[0m
+[1m        assert 'thefuck' in shell.app_alias('fuck')[0m
+[1m>       assert 'TF_ALIAS=fuck PYTHONIOENCODING' in shell.app_alias('fuck')[0m
+[1m[31mE       assert 'TF_ALIAS=fuck PYTHONIOENCODING' in 'alias fuck=\'eval "$(TF_ALIAS=fuck" PYTHONIOENCODING=utf-8 thefuck "$(fc -ln -1))"\''[0m
+[1m[31mE        +  where 'alias fuck=\'eval "$(TF_ALIAS=fuck" PYTHONIOENCODING=utf-8 thefuck "$(fc -ln -1))"\'' = bound method Generic.app_alias of thefuck.shells.generic.Generic object at 0x7f0c5bea00f0>>('fuck')[0m
+[1m[31mE        +    where bound method Generic.app_alias of thefuck.shells.generic.Generic object at 0x7f0c5bea00f0>> = thefuck.shells.generic.Generic object at 0x7f0c5bea00f0>.app_alias[0m
+
+[1m[31m/home/travis/build/nvbn/thefuck/tests/shells/test_generic.py[0m:31: AssertionError

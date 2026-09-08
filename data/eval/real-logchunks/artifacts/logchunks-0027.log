@@ -1,0 +1,29 @@
+Nancy.Testing.Tests.BrowserFixture.Should_return_JSON_serialized_form [FAIL]
+
+[m[37m      Assert.Equal() Failure
+
+[m[37m      Expected: 1
+
+[m[37m      Actual:   0
+
+[m[30;1m      Stack Trace:
+
+[m[37m        /Users/travis/build/NancyFx/Nancy/test/Nancy.Testing.Tests/BrowserFixture.cs(445,0): at Nancy.Testing.Tests.BrowserFixture.Should_return_JSON_serialized_formd__24.MoveNext()
+
+[m[37m        --- End of stack trace from previous location where exception was thrown ---
+
+[m[37m           at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+
+[m[37m           at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)
+
+[m[37m        --- End of stack trace from previous location where exception was thrown ---
+
+[m[37m           at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+
+[m[37m           at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)
+
+[m[37m        --- End of stack trace from previous location where exception was thrown ---
+
+[m[37m           at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+
+[m[37m           at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)

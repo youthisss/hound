@@ -1,0 +1,2 @@
+standard: Use JavaScript Standard Style (https://github.com/feross/standard) 
+  /home/travis/build/jlord/git-it-electron/lib/locale.js:36:16: Unexpected trailing comma.

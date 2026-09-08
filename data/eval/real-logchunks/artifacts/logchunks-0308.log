@@ -1,0 +1,15 @@
+ReactiveMapKitTests.MKMapViewSpec
+
+  should_accept_changes_from_bindings_to_its_scroll_enabled_state, [31mexpected to eventually be nil, got MKMapView: 0x7fb451074800; frame = (0 0; 0 0); clipsToBounds = YES; layer = CALayer: 0x7fb4520c0f00>>>[0m
+
+  [36m/Users/travis/build/ReactiveCocoa/ReactiveCocoa/ReactiveMapKitTests/MKMapViewSpec.swift:30[0m
+
+  ```
+
+[38;5;230m			[39m[38;5;67;04m// since it takes time to release MKMapView[39;00m[38;5;230m
+
+[38;5;230m			[39m[38;5;153mexpect[39m[38;5;87m([39m[38;5;230m_mapView[39m[38;5;87m)[39m[38;5;87m.[39m[38;5;153mtoEventually[39m[38;5;87m([39m[38;5;153mbeNil[39m[38;5;87m())[39m[38;5;230m
+
+[38;5;230m			[39m[38;5;155;01;04m#endif[39;00m[38;5;230m
+
+[38;5;230m[39m  ```

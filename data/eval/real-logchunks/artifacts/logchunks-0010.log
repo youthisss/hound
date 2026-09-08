@@ -1,0 +1,3 @@
+001+ Deprecated: Implicit nullable types are deprecated, mark the type as explicitly nullable with the '?' sign in /home/travis/build/php/php-src/ext/pdo_pgsql/tests/bug72294.php on line 18
+========DONE========
+FAIL Bug #72294 Segmentation fault/invalid pointer in connection with pgsql_stmt_dtor [ext/pdo_pgsql/tests/bug72294.phpt]

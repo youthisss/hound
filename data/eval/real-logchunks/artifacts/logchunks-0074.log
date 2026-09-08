@@ -1,0 +1,179 @@
+FAIL [39m[22m[27m[0m [2mtest/[22m[1mautoprefixer.test.js[22m ([0m[1m[41m11.408s[49m[22m[0m)
+[1m[31m  [1m● [1mprevents doubling prefixes[39m[22m
+
+    [2mexpect([22m[31mreceived[39m[2m).toEqual([22m[32mexpected[39m[2m)[22m
+
+    Expected value to equal:
+      [32m".a {[39m
+    [32m  -ms-grid-row: 5;[39m
+    [32m  -ms-grid-row-span: 1;[39m
+    [32m  -ms-grid-column: 1;[39m
+    [32m  -ms-grid-column-span: 5;[39m
+    [32m  grid-area: 5 / 1 / span 1 / span 5;[39m
+    [32m}[7m[39m
+    [32m[27m[39m
+    [32m.b {[39m
+    [32m  -ms-grid-row: 3;[39m
+    [32m  -ms-grid-row-span: 1;[39m
+    [32m  -ms-grid-column: 1;[39m
+    [32m  -ms-grid-column-span: 3;[39m
+    [32m  grid-area: span 1 / span 3 / 4 / 4;[39m
+    [32m}[7m[39m
+    [32m[27m[39m
+    [32m.c {[39m
+    [32m  -ms-grid-row: 2;[39m
+    [32m  -ms-grid-column: 2;[39m
+    [32m  grid-area: 2 / 2;[39m
+    [32m}[7m[39m
+    [32m[27m[39m
+    [32m.d {[39m
+    [32m  grid-area: \"custom-ident\";[39m
+    [32m}[7m[39m
+    [32m[27m[39m
+    [32m.e {[39m
+    [32m  -ms-grid-row: 2;[39m
+    [32m  -ms-grid-row-span: 1;[39m
+    [32m  -ms-grid-column: 2;[39m
+    [32m  -ms-grid-column-span: 6;[39m
+    [32m  grid-area: 2 / 2 / 3 / 8;[39m
+    [32m}[7m[39m
+    [32m[27m[39m
+    [32m.f {[39m
+    [32m  -ms-grid-row: 2;[39m
+    [32m  -ms-grid-row-span: 1;[39m
+    [32m  -ms-grid-column: 2;[39m
+    [32m  grid-area: 2 / 2 / 3;[39m
+    [32m}[7m[39m
+    [32m[27m[39m
+    [32m/* emit warning */[39m
+    [32m.g {[39m
+    [32m  -ms-grid-row: 3;[39m
+    [32m  -ms-grid-column: 1;[39m
+    [32m  grid-area: 3 / 1;[39m
+    [32m  grid-row: 1;[39m
+    [32m  grid-column: 2;[39m
+    [32m}[39m
+    [32m"[39m
+    Received:
+      [31m".a {[39m
+    [31m  -ms-grid-row: 5;[39m
+    [31m  -ms-grid-row-span: 1;[39m
+    [31m  -ms-grid-column: 1;[39m
+    [31m  -ms-grid-column-span: 5;[39m
+    [31m  grid-area: 5 / 1 / span 1 / span 5;[39m
+    [31m}[7m[39m
+    [31m[27m[39m
+    [31m.b {[39m
+    [31m  -ms-grid-row: 3;[39m
+    [31m  -ms-grid-row-span: 1;[39m
+    [31m  -ms-grid-column: 1;[39m
+    [31m  -ms-grid-column-span: 3;[39m
+    [31m  grid-area: span 1 / span 3 / 4 / 4;[39m
+    [31m}[7m[39m
+    [31m[27m[39m
+    [31m.c {[39m
+    [31m  -ms-grid-row: 2;[39m
+    [31m  -ms-grid-column: 2;[39m
+    [31m  grid-area: 2 / 2;[39m
+    [31m}[7m[39m
+    [31m[27m[39m
+    [31m.d {[39m
+    [31m  grid-area: \"custom-ident\";[39m
+    [31m}[7m[39m
+    [31m[27m[39m
+    [31m.e {[39m
+    [31m  -ms-grid-row: 2;[39m
+    [31m  -ms-grid-row-span: 1;[39m
+    [31m  -ms-grid-column: 2;[39m
+    [31m  -ms-grid-column-span: 6;[39m
+    [31m  grid-area: 2 / 2 / 3 / 8;[39m
+    [31m}[7m[39m
+    [31m[27m[39m
+    [31m.f {[39m
+    [31m  -ms-grid-row: 2;[39m
+    [31m  -ms-grid-row-span: 1;[39m
+    [31m  -ms-grid-column: 2;[39m
+    [31m  grid-area: 2 / 2 / 3;[39m
+    [31m}[7m[39m
+    [31m[27m[39m
+    [31m/* emit warning */[39m
+    [31m.g {[39m
+    [31m  -ms-grid-row: 3;[39m
+    [31m  -ms-grid-column: 1;[39m
+    [31m  grid-area: 3 / 1;[39m
+    [31m  grid-row: 1;[39m
+    [31m  grid-column: 2;[39m
+    [31m}[7m[39m
+    [31m[27m[39m
+    [31m.h {[39m
+    [31m  -ms-grid-row: 3;[39m
+    [31m  -ms-grid-column: 1;[39m
+    [31m  grid-area: 3 / 1;[39m
+    [31m  -ms-grid-column-span: 4;[39m
+    [31m  grid-column: 1 / span 4;[39m
+    [31m}[7m[39m
+    [31m[27m[39m
+    [31m/* there should be no warning */[39m
+    [31m.i {[39m
+    [31m  -ms-grid-row: 3;[39m
+    [31m  -ms-grid-column: 1;[39m
+    [31m  grid-area: 3 / 1;[39m
+    [31m  -ms-grid-column-span: 4;[39m
+    [31m  grid-column-end: span 4;[39m
+    [31m}[7m[39m
+    [31m[27m[39m
+    [31m.j {[39m
+    [31m  -ms-grid-row: 3;[39m
+    [31m  -ms-grid-column: 1;[39m
+    [31m  grid-area: 3 / 1;[39m
+    [31m  -ms-grid-row-span: 4;[39m
+    [31m  grid-row-end: span 4;[39m
+    [31m}[39m
+    [31m"[39m
+
+    Difference:
+
+    [32m- Expected[39m
+    [31m+ Received[39m
+
+    [33m@@ -46,5 +46,30 @@[39m
+    [2m    grid-area: 3 / 1;[22m
+    [2m    grid-row: 1;[22m
+    [2m    grid-column: 2;[22m
+    [2m  }[22m
+    [2m  [22m
+    [31m+ .h {[39m
+    [31m+   -ms-grid-row: 3;[39m
+    [31m+   -ms-grid-column: 1;[39m
+    [31m+   grid-area: 3 / 1;[39m
+    [31m+   -ms-grid-column-span: 4;[39m
+    [31m+   grid-column: 1 / span 4;[39m
+    [31m+ }[39m
+    [31m+ [39m
+    [31m+ /* there should be no warning */[39m
+    [31m+ .i {[39m
+    [31m+   -ms-grid-row: 3;[39m
+    [31m+   -ms-grid-column: 1;[39m
+    [31m+   grid-area: 3 / 1;[39m
+    [31m+   -ms-grid-column-span: 4;[39m
+    [31m+   grid-column-end: span 4;[39m
+    [31m+ }[39m
+    [31m+ [39m
+    [31m+ .j {[39m
+    [31m+   -ms-grid-row: 3;[39m
+    [31m+   -ms-grid-column: 1;[39m
+    [31m+   grid-area: 3 / 1;[39m
+    [31m+   -ms-grid-row-span: 4;[39m
+    [31m+   grid-row-end: span 4;[39m
+    [31m+ }[39m
+    [31m+ [39m
+[2m[22m
+[2m    [0m [90m 333 | [39m    let input [33m=[39m read(type)[0m[22m
+[2m    [0m [90m 334 | [39m    let output [33m=[39m read(type [33m+[39m [32m'.out'[39m)[0m[22m
+[2m    [0m[31m[1m>[2m[39m[90m 335 | [39m    expect(processor[33m.[39mprocess(processor[33m.[39mprocess(input))[33m.[39mcss)[33m.[39mtoEqual(output)[0m[22m
+[2m    [0m [90m     | [39m                                                            [31m[1m^[2m[39m[0m[22m
+[2m    [0m [90m 336 | [39m  }[0m[22m
+[2m    [0m [90m 337 | [39m})[0m[22m
+[2m    [0m [90m 338 | [39m[0m[22m
+[2m[22m
+[2m      [2mat Object.toEqual ([2m[0m[36mtest/autoprefixer.test.js[39m[0m[2m:335:61)

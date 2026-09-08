@@ -1,0 +1,13 @@
+[info] - http/2 client, http/1.1 server (streaming): symmetric reader and getContent *** FAILED ***
+[info]   com.twitter.util.TimeoutException: 30.seconds
+[info]   at com.twitter.util.Promise.ready(Promise.scala:656)
+[info]   at com.twitter.util.Promise.result(Promise.scala:665)
+[info]   at com.twitter.util.Await$.$anonfun$result$1(Awaitable.scala:152)
+[info]   at com.twitter.concurrent.LocalScheduler$Activation.blocking(Scheduler.scala:189)
+[info]   at com.twitter.concurrent.LocalScheduler.blocking(Scheduler.scala:256)
+[info]   at com.twitter.concurrent.Scheduler$.blocking(Scheduler.scala:85)
+[info]   at com.twitter.util.Await$.result(Awaitable.scala:152)
+[info]   at com.twitter.finagle.http.AbstractEndToEndTest.await(AbstractEndToEndTest.scala:58)
+[info]   at com.twitter.finagle.http.AbstractEndToEndTest.$anonfun$streaming$7(AbstractEndToEndTest.scala:694)
+[info]   at org.scalatest.OutcomeOf.outcomeOf(OutcomeOf.scala:85)
+[info]   ...

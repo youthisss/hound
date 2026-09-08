@@ -1,0 +1,11 @@
+Offenses:
+
+[36mlib/jekyll/excerpt.rb[0m:158:17: [33mC[0m: Performance/RegexpMatch: Use [33mmatch?[0m instead of [33m=~[0m when [33mMatchData[0m is not used.
+        next if head =~ endtag_regex_stash(tag_name)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[36mlib/jekyll/readers/post_reader.rb[0m:53:21: [33mC[0m: Performance/RegexpMatch: Use [33mmatch?[0m instead of [33m=~[0m when [33mMatchData[0m is not used.
+        next unless entry =~ matcher
+                    ^^^^^^^^^^^^^^^^
+[36mlib/jekyll/filters.rb[0m:374:31: [33mC[0m: Performance/RegexpMatch: Use [33mmatch?[0m instead of [33m=~[0m when [33mMatchData[0m is not used.
+      return property.to_f if property =~ number_like
+                              ^^^^^^^^^^^^^^^^^^^^^^^

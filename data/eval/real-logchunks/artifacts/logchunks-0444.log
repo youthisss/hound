@@ -1,0 +1,7 @@
+error[0m] [0m[0m/home/travis/build/akka/akka/akka-distributed-data/src/main/scala/akka/cluster/ddata/Vote.scala:93:15: Unused import[0m
+[0m[[0m[31merror[0m] [0m[0m  import Vote.Zero[0m
+[0m[[0m[31merror[0m] [0m[0m              ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-distributed-data/src/main/scala/akka/cluster/ddata/Vote.scala:68:15: private val Zero in object Vote is never used[0m
+[0m[[0m[31merror[0m] [0m[0m  private val Zero = BigInt(0)[0m
+[0m[[0m[31merror[0m] [0m[0m              ^[0m
+[0m[[0m[31merror[0m] [0m[0mtwo errors found[0m

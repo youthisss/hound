@@ -1,0 +1,40 @@
+An error occurred while loading ./spec/requests/users_controller_spec.rb.
+[31mFailure/Error: [0m[32mreturn[0m load_without_bootsnap(resolved, wrap)[0m
+[31m[0m
+[31mSyntaxError:[0m
+[31m  /home/travis/build/discourse/discourse/spec/requests/users_controller_spec.rb:3520: syntax error, unexpected end-of-input, expecting end[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/bootsnap-1.4.4/lib/bootsnap/load_path_cache/core_ext/kernel_require.rb:54:in `load'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/bootsnap-1.4.4/lib/bootsnap/load_path_cache/core_ext/kernel_require.rb:54:in `load'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/activesupport-5.2.3/lib/active_support/dependencies.rb:285:in `block in load'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/activesupport-5.2.3/lib/active_support/dependencies.rb:257:in `load_dependency'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/activesupport-5.2.3/lib/active_support/dependencies.rb:285:in `load'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/rspec-core-3.8.0/lib/rspec/core/configuration.rb:2034:in `load_file_handling_errors'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/rspec-core-3.8.0/lib/rspec/core/configuration.rb:1560:in `block in load_spec_files'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/rspec-core-3.8.0/lib/rspec/core/configuration.rb:1558:in `each'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/rspec-core-3.8.0/lib/rspec/core/configuration.rb:1558:in `load_spec_files'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/rspec-core-3.8.0/lib/rspec/core/runner.rb:98:in `setup'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/rspec-core-3.8.0/lib/rspec/core/runner.rb:86:in `run'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/rspec-core-3.8.0/lib/rspec/core/runner.rb:71:in `run'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/rspec-core-3.8.0/lib/rspec/core/runner.rb:45:in `invoke'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/gems/rspec-core-3.8.0/exe/rspec:4:in `top (required)>'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/bin/rspec:23:in `load'[0m
+[36m# /home/travis/build/discourse/discourse/vendor/bundle/ruby/2.6.0/bin/rspec:23:in `top (required)>'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/cli/exec.rb:74:in `load'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/cli/exec.rb:74:in `kernel_load'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/cli/exec.rb:28:in `run'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/cli.rb:463:in `exec'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/vendor/thor/lib/thor/command.rb:27:in `run'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/vendor/thor/lib/thor/invocation.rb:126:in `invoke_command'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/vendor/thor/lib/thor.rb:387:in `dispatch'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/cli.rb:27:in `dispatch'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/vendor/thor/lib/thor/base.rb:466:in `start'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/cli.rb:18:in `start'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/exe/bundle:30:in `block in top (required)>'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/lib/bundler/friendly_errors.rb:124:in `with_friendly_errors'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/gems/bundler-1.17.3/exe/bundle:22:in `top (required)>'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/bin/bundle:23:in `load'[0m
+[36m# /home/travis/.rvm/gems/ruby-2.6.3/bin/bundle:23:in `main>'[0m
+[36m# [0m
+[36m#   Showing full backtrace because every line was filtered out.[0m
+[36m#   See docs for RSpec::Configuration#backtrace_exclusion_patterns and[0m
+[36m#   RSpec::Configuration#backtrace_inclusion_patterns for more information.

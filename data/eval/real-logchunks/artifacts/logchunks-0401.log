@@ -1,0 +1,5 @@
+Module Failed: date-time-input-range
+Test Failed: prevents toDate to be before fromDate
+  Assertion Failed: failed, expected argument to be falsy, was: true    
+  Assertion Failed: failed, expected argument to be truthy, was: false
+    Expected: true, Actual: false

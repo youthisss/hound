@@ -1,0 +1,2 @@
+1) AtomWindow creating a real window creates a real, properly configured BrowserWindow:
+     Error: timeout of 10000ms exceeded. Ensure the done() callback is being called in this test.

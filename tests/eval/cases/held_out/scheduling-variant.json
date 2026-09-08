@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-scheduling-variant",
+  "artifact": "scheduling-variant.log",
+  "expected": {
+    "stage": "deploy",
+    "kind": "scheduling_failed",
+    "primary_event": {"stage": "deploy", "kind": "scheduling_failed"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

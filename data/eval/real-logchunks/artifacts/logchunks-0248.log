@@ -1,0 +1,8 @@
+1) Check challenges
+       Check challenges (english)
+         Use Recursion to Create a Range of Numbers
+           Check tests against solutions
+             Solution 1:
+     Error: the string "<code>rangeOfNumbers(1, 5)</code> should return <code>[1, 2, 3, 4, 5]</code>.\n        <code>rangeOfNumbers(1, 5)</code> should return <code>[1, 2, 3, 4, 5]</code>.\nassert.deepStrictEqual is not a function" was thrown, throw an Error :)
+      at Runner.Mocha.Runner.fail (test/test-challenges.js:65:24)
+      at process._tickCallback (internal/process/next_tick.js:68:7)

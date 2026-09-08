@@ -1,0 +1,5 @@
+io.reactivex.internal.operators.observable.ObservableRefCountTest > publishNoLeak FAILED
+    java.lang.AssertionError: 12,973,696 -> 112,950,472
+        at org.junit.Assert.fail(Assert.java:88)
+        at org.junit.Assert.assertTrue(Assert.java:41)
+        at io.reactivex.internal.operators.observable.ObservableRefCountTest.publishNoLeak(ObservableRefCountTest.java:733)

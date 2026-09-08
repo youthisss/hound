@@ -1,0 +1,5 @@
+db/migrate/20190731090219_rename_edit_notification_setting.rb[0m:1:1: [33mC[0m: Style/FrozenStringLiteralComment: Missing magic comment [33m# frozen_string_literal: true[0m.
+
+class RenameEditNotificationSetting  ActiveRecord::Migration[5.2]
+
+^

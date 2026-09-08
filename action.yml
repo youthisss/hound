@@ -20,6 +20,30 @@ inputs:
     description: "Force rule-based analysis (no LLM)"
     required: false
     default: "true"
+  provider:
+    description: "Optional OpenAI-compatible provider preset; leave empty to use environment/configuration"
+    required: false
+    default: ""
+  model:
+    description: "Optional model override; leave empty to use environment/configuration"
+    required: false
+    default: ""
+  source-context:
+    description: "Attach bounded repository source context when trust policy permits"
+    required: false
+    default: "false"
+  context:
+    description: "Optional trusted JSON context sidecar path inside the workspace"
+    required: false
+    default: ""
+  enrich:
+    description: "Collect bounded read-only deployment evidence when configured"
+    required: false
+    default: "false"
+  redact:
+    description: "Keep secret and PII redaction enabled (set false only for controlled local use)"
+    required: false
+    default: "true"
 outputs:
   report:
     description: "Path to the primary RCA JSON report"
@@ -46,3 +70,15 @@ runs:
     - ${{ inputs.out }}
     - --offline-value
     - ${{ inputs.offline }}
+    - --provider
+    - ${{ inputs.provider }}
+    - --model
+    - ${{ inputs.model }}
+    - --source-context-value
+    - ${{ inputs.source-context }}
+    - --context
+    - ${{ inputs.context }}
+    - --enrich-value
+    - ${{ inputs.enrich }}
+    - --redact-value
+    - ${{ inputs.redact }}

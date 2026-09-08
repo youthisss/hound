@@ -1,0 +1,4 @@
+diff --git a/src/wallet/rpcwallet.cpp b/src/wallet/rpcwallet.cpp
+@@ -3338,4 +3342,5 @@ static UniValue bumpfee(const JSONRPCRequest& request)
++            true, true);
+^---- failure generated from test/lint/lint-whitespace.sh

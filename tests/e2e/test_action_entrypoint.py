@@ -15,6 +15,7 @@ def test_action_entrypoint_preserves_first_cli_argument():
     assert "export HOME=/home/hound" in script
     assert 'chown -R "$workspace_uid:$workspace_gid" "$output"' in script
     assert 'exit "$status"' in script
+    assert 'context_path=$(resolve_workspace_path "$context")' in script
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Docker action entrypoint is exercised in Linux CI")

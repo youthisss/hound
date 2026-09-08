@@ -1,0 +1,25 @@
+[-] - running a single mock in one It -> Expected and actual values differ!
+
+Expected: 'mock'
+
+Actual  : ''
+
+at Verify-Equal, /Users/travis/build/pester/Pester/Dependencies/Axiom/Verify-Equal.ps1:16
+
+at <ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:30
+
+at t, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:103
+
+at <ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:19
+
+at b, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:77
+
+at <ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:18
+
+at i, /Users/travis/build/pester/Pester/new-runtimepoc/p.psm1:43
+
+at <ScriptBlock>, /Users/travis/build/pester/Pester/new-runtimepoc/Pester.Mock.RSpec.ts.ps1:17
+
+at <ScriptBlock>, <No file>:1
+
+at <ScriptBlock>, <No file>:1

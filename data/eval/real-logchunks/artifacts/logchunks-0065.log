@@ -1,0 +1,97 @@
+AST as expected for NullLiteral node[0m 
+[0;31m  AssertionError: Property [0mtype[0;31m: expected [0me[0;31m to equal [0mNullLiteral[0;31m
+    at exports.eq (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at deepStrictEqualExpectedProps (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at exports.expressionAstMatchesObject (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at Function.eval (anonymous>:1:1)
+    at global.test (/home/travis/build/jashkenas/coffeescript/Cakefile:538:21)
+    at eval (anonymous>:1:1)
+[0m 
+  function () {
+  return testExpression('null', {
+    type: 'NullLiteral'
+  });
+}
+
+[0;31m  AST as expected for BooleanLiteral node[0m 
+[0;31m  AssertionError: Property [0mtype[0;31m: expected [0mh[0;31m to equal [0mBooleanLiteral[0;31m
+    at exports.eq (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at deepStrictEqualExpectedProps (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at exports.expressionAstMatchesObject (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at Function.eval (anonymous>:1:1)
+    at global.test (/home/travis/build/jashkenas/coffeescript/Cakefile:538:21)
+    at eval (anonymous>:1:1)
+[0m 
+  function () {
+  testExpression('true', {
+    type: 'BooleanLiteral',
+    value: true,
+    name: 'true'
+  });
+  testExpression('off', {
+    type: 'BooleanLiteral',
+    value: false,
+    name: 'off'
+  });
+  return testExpression('yes', {
+    type: 'BooleanLiteral',
+    value: true,
+    name: 'yes'
+  });
+}
+
+[0;31m  AST location data as expected for NullLiteral node[0m 
+[0;31m  AssertionError: Property [0mtype[0;31m: expected [0me[0;31m to equal [0mNullLiteral[0;31m
+    at exports.eq (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at deepStrictEqualExpectedProps (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at exports.expressionAstMatchesObject (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at Function.eval (anonymous>:1:1)
+    at global.test (/home/travis/build/jashkenas/coffeescript/Cakefile:538:21)
+    at eval (anonymous>:1:1)
+[0m 
+  function () {
+  return testExpression('null', {
+    type: 'NullLiteral',
+    start: 0,
+    end: 4,
+    range: [0, 4],
+    loc: {
+      start: {
+        line: 1,
+        column: 0
+      },
+      end: {
+        line: 1,
+        column: 4
+      }
+    }
+  });
+}
+
+[0;31m  AST location data as expected for BooleanLiteral node[0m 
+[0;31m  AssertionError: Property [0mtype[0;31m: expected [0mh[0;31m to equal [0mBooleanLiteral[0;31m
+    at exports.eq (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at deepStrictEqualExpectedProps (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at exports.expressionAstMatchesObject (/home/travis/build/jashkenas/coffeescript/test/support/helpers.coffee:1:1)
+    at Function.eval (anonymous>:1:1)
+    at global.test (/home/travis/build/jashkenas/coffeescript/Cakefile:538:21)
+    at eval (anonymous>:1:1)
+[0m 
+  function () {
+  return testExpression('true', {
+    type: 'BooleanLiteral',
+    start: 0,
+    end: 4,
+    range: [0, 4],
+    loc: {
+      start: {
+        line: 1,
+        column: 0
+      },
+      end: {
+        line: 1,
+        column: 4
+      }
+    }
+  });
+}

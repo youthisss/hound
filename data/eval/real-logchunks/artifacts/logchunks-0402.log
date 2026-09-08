@@ -1,0 +1,30 @@
+Error while processing route: adminWatchedWords.action
+Deprecation notice: Please replace all occurrences of "refresh"" with "sync". FontAwesome 4.7 icon names are now deprecated and will be removed in the next release.
+TypeError: Cannot read property 'block' of undefined
+    at eval (admin/models/watched-word:48:73)
+    at Array.map (anonymous>)
+    at eval (admin/models/watched-word:41:37)
+    at tryCatcher (ember:61303:21)
+    at invokeCallback (ember:61476:33)
+    at publish (ember:61462:9)
+    at eval (ember:55822:16)
+    at invoke (ember:54023:16)
+    at Queue.flush (ember:53915:13)
+    at DeferredActionQueues.flush (ember:54119:21)
+F
+
+Module Failed: Acceptance: Admin - Watched Words
+  Test Failed: remove words
+    Assertion Failed: TypeError: Cannot read property 'block' of undefined
+      Expected: true, Actual: false    
+    Assertion Failed: Promise rejected during "remove words": Element .show-words-checkbox not found.
+  Test Failed: add words
+    Assertion Failed: TypeError: Cannot read property 'block' of undefined
+      Expected: true, Actual: false    
+    Assertion Failed: Promise rejected during "add words": Element .show-words-checkbox not found.
+  Test Failed: list words in groups
+    Assertion Failed: TypeError: Cannot read property 'block' of undefined
+      Expected: true, Actual: false    
+    Assertion Failed: failed, expected argument to be truthy, was: false
+      Expected: true, Actual: false    
+    Assertion Failed: Promise rejected during "list words in groups": Element .admin-controls .controls input[type=text] not found.

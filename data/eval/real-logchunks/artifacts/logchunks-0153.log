@@ -1,0 +1,11 @@
+FAIL: TestAlpha/Libraries_for_developing_GraphQL_servers_in_Go. (0.00s)
+        repo_test.go:131: expected 'gqlgen' but actual is 'graphql-go'
+        repo_test.go:131: expected 'graphql-go' but actual is 'gqlgen'
+        repo_test.go:135: expected order is:
+            appointy/jaal
+            gqlgen
+            graph-gophers/graphql-go
+            graphql-go
+            graphql-relay-go
+            machinebox/graphql
+            samsarahq/thunder

@@ -1,0 +1,6 @@
+Non-matching xml in docProps/core.xml:
+          -   7   <dc:subject>This is a subtitle or the subject in word</dc:subject>
+          +   8   <dcterms:created xsi:type="dcterms:W3CDTF">2019-01-18T13:19:08Z</dcterms:created>
+          +   9   <dcterms:modified xsi:type="dcterms:W3CDTF">2019-01-18T13:19:08Z</dcterms:modified>
+          -   9   <dcterms:created xsi:type="dcterms:W3CDTF">2019-01-15T23:56:43Z</dcterms:created>
+          -  10   <dcterms:modified xsi:type="dcterms:W3CDTF">2019-01-15T23:56:43Z</dcterms:modified>

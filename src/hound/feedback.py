@@ -4,12 +4,17 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 from uuid import uuid4
 
+from hound.fsio import read_bounded_bytes
 from hound.ingest.redact import redact_text
 from hound.models import KINDS, SEVERITIES, validate
+from hound.pathutil import path_has_symlink
+from hound.state_recovery import preserve_corrupt_sqlite
 
 FEEDBACK_SCHEMA_VERSION = "1.0"
 MAX_REPORT_BYTES = 16 * 1024 * 1024
@@ -51,9 +56,9 @@ def _load_report(path: Path) -> tuple[dict, str]:
     if size > MAX_REPORT_BYTES:
         raise ValueError(f"report exceeds {MAX_REPORT_BYTES} bytes")
     try:
-        raw = path.read_bytes()
+        raw = read_bounded_bytes(path, MAX_REPORT_BYTES)
         document = json.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError(f"could not read report: {exc}") from exc
     validate(document)
     return document, hashlib.sha256(raw).hexdigest()
@@ -68,43 +73,78 @@ def _safe_text(value: str, field: str, limit: int = 256) -> str:
     return redacted
 
 
-def _connect(path: str | Path) -> sqlite3.Connection:
+@contextmanager
+def _connect(path: str | Path) -> Iterator[sqlite3.Connection]:
     store = Path(path)
-    if store.is_symlink() or store.parent.is_symlink():
+    if path_has_symlink(store) or store.is_symlink():
         raise ValueError("feedback store must not use symlinks")
     store.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(store, timeout=10)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute("PRAGMA busy_timeout=10000")
-    connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS feedback (
-            feedback_id TEXT PRIMARY KEY,
-            run_id TEXT NOT NULL,
-            report_schema_version TEXT NOT NULL,
-            report_sha256 TEXT NOT NULL,
-            dedup_key TEXT NOT NULL,
-            predicted_kind TEXT NOT NULL,
-            predicted_severity TEXT NOT NULL,
-            predicted_component TEXT NOT NULL,
-            usefulness TEXT NOT NULL,
-            kind_correct TEXT NOT NULL,
-            severity_correct TEXT NOT NULL,
-            owner_correct TEXT NOT NULL,
-            duplicate_correct TEXT NOT NULL,
-            actual_kind TEXT,
-            actual_severity TEXT,
-            actual_owner TEXT NOT NULL,
-            actual_outcome TEXT NOT NULL,
-            review_status TEXT NOT NULL,
-            reviewer TEXT NOT NULL,
-            created_at TEXT NOT NULL
+    if path_has_symlink(store) or store.is_symlink():
+        raise ValueError("feedback store must not use symlinks")
+    connection: sqlite3.Connection | None = None
+    try:
+        connection = sqlite3.connect(store, timeout=10)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA busy_timeout=10000")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS feedback (
+                feedback_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                report_schema_version TEXT NOT NULL,
+                report_sha256 TEXT NOT NULL,
+                dedup_key TEXT NOT NULL,
+                predicted_kind TEXT NOT NULL,
+                predicted_severity TEXT NOT NULL,
+                predicted_component TEXT NOT NULL,
+                usefulness TEXT NOT NULL,
+                kind_correct TEXT NOT NULL,
+                severity_correct TEXT NOT NULL,
+                owner_correct TEXT NOT NULL,
+                duplicate_correct TEXT NOT NULL,
+                actual_kind TEXT,
+                actual_severity TEXT,
+                actual_owner TEXT NOT NULL,
+                actual_outcome TEXT NOT NULL,
+                review_status TEXT NOT NULL,
+                reviewer TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                validation_id TEXT,
+                root_cause_correction TEXT,
+                notes TEXT
+            )
+            """
         )
-        """
+        # Migrate table if created with older schema
+        existing_cols = {row[1] for row in connection.execute("PRAGMA table_info(feedback)").fetchall()}
+        for new_col in ("validation_id", "root_cause_correction", "notes"):
+            if new_col not in existing_cols:
+                connection.execute(f"ALTER TABLE feedback ADD COLUMN {new_col} TEXT DEFAULT ''")
+        connection.execute("PRAGMA user_version=1")
+        yield connection
+        connection.commit()
+    except sqlite3.DatabaseError as exc:
+        if connection is not None:
+            connection.rollback()
+        if store.exists() and _looks_corrupt(exc):
+            if connection is not None:
+                connection.close()
+                connection = None
+            recovery = preserve_corrupt_sqlite(store)
+            raise ValueError(f"feedback store is damaged; original preserved at {recovery}") from exc
+        raise
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def _looks_corrupt(error: sqlite3.DatabaseError) -> bool:
+    message = str(error).lower()
+    return any(
+        marker in message
+        for marker in ("not a database", "database disk image is malformed", "file is encrypted")
     )
-    connection.execute("PRAGMA user_version=1")
-    return connection
 
 
 def record_feedback(
@@ -123,6 +163,10 @@ def record_feedback(
     actual_outcome: str = "unknown",
     review_status: str = "pending",
     reviewer: str = "",
+    validation_id: str | None = None,
+    root_cause_correction: str = "",
+    notes: str = "",
+    validation_store_path: str | Path | None = None,
 ) -> dict:
     """Validate and append one structured feedback record."""
     if usefulness not in USEFULNESS:
@@ -146,6 +190,22 @@ def record_feedback(
         raise ValueError(f"review_status must be one of {sorted(REVIEW_STATUSES)}")
 
     report, digest = _load_report(Path(report_path))
+
+    # Gating: only reports passing validation can be marked 'reviewed'
+    if review_status == "reviewed":
+        from hound.validation import default_validation_store, get_latest_validation, validate_report
+
+        v_store = Path(validation_store_path) if validation_store_path else default_validation_store(Path(report_path).parent.parent)
+        val_record = get_latest_validation(v_store, run_id) if v_store.is_file() else None
+        if val_record is None or val_record.is_stale(report_path):
+            val_record = validate_report(report_path, persist=False)
+        if val_record.status == "FAIL":
+            raise ValueError(
+                f"cannot mark feedback as 'reviewed' for invalid report: {val_record.summary}"
+            )
+        if validation_id is None:
+            validation_id = val_record.validation_id
+
     record = {
         "feedback_id": f"fb-{uuid4().hex}",
         "run_id": _safe_text(run_id, "run_id", 160),
@@ -164,6 +224,9 @@ def record_feedback(
         "review_status": review_status,
         "reviewer": _safe_text(reviewer, "reviewer"),
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "validation_id": validation_id or "",
+        "root_cause_correction": _safe_text(root_cause_correction, "root_cause_correction", 1024),
+        "notes": _safe_text(notes, "notes", 2048),
     }
     columns = tuple(record)
     placeholders = ", ".join("?" for _ in columns)
@@ -220,6 +283,11 @@ def find_known_issue(
     if digest != record["report_sha256"]:
         return None
     if report.get("triage", {}).get("dedup_key") != dedup_key:
+        return None
+    from hound.validation import validate_report
+
+    val = validate_report(report_path, persist=False)
+    if val.status == "FAIL":
         return None
     return {"feedback": record, "report": report}
 

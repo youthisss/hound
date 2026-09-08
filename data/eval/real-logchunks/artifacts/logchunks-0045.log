@@ -1,0 +1,7 @@
+CMake Error at /usr/share/cmake-3.2/Modules/FindPackageHandleStandardArgs.cmake:138 (message):
+  Could NOT find Halide (missing: HALIDE_LIBRARIES HALIDE_INCLUDE_DIR)
+Call Stack (most recent call first):
+  /usr/share/cmake-3.2/Modules/FindPackageHandleStandardArgs.cmake:374 (_FPHSA_FAILURE_MESSAGE)
+  cmake/Modules/FindHalide.cmake:38 (find_package_handle_standard_args)
+  cmake/Dependencies.cmake:209 (find_package)
+  CMakeLists.txt:46 (include)

@@ -1,0 +1,68 @@
+Exception in thread "main" java.lang.ExceptionInInitializerError
+	at org.jruby.Ruby.newInstance(Ruby.java:266)
+	at s3.website.Ruby$.rubyRuntime$lzycompute(Ruby.scala:4)
+	at s3.website.Ruby$.rubyRuntime(Ruby.scala:4)
+	at s3.website.model.Config$$anonfun$13.apply(Config.scala:215)
+	at s3.website.model.Config$$anonfun$13.apply(Config.scala:213)
+	at scala.util.Try$.apply(Try.scala:192)
+	at s3.website.model.Config$.erbEval(Config.scala:213)
+	at s3.website.model.Site$$anonfun$2.apply(Site.scala:28)
+	at s3.website.model.Site$$anonfun$2.apply(Site.scala:27)
+	at scala.util.Success.flatMap(Try.scala:231)
+	at s3.website.model.Site$.parseConfig(Site.scala:27)
+	at s3.website.model.Site$.loadSite(Site.scala:94)
+	at s3.website.Push$.push(Push.scala:62)
+	at s3.website.Push$.main(Push.scala:40)
+	at s3.website.Push.main(Push.scala)
+Caused by: java.lang.RuntimeException: unsupported Java version: 11
+	at org.jruby.RubyInstanceConfig.initGlobalJavaVersion(RubyInstanceConfig.java:1878)
+	at org.jruby.RubyInstanceConfig.clinit>(RubyInstanceConfig.java:1585)
+	... 15 more
+
+[31;1mThe command "bundle exec s3_website push" failed. Retrying, 2 of 3.[0m
+
+Exception in thread "main" java.lang.ExceptionInInitializerError
+	at org.jruby.Ruby.newInstance(Ruby.java:266)
+	at s3.website.Ruby$.rubyRuntime$lzycompute(Ruby.scala:4)
+	at s3.website.Ruby$.rubyRuntime(Ruby.scala:4)
+	at s3.website.model.Config$$anonfun$13.apply(Config.scala:215)
+	at s3.website.model.Config$$anonfun$13.apply(Config.scala:213)
+	at scala.util.Try$.apply(Try.scala:192)
+	at s3.website.model.Config$.erbEval(Config.scala:213)
+	at s3.website.model.Site$$anonfun$2.apply(Site.scala:28)
+	at s3.website.model.Site$$anonfun$2.apply(Site.scala:27)
+	at scala.util.Success.flatMap(Try.scala:231)
+	at s3.website.model.Site$.parseConfig(Site.scala:27)
+	at s3.website.model.Site$.loadSite(Site.scala:94)
+	at s3.website.Push$.push(Push.scala:62)
+	at s3.website.Push$.main(Push.scala:40)
+	at s3.website.Push.main(Push.scala)
+Caused by: java.lang.RuntimeException: unsupported Java version: 11
+	at org.jruby.RubyInstanceConfig.initGlobalJavaVersion(RubyInstanceConfig.java:1878)
+	at org.jruby.RubyInstanceConfig.clinit>(RubyInstanceConfig.java:1585)
+	... 15 more
+
+[31;1mThe command "bundle exec s3_website push" failed. Retrying, 3 of 3.[0m
+
+Exception in thread "main" java.lang.ExceptionInInitializerError
+	at org.jruby.Ruby.newInstance(Ruby.java:266)
+	at s3.website.Ruby$.rubyRuntime$lzycompute(Ruby.scala:4)
+	at s3.website.Ruby$.rubyRuntime(Ruby.scala:4)
+	at s3.website.model.Config$$anonfun$13.apply(Config.scala:215)
+	at s3.website.model.Config$$anonfun$13.apply(Config.scala:213)
+	at scala.util.Try$.apply(Try.scala:192)
+	at s3.website.model.Config$.erbEval(Config.scala:213)
+	at s3.website.model.Site$$anonfun$2.apply(Site.scala:28)
+	at s3.website.model.Site$$anonfun$2.apply(Site.scala:27)
+	at scala.util.Success.flatMap(Try.scala:231)
+	at s3.website.model.Site$.parseConfig(Site.scala:27)
+	at s3.website.model.Site$.loadSite(Site.scala:94)
+	at s3.website.Push$.push(Push.scala:62)
+	at s3.website.Push$.main(Push.scala:40)
+	at s3.website.Push.main(Push.scala)
+Caused by: java.lang.RuntimeException: unsupported Java version: 11
+	at org.jruby.RubyInstanceConfig.initGlobalJavaVersion(RubyInstanceConfig.java:1878)
+	at org.jruby.RubyInstanceConfig.clinit>(RubyInstanceConfig.java:1585)
+	... 15 more
+
+[31;1mThe command "bundle exec s3_website push" failed 3 times.

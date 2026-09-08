@@ -1,0 +1,2 @@
+standard: Use JavaScript Standard Style (https://github.com/feross/standard) 
+  /home/travis/build/jlord/git-it-electron/lib/build-challenges.js:178:40: A space is required after ','.

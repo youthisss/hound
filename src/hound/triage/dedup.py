@@ -20,13 +20,15 @@ import re
 import sqlite3
 import sys
 import time
-import tempfile
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from hound.fsio import atomic_write, read_bounded_text
 from hound.models import Artifacts, Triage
+from hound.pathutil import path_has_symlink
+from hound.urlutil import validate_http_url
 
 _REMOVE_RE = re.compile(
     r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\b|"
@@ -38,6 +40,7 @@ _REMOVE_RE = re.compile(
 )
 
 MAX_STATE_ENTRIES = 1000
+MAX_STATE_BYTES = 8 * 1024 * 1024
 IDENTITY_VERSION = "incident-v2"
 CACHE_VERSION = "rca-context-v1"
 DELIVERY_CLAIM_TTL_SECONDS = 300
@@ -47,6 +50,7 @@ _LOCK_STALE_SECONDS = 60.0
 _HTTP_TIMEOUT = 15
 _SQLITE_BUSY_TIMEOUT_MS = 5000
 _SQLITE_PRUNE_EVERY = 64
+_MAX_HTTP_RESPONSE_BYTES = 256 * 1024
 
 _BACKEND = "file"
 _STORE_URL = ""
@@ -102,9 +106,13 @@ def _http_get() -> list[dict]:
     try:
         from urllib.request import Request, urlopen
 
-        req = Request(_STORE_URL, headers=_http_headers(), method="GET")
+        endpoint = validate_http_url(_STORE_URL, label="dedup store URL", allow_query=True)
+        req = Request(endpoint, headers=_http_headers(), method="GET")
         with urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read(_MAX_HTTP_RESPONSE_BYTES + 1)
+        if len(raw) > _MAX_HTTP_RESPONSE_BYTES:
+            raise ValueError("dedup store response exceeded the byte limit")
+        data = json.loads(raw.decode("utf-8"))
         return data if isinstance(data, list) else []
     except Exception as exc:
         sys.stderr.write(f"Warning: dedup HTTP store GET failed: {exc}\n")
@@ -118,7 +126,10 @@ def _http_put(entries: list[dict]) -> None:
         from urllib.request import Request, urlopen
 
         payload = json.dumps(entries).encode("utf-8")
-        req = Request(_STORE_URL, data=payload, headers=_http_headers(), method="PUT")
+        endpoint = validate_http_url(_STORE_URL, label="dedup store URL", allow_query=True)
+        if len(payload) > _MAX_HTTP_RESPONSE_BYTES:
+            raise ValueError("dedup store request exceeded the byte limit")
+        req = Request(endpoint, data=payload, headers=_http_headers(), method="PUT")
         with urlopen(req, timeout=_HTTP_TIMEOUT):  # noqa: S310 - user-supplied store URL
             pass
     except Exception as exc:
@@ -242,8 +253,13 @@ def _json_dumps(value: dict) -> str:
 
 
 def _sqlite_connect(path: str | os.PathLike) -> sqlite3.Connection:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=10.0)
+    sqlite_path = Path(path)
+    if path_has_symlink(sqlite_path) or sqlite_path.is_symlink():
+        raise ValueError("dedup state path must not contain symlinked path components")
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    if path_has_symlink(sqlite_path.parent) or sqlite_path.is_symlink():
+        raise ValueError("dedup state path must not contain symlinked path components")
+    conn = sqlite3.connect(str(sqlite_path), timeout=10.0)
     conn.row_factory = sqlite3.Row
     # journal_mode needs a write lock during first-use initialization. Install
     # the busy handler first, then retry because Windows may still return BUSY
@@ -584,10 +600,14 @@ def _is_stale_lock(lock_path: Path) -> bool:
     hold a lock longer than the old timeout.
     """
     try:
-        pid_str = lock_path.read_text(encoding="utf-8", errors="ignore").strip().split(":", 1)[0]
+        if path_has_symlink(lock_path) or lock_path.is_symlink():
+            return False
+        if not lock_path.exists():
+            return False
+        pid_str = read_bounded_text(lock_path, 512, encoding="utf-8", errors="ignore").strip().split(":", 1)[0]
         if pid_str.isdigit() and not _pid_alive(int(pid_str)):
             return True
-    except OSError:
+    except (OSError, ValueError):
         return False
     return False
 
@@ -602,13 +622,18 @@ def _state_lock(state_path: str | os.PathLike):
         # Server-side store is responsible for its own consistency; no local lock.
         yield
         return
+    state = Path(state_path)
     lock_path = Path(state_path).with_suffix(".lock")
+    if path_has_symlink(state) or state.is_symlink() or path_has_symlink(lock_path) or lock_path.is_symlink():
+        raise ValueError("dedup state and lock paths must not contain symlinks")
     acquired = False
     owner = f"{os.getpid()}:{uuid4().hex}"
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         for _ in range(_LOCK_RETRIES):
             try:
+                if path_has_symlink(lock_path) or lock_path.is_symlink():
+                    raise RuntimeError("dedup lock path became a symlink")
                 fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
                 try:
                     os.write(fd, owner.encode("utf-8"))
@@ -634,12 +659,14 @@ def _state_lock(state_path: str | os.PathLike):
         if acquired:
             for _ in range(_LOCK_RETRIES):
                 try:
-                    if lock_path.read_text(encoding="utf-8", errors="ignore").strip() == owner:
+                    if path_has_symlink(lock_path) or lock_path.is_symlink():
+                        break
+                    if read_bounded_text(lock_path, 512, encoding="utf-8", errors="ignore").strip() == owner:
                         lock_path.unlink()
                     break
                 except FileNotFoundError:
                     break
-                except OSError:
+                except (OSError, ValueError):
                     time.sleep(_LOCK_RETRY_DELAY)
 
 
@@ -649,10 +676,12 @@ def load_state(path: str | os.PathLike) -> list[dict]:
     if _is_http():
         return _http_get()
     p = Path(path)
+    if path_has_symlink(p) or p.is_symlink():
+        raise ValueError("dedup state path must not contain symlinked path components")
     if not p.exists():
         return []
     try:
-        data = json.loads(p.read_text(encoding="utf-8"))
+        data = json.loads(read_bounded_text(p, MAX_STATE_BYTES, encoding="utf-8"))
     except json.JSONDecodeError as exc:
         backup = p.with_name(p.name + f".corrupt-{int(time.time())}")
         with contextlib.suppress(OSError):
@@ -673,8 +702,12 @@ def save_state(path: str | os.PathLike, entries: list[dict], keep_key: str | Non
         _http_put(entries)
         return True
     p = Path(path)
+    if path_has_symlink(p) or p.is_symlink():
+        raise ValueError("dedup state path must not contain symlinked path components")
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
+        if path_has_symlink(p.parent) or p.is_symlink():
+            raise ValueError("dedup state path must not contain symlinked path components")
         # Prefer filed entries, but keep the state strictly bounded.
         if len(entries) > MAX_STATE_ENTRIES:
             unbounded_entries = entries
@@ -706,16 +739,10 @@ def save_state(path: str | os.PathLike, entries: list[dict], keep_key: str | Non
                     evicted = min(same_class or entries, key=lambda entry: entry.get("last_seen", ""))
                     entries.remove(evicted)
                     entries.append(protected)
-        fd, tmp_name = tempfile.mkstemp(prefix=f".{p.name}.", suffix=".tmp", dir=p.parent)
-        tmp = Path(tmp_name)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump(entries, stream, indent=2, ensure_ascii=False)
-            os.replace(tmp, p)
-        except Exception:
-            # os.fdopen owns the fd; the with-block already closed it on error.
-            tmp.unlink(missing_ok=True)
-            raise
+        serialized = json.dumps(entries, indent=2, ensure_ascii=False)
+        if len(serialized.encode("utf-8")) > MAX_STATE_BYTES:
+            raise ValueError(f"dedup state exceeds the {MAX_STATE_BYTES}-byte limit")
+        atomic_write(p, serialized)
         return True
     except OSError as exc:
         sys.stderr.write(f"Warning: Failed to save dedup state to '{path}': {exc}\n")
@@ -927,6 +954,56 @@ def lookup_incident(state_path: str | None, key: str) -> dict | None:
             if entry.get("key") == key:
                 return entry
     return None
+
+
+def list_incidents(
+    state_path: str | None,
+    *,
+    kind: str | None = None,
+    filed: bool | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    """Return bounded incident snapshots for read-only operator inspection.
+
+    This function never increments recurrence counts and never deletes history.
+    ``filed`` filters the legacy GitHub flag; destination-specific delivery
+    details remain available in the entry's redacted ``deliveries`` mapping.
+    """
+    if not state_path:
+        return []
+    if limit < 1 or limit > 1000:
+        raise ValueError("limit must be in [1, 1000]")
+    if _is_sqlite():
+        clauses: list[str] = []
+        params: list[object] = []
+        if kind is not None:
+            clauses.append("kind = ?")
+            params.append(kind)
+        if filed is not None:
+            clauses.append("filed = ?")
+            params.append(1 if filed else 0)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        with _sqlite_session(state_path) as conn:
+            rows = conn.execute(
+                f"SELECT * FROM incidents{where} ORDER BY last_seen DESC, key DESC LIMIT ?",
+                (*params, limit),
+            ).fetchall()
+        return [_sqlite_row_to_entry(row) for row in rows]
+    if _is_http():
+        raise ValueError("HTTP dedup backend is disabled for incident administration")
+    with _state_lock(state_path):
+        entries = load_state(state_path)
+    filtered = [
+        entry for entry in entries
+        if isinstance(entry, dict)
+        and (kind is None or entry.get("kind") == kind)
+        and (filed is None or bool(entry.get("filed")) is filed)
+    ]
+    return sorted(
+        filtered,
+        key=lambda entry: (str(entry.get("last_seen", "")), str(entry.get("key", ""))),
+        reverse=True,
+    )[:limit]
 
 
 def invalidate_root_cause(state_path: str | None, key: str) -> bool:

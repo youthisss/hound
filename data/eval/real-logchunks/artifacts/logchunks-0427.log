@@ -1,0 +1,17 @@
+error[E0658]: `cfg(target_vendor)` is experimental and subject to change (see issue #29718)
+   --> C:\Users\travis\.cargo\registry\src\github.com-1ecc6299db9ec823\backtrace-0.3.33\src\lib.rs:147:45
+    |
+147 | #[cfg(all(windows, feature = "dbghelp", not(target_vendor = "uwp")))]
+    |                                             ^^^^^^^^^^^^^^^^^^^^^
+
+error[E0658]: `cfg(target_vendor)` is experimental and subject to change (see issue #29718)
+   --> C:\Users\travis\.cargo\registry\src\github.com-1ecc6299db9ec823\backtrace-0.3.33\src\backtrace\mod.rs:140:59
+    |
+140 |     } else if #[cfg(all(windows, feature = "dbghelp", not(target_vendor = "uwp")))] {
+    |                                                           ^^^^^^^^^^^^^^^^^^^^^
+
+error[E0658]: `cfg(target_vendor)` is experimental and subject to change (see issue #29718)
+   --> C:\Users\travis\.cargo\registry\src\github.com-1ecc6299db9ec823\backtrace-0.3.33\src\symbolize\mod.rs:466:52
+    |
+466 |                         any(unix, all(windows, not(target_vendor = "uwp"), target_env = "gnu")),
+    |                                                    ^^^^^^^^^^^^^^^^^^^^^

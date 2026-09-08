@@ -1,0 +1,21 @@
+_________________________________ test_readme __________________________________[0m
+
+source_root = PosixPath('/home/travis/build/nvbn/thefuck')
+
+[1m    def test_readme(source_root):[0m
+[1m        with source_root.joinpath('README.md').open() as f:[0m
+[1m            readme = f.read()[0m
+[1m    [0m
+[1m            bundled = source_root.joinpath('thefuck') \[0m
+[1m                                 .joinpath('rules') \[0m
+[1m                                 .glob('*.py')[0m
+[1m    [0m
+[1m            for rule in bundled:[0m
+[1m                if rule.stem != '__init__':[0m
+[1m>                   assert rule.stem in readme,\[0m
+[1m                        'Missing rule "{}" in README.md'.format(rule.stem)[0m
+[1m[31mE                   AssertionError: Missing rule "docker_image_being_used_by_container" in README.md[0m
+[1m[31mE                   assert 'docker_image_being_used_by_container' in '# The Fuck [![Version][version-badge]][version-link] [![Build Status][travis-badge]][travis-link] [![Windows Build St...efuck/master/example_instant_mode.gif\n[homebrew]:        https://brew.sh/\n[linuxbrew]:       https://linuxbrew.sh/\n'[0m
+[1m[31mE                    +  where 'docker_image_being_used_by_container' = PosixPath('/home/travis/build/nvbn/thefuck/thefuck/rules/docker_image_being_used_by_container.py').stem[0m
+
+[1m[31mtests/test_readme.py[0m:11: AssertionError

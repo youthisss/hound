@@ -11,8 +11,8 @@ class FakeResponse:
         self._data = json.dumps(data).encode("utf-8")
         self.status = status
 
-    def read(self):
-        return self._data
+    def read(self, limit=None):
+        return self._data if limit is None else self._data[:limit]
 
     def __enter__(self):
         return self

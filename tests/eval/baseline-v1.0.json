@@ -1,8 +1,8 @@
 {
-  "recorded_on": "2026-09-07",
+  "recorded_on": "2026-09-08",
   "evaluation_version": "1.0",
-  "case_count": 36,
-  "split_counts": {"dev": 17, "held_out": 19},
+  "case_count": 48,
+  "split_counts": {"dev": 17, "held_out": 31},
   "metrics": {
     "stage": {
       "accuracy": 1.0,
@@ -10,9 +10,9 @@
       "macro_recall": 1.0,
       "per_label": {
         "build": {"support": 6, "precision": 1.0, "recall": 1.0},
-        "ci": {"support": 3, "precision": 1.0, "recall": 1.0},
-        "deploy": {"support": 6, "precision": 1.0, "recall": 1.0},
-        "test": {"support": 10, "precision": 1.0, "recall": 1.0},
+        "ci": {"support": 4, "precision": 1.0, "recall": 1.0},
+        "deploy": {"support": 16, "precision": 1.0, "recall": 1.0},
+        "test": {"support": 11, "precision": 1.0, "recall": 1.0},
         "unknown": {"support": 11, "precision": 1.0, "recall": 1.0}
       }
     },
@@ -22,28 +22,28 @@
       "macro_recall": 1.0,
       "per_label": {
         "api_rate_limited": {"support": 1, "precision": 1.0, "recall": 1.0},
-        "ci_failure": {"support": 0, "precision": 0.0, "recall": 0.0},
+        "ci_failure": {"support": 1, "precision": 1.0, "recall": 1.0},
         "compilation_error": {"support": 3, "precision": 1.0, "recall": 1.0},
         "config_missing": {"support": 1, "precision": 1.0, "recall": 1.0},
         "crash_loop": {"support": 1, "precision": 1.0, "recall": 1.0},
         "dependency_resolution": {"support": 1, "precision": 1.0, "recall": 1.0},
-        "deployment_failed": {"support": 0, "precision": 0.0, "recall": 0.0},
+        "deployment_failed": {"support": 1, "precision": 1.0, "recall": 1.0},
         "disk_full": {"support": 1, "precision": 1.0, "recall": 1.0},
-        "flaky": {"support": 0, "precision": 0.0, "recall": 0.0},
-        "health_check_failed": {"support": 0, "precision": 0.0, "recall": 0.0},
+        "flaky": {"support": 1, "precision": 1.0, "recall": 1.0},
+        "health_check_failed": {"support": 1, "precision": 1.0, "recall": 1.0},
         "image_pull_error": {"support": 1, "precision": 1.0, "recall": 1.0},
         "import_error": {"support": 1, "precision": 1.0, "recall": 1.0},
-        "liveness_probe_failed": {"support": 0, "precision": 0.0, "recall": 0.0},
+        "liveness_probe_failed": {"support": 1, "precision": 1.0, "recall": 1.0},
         "migration_failed": {"support": 1, "precision": 1.0, "recall": 1.0},
         "network_failure": {"support": 1, "precision": 1.0, "recall": 1.0},
-        "oom_killed": {"support": 0, "precision": 0.0, "recall": 0.0},
-        "permission_error": {"support": 0, "precision": 0.0, "recall": 0.0},
-        "quota_exceeded": {"support": 0, "precision": 0.0, "recall": 0.0},
+        "oom_killed": {"support": 1, "precision": 1.0, "recall": 1.0},
+        "permission_error": {"support": 1, "precision": 1.0, "recall": 1.0},
+        "quota_exceeded": {"support": 1, "precision": 1.0, "recall": 1.0},
         "readiness_probe_failed": {"support": 1, "precision": 1.0, "recall": 1.0},
-        "readiness_timeout": {"support": 0, "precision": 0.0, "recall": 0.0},
-        "registry_auth_failure": {"support": 0, "precision": 0.0, "recall": 0.0},
-        "rollback": {"support": 0, "precision": 0.0, "recall": 0.0},
-        "scheduling_failed": {"support": 0, "precision": 0.0, "recall": 0.0},
+        "readiness_timeout": {"support": 1, "precision": 1.0, "recall": 1.0},
+        "registry_auth_failure": {"support": 1, "precision": 1.0, "recall": 1.0},
+        "rollback": {"support": 1, "precision": 1.0, "recall": 1.0},
+        "scheduling_failed": {"support": 1, "precision": 1.0, "recall": 1.0},
         "test_failure": {"support": 9, "precision": 1.0, "recall": 1.0},
         "timeout": {"support": 2, "precision": 1.0, "recall": 1.0},
         "tls_certificate_error": {"support": 1, "precision": 1.0, "recall": 1.0},
@@ -56,10 +56,10 @@
     "stack_frames": {"precision": 0.75, "recall": 0.75},
     "dedup": {"precision": 1.0, "recall": 1.0},
     "redaction_recall": 1.0,
-    "unknown_rate": 0.305556,
+    "unknown_rate": 0.229167,
     "failure_detection": {
       "healthy_support": 7,
-      "failure_support": 25,
+      "failure_support": 37,
       "false_positives": 0,
       "missed_failures": 0,
       "false_positive_rate": 0.0,
@@ -71,7 +71,7 @@
     "score_semantics": "evidence_completeness_not_probability",
     "bands": {
       "high": {"support": 0, "empirical_accuracy": null, "mean_evidence_completeness": null},
-      "low": {"support": 25, "empirical_accuracy": 1.0, "mean_evidence_completeness": 0.396},
+      "low": {"support": 37, "empirical_accuracy": 1.0, "mean_evidence_completeness": 0.445946},
       "medium": {"support": 11, "empirical_accuracy": 1.0, "mean_evidence_completeness": 0.75}
     },
     "limitations": [
@@ -82,5 +82,5 @@
       "No evaluation support for: high."
     ]
   },
-  "notes": "P0-P2 synthetic regression audit. Original eight outcomes retained; 28 additional cases. Metrics describe this corpus only, not production root-cause accuracy or triage-time savings."
+  "notes": "P0-P2 synthetic regression audit. Original eight outcomes retained; 40 additional cases. Metrics describe this corpus only, not production root-cause accuracy or triage-time savings."
 }
