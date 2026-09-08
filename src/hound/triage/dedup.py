@@ -313,13 +313,22 @@ def _sqlite_init(conn: sqlite3.Connection) -> None:
         )"""
     )
     # Migration (schema v1.3): stores a root-cause snapshot for LLM reuse.
+    # Migration (schema v1.4): stores context fingerprint for dedup.
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
     if "root_cause" not in columns:
-        conn.execute("ALTER TABLE incidents ADD COLUMN root_cause TEXT NOT NULL DEFAULT ''")
-        conn.commit()
+        try:
+            conn.execute("ALTER TABLE incidents ADD COLUMN root_cause TEXT NOT NULL DEFAULT ''")
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
     if "context_fingerprint" not in columns:
-        conn.execute("ALTER TABLE incidents ADD COLUMN context_fingerprint TEXT NOT NULL DEFAULT ''")
-        conn.commit()
+        try:
+            conn.execute("ALTER TABLE incidents ADD COLUMN context_fingerprint TEXT NOT NULL DEFAULT ''")
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
 
 
 def _sqlite_row_to_entry(row: sqlite3.Row) -> dict:
