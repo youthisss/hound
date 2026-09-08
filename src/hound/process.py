@@ -58,7 +58,7 @@ def run_bounded(
     if max_output_bytes < 0:
         raise ValueError("subprocess output limit must not be negative")
 
-    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
     process = subprocess.Popen(
         list(args),
         cwd=str(cwd) if cwd is not None else None,
