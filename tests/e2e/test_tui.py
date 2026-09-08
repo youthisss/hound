@@ -738,7 +738,7 @@ def test_tui_artifact_workspace_multi_select_and_batch_analyze(tmp_path, monkeyp
             await pilot.pause()
             assert len(app._selected_artifacts) == 0
             assert "selected" not in str(app.query_one("#artifact-workspace-meta", Static).renderable)
-            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze selected (a)"
+            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze selected"
             assert app.query_one("#workspace-analyze", Button).disabled
 
             # Space selection
@@ -2651,6 +2651,8 @@ def test_tui_back_navigation_and_shortcuts(tmp_path):
             await pilot.press("B")
             await pilot.pause()
             assert app._current_view_state() == ("home", None)
+            assert not app.has_class("has-back-nav")
+            assert back_btn.disabled is True
 
             # 7. 'k' unfocuses, while Escape always navigates back.
             await pilot.press("f")
