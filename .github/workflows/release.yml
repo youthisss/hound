@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Existing vX.Y.Z tag to promote
+        description: Existing X.Y.Z tag to promote (omit the leading v)
         required: true
         type: string
       prerelease:
@@ -23,6 +23,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     outputs:
       version: ${{ steps.identity.outputs.version }}
     permissions:
@@ -50,7 +51,7 @@ jobs:
       - name: Audit locked production dependencies
         run: |
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file audited-requirements.txt
-          uv run pip-audit --requirement audited-requirements.txt --ignore-vuln CVE-2026-4444
+          uv run pip-audit --requirement audited-requirements.txt
       - name: Build package artifacts
         run: uv build
       - name: Validate package metadata
@@ -103,6 +104,7 @@ jobs:
   provenance:
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       id-token: write
       attestations: write
@@ -119,6 +121,7 @@ jobs:
   container-gate:
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -164,6 +167,7 @@ jobs:
   windows:
     needs: [build]
     runs-on: windows-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -179,13 +183,14 @@ jobs:
           $wheel = (Get-ChildItem dist\*.whl | Select-Object -First 1).FullName
           uv pip install --python "$smoke\venv\Scripts\python.exe" $wheel
           Push-Location $smoke
-          & "$smoke\venv\Scripts\hound.exe" --version
-          & "$smoke\venv\Scripts\hound.exe" doctor --output-dir doctor-output --json
+           & "$smoke\venv\Scripts\hound.exe" --version
+           & "$smoke\venv\Scripts\hound.exe" doctor --output-dir doctor-output --json
            Pop-Location
 
   publish-testpypi:
     needs: [build, provenance, container-gate, windows]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: testpypi
       url: https://test.pypi.org/p/hound-tracer
@@ -206,6 +211,7 @@ jobs:
   verify-testpypi:
     needs: [build, publish-testpypi]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -249,6 +255,7 @@ jobs:
   publish-pypi:
     needs: [build, provenance, container-gate, windows, verify-testpypi]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: pypi
       url: https://pypi.org/p/hound-tracer
@@ -268,6 +275,7 @@ jobs:
   verify-pypi:
     needs: [build, publish-pypi]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -289,6 +297,7 @@ jobs:
   release:
     needs: [build, provenance, verify-pypi]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-release
     permissions:

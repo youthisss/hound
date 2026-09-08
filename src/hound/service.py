@@ -11,6 +11,7 @@ from hound.pipeline import default_state_path
 
 from hound.pipeline import analyze as _analyze_pipeline
 from hound.output.report import ensure_outdir
+from hound.pathutil import path_has_symlink
 
 
 SUPPORTED_LOG_SUFFIXES = {".log", ".xml", ".sarif", ".json"}
@@ -31,6 +32,8 @@ class AnalysisRun:
 def find_logs(log_directory: str | Path) -> list[Path]:
     """Return supported logs from one directory without recursive scanning."""
     directory = Path(log_directory).expanduser()
+    if path_has_symlink(directory) or directory.is_symlink():
+        raise AnalysisInputError(f"log directory must not contain symlinked path components: {directory}")
     if not directory.exists():
         raise AnalysisInputError(f"log directory does not exist: {directory}")
     if not directory.is_dir():

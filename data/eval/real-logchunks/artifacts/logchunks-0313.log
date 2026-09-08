@@ -1,0 +1,15 @@
+SchemaTests
+
+  testMultipleProcessesTryingToInitializeSchema, [31m((0) equal to ([self runChildAndWait])) failed: ("0") is not equal to ("11") - Tests in child process failed[0m
+
+  [36m/Users/travis/build/realm/realm-cocoa/Realm/Tests/SchemaTests.mm:886[0m
+
+  ```
+
+        dispatch_group_async(group, dispatch_get_global_queue(0, 0), ^{
+
+            RLMRunChildAndWait();
+
+        });
+
+  ```

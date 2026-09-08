@@ -1,0 +1,2 @@
+* Failure 404 Not Found
+thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Custom { kind: NotFound, error: StringError("https://static.redox-os.org/pkg/x86_64-unknown-redox/shellstorm.sig not found") }', libcore/result.rs:945:5

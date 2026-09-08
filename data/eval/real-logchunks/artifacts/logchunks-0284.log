@@ -1,0 +1,27 @@
+fail: [1;33;41m[string "bundle:libs/codec.lua"]:123: No such hash: 31b8c996c762b151bedbd7f0e5ad12c2ababf3cd
+
+stack traceback:
+
+	[C]: in function 'assert'
+
+	[string "bundle:libs/codec.lua"]:123: in function 'read'
+
+	[string "bundle:libs/codec.lua"]:128: in function 'readAs'
+
+	[string "bundle:libs/rdb.lua"]:165: in function 'fetch'
+
+	[string "bundle:libs/rdb.lua"]:140: in function 'load'
+
+	[string "bundle:deps/git/db.lua"]:395: in function 'loadAny'
+
+	[string "bundle:libs/pkg.lua"]:132: in function 'queryDb'
+
+	[string "bundle:libs/core.lua"]:378: in function 'makeUrl'
+
+	[string "bundle:commands/make.lua"]:13: in function [string "bundle:commands/make.lua"]:1>
+
+	[string "bundle:main.lua"]:52: in function [string "bundle:main.lua"]:39>
+
+	[C]: in function 'xpcall'
+
+	[string "bundle:main.lua"]:39: in function [string "bundle:main.lua"]:31>

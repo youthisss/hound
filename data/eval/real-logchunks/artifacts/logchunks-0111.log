@@ -1,0 +1,6 @@
+** (throw) "Words not in order \"thumbor_client\" and \"thumbnex\""
+    check.exs:9: Awesome.Order.check_string_list_in_order/1
+    check.exs:130: anonymous fn/2 in Awesome.test_file/1
+    (elixir) lib/enum.ex:1755: Enum."-reduce/3-lists^foldl/2-0-"/3
+    check.exs:129: Awesome.test_file/1
+    (elixir) lib/code.ex:370: Code.require_file/2

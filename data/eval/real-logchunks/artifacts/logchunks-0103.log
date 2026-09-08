@@ -1,0 +1,6 @@
+1) test assert received with multiple unique pinned variables (ExUnit.AssertionsTest)
+     [1m[30mtest/ex_unit/assertions_test.exs:363[0m
+     [31m** (MatchError) no match of right hand side value: {{:{}, [line: 369], [:status, {:^, [line: 369], [{:status, [line: 369], nil}]}, {:^, [line: 369], [{:other_status, [line: 369], nil}]}]}, [{:status, :invalid, :invalid}]}[0m
+     [36mcode: [0m[{:status, :invalid, :invalid}] = error.mailbox
+     [36mstacktrace:[0m
+       test/ex_unit/assertions_test.exs:380: (test)

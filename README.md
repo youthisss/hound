@@ -13,8 +13,8 @@
 
 <p align="center">
   <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta%20v0.4.0-yellow.svg" alt="Status"></a>
-  <a href="#testing-and-verification"><img src="https://img.shields.io/badge/Tests-CI%20Verified-success.svg" alt="Tests"></a>
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python Version"></a>
+  <a href="#testing-and-verification"><img src="https://img.shields.io/badge/Tests-Targeted%20gates-success.svg" alt="Tests"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%20to%203.12-blue.svg" alt="Python Version"></a>
   <a href="#security-and-privacy"><img src="https://img.shields.io/badge/Security-Redaction%20Default-orange.svg" alt="Security"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
 </p>
@@ -97,9 +97,11 @@ Hound Tracer is strictly advisory and read-only. It inspects artifacts and produ
 
 ### Using uv (Recommended)
 
+Until the first verified PyPI publication, install the reviewed Git commit:
+
 ```sh
 # Install globally
-uv tool install hound-tracer
+uv tool install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 
 # Verify installation
 hound --version
@@ -110,11 +112,14 @@ hound doctor
 
 ```sh
 # Install with pipx (isolated application environment)
-pipx install hound-tracer
+pipx install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 
-# Or install in a standard Python environment (Python >= 3.10)
-pip install hound-tracer
+# Or install in a standard Python environment (Python >= 3.10, < 3.13)
+pip install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
 ```
+
+Replace the Git source with `hound-tracer` only after the release checklist
+confirms the package is publicly available.
 
 ### From Source
 
@@ -194,13 +199,56 @@ Use canonical subcommands for automation scripts and CI pipelines:
 | `hound runs` | `hound list-runs` | List historical analysis runs stored on disk |
 | `hound report` | None | Re-render a stored run report in text, JSON, or Markdown |
 | `hound feedback` | None | Record engineer ratings and export regression test candidates |
+| `hound delivery` | None | Inspect and explicitly recover persisted external-delivery outcomes |
+| `hound incidents` | None | Inspect recurrence and invalidate cached RCA snapshots without deleting history |
+| `hound client` | None | Submit, inspect, poll, or cancel jobs on a bounded Hound server |
 | `hound clean` | None | Safely purge output directories verified by `.hound-owned` markers |
+
+## Capability boundaries
+
+The four supported surfaces share the same read-only analysis pipeline, but they
+do not expose the same controls:
+
+| Surface | Primary capabilities | Deliberate limits |
+|:---|:---|:---|
+| CLI | Headless analysis, batch budgets, log capture, QA gates/history, reports, feedback, providers, and opt-in delivery | No interactive screen; automation must handle exit codes and output files |
+| TUI | Interactive artifact selection, local/LLM analysis, stored runs, report/ticket/raw-log review, settings, QA history import, feedback, and Context | No infrastructure mutation, connector collection, or automatic external delivery; bounded local history/feedback/preferences writes are allowed |
+| Server | Authenticated `POST /analyze`, bounded jobs, polling, health/readiness, and telemetry endpoints | HTTP receiver only; no interactive UI, shell commands, or deploy/rollback operations |
+| GitHub Action | One artifact analysis with JSON/Markdown/ticket outputs and Action outputs | Action wrapper only; it does not expose the server, TUI, or long-term QA export workflows |
+
+The requirement-to-code-to-test evidence is maintained in
+[`docs/requirements-matrix.md`](docs/requirements-matrix.md).
+The tested platform/runtime boundaries are maintained in
+[`docs/support-matrix.md`](docs/support-matrix.md).
+
+| Capability | CLI | TUI | Server | Action |
+|:---|:---:|:---:|:---:|:---:|
+| Analyze artifacts | Yes | Yes | Yes | Yes |
+| Batch analysis | Yes | Yes | Via queue | Limited |
+| QA history import | Yes | Yes | No | No |
+| Quality gate | Yes | Yes | No | Optional |
+| Feedback record | Yes | Yes | No | No |
+| Feedback export | Yes | No | No | No |
+| DevOps enrichment | Yes | Read-only report validation/readiness view | Yes | Optional |
+| Ticket delivery | Yes | Read-only status | Caller-managed | Optional |
+| Log capture | Yes | No | No | No |
+| Server lifecycle | Yes | No | N/A | No |
+
+The console workspaces are Home, Artifacts, Results, Quality, Context, Settings,
+and Feedback. It can inspect delivery history and connector audits, but never
+sends external delivery or constructs an infrastructure mutation command. QA
+history export, feedback export, delivery reconciliation, and incident
+invalidation are CLI-only administrative operations.
 
 ---
 
 ### hound analyze: Core Artifact Analysis
 
 Scans `.log`, `.xml` (JUnit), `.sarif`, and `.json` test reports. Generates `report.json` (Schema v2.0), `report.md`, and `ticket.md`.
+
+Directory analysis uses opaque `run-<id>` subdirectories. The legacy
+`hound analyze --log <single-file>` form keeps its direct `--output-dir` layout
+for compatibility; new automation should pass a directory.
 
 ```sh
 # Offline analysis (safe, deterministic, zero network requests)
@@ -351,7 +399,8 @@ hound serve \
 #### Endpoints
 
 - `POST /analyze`: Submit analysis job `{"log": "relative/path.log", "offline": false}`
-- `GET /jobs/<id>`: Poll job status, progress, and completed RCA document
+- `GET /jobs/<id>`: Poll bounded job status, engine, errors, and the managed report path
+- `DELETE /jobs/<id>`: Cancel a queued or running job; a worker that already started is not force-killed
 - `GET /health` and `GET /ready`: Health and readiness probes for orchestrators
 - `GET /stats`: Telemetry counters (queued, running, completed, engine breakdown)
 
@@ -382,7 +431,26 @@ hound feedback export --candidate-fixtures --output candidate-fixtures.json
 
 # Safely purge analysis output directory (checks .hound-owned marker)
 hound clean --output-dir hound-output --yes
+
+# Inspect and explicitly recover delivery outcomes
+hound delivery list --output-dir hound-output --json
+hound delivery inspect --output-dir hound-output --incident-key <key> --destination github --json
+hound delivery reconcile --output-dir hound-output --incident-key <key> --destination github --external-id <id>
+hound delivery mark-failed --output-dir hound-output --incident-key <key> --destination github --error "verified absent" --confirm-absent
+hound delivery retry-failed --output-dir hound-output --incident-key <key> --destination jira
+
+# Inspect recurrence and stale RCA provenance without deleting history
+hound incidents list --output-dir hound-output --json
+hound incidents inspect --output-dir hound-output --key <dedup-key> --json
+hound incidents invalidate --output-dir hound-output --key <dedup-key> --yes
+
+# Use the bounded server client
+hound client submit --url http://127.0.0.1:8123 --token "$HOUND_SERVER_TOKEN" --log failure.log --offline --wait
 ```
+
+`hound config set` intentionally supports only the non-secret `model` key. Use
+YAML for other non-secret settings and environment variables or the keyring for
+credentials; the command does not accept arbitrary keys.
 
 ---
 
@@ -528,7 +596,8 @@ slack:
 
 ### Official GitHub Action
 
-Hound Tracer provides an official GitHub Action (`youthisss/hound-tracer@v0.4.0`):
+Hound Tracer provides a GitHub Action. Until an immutable release tag is
+published, pin the reviewed commit shown below:
 
 ```yaml
 name: CI Suite with Hound Tracer Failure Triage
@@ -559,7 +628,7 @@ jobs:
 
       - name: Investigate Failures with Hound Tracer
         if: steps.test_run.outcome == 'failure'
-        uses: youthisss/hound-tracer@v0.4.0
+        uses: youthisss/hound-tracer@e0a640effda889427598b0cdb5bdd41d9749045c
         with:
           log: "artifacts/pytest.log"
           repo: "${{ github.workspace }}"
@@ -577,6 +646,8 @@ jobs:
 ### Docker Execution
 
 Run Hound Tracer inside an isolated container with mounted artifact volumes:
+This is an operator/CI path; Docker and Trivy execution are not available in the
+current verification workspace and are not claimed as locally passed gates.
 
 ```sh
 # Build image locally
@@ -670,6 +741,8 @@ Comprehensive specifications, operational manuals, and architecture guides:
 | [**Server Deployment Guide**](docs/guides/server-deployment.md) | Reverse-proxy setup, rate limiting, and systemd units |
 | [**Reference Contracts**](docs/reference/log-format.md) | Log formats, timeline schemas, and test impact contracts |
 | [**Contribution Workflow**](docs/workflow.md) | Development standards, coding conventions, and verification gates |
+| [**Master implementation roadmap**](docs/plans/hound-master-implementation-roadmap.md) | P0-P12 status, evidence, blockers, and release closure |
+| [**Requirements matrix**](docs/requirements-matrix.md) | Requirement-to-code/test/evidence crosswalk |
 | [**Changelog**](CHANGELOG.md) | Release history, migration notes, and version changes |
 
 ---

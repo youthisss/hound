@@ -1,0 +1,8 @@
+1) DistributedMutex allows only one mutex object to have the lock at a time
+[31mFailure/Error: [0m[32mexpect[0m(x).to eq([1;34m10[0m)[0m
+[31m[0m
+[31m  expected: 10[0m
+[31m       got: 7[0m
+[31m[0m
+[31m  (compared using ==)[0m
+[36m# ./spec/components/distributed_mutex_spec.rb:29:in `block (2 levels) in main>'

@@ -1,0 +1,4 @@
+Extensions/CollectionExtensions.cs(20,40): error CS0103: The name 'key' does not exist in the current context [/home/travis/build/NancyFx/Nancy/src/Nancy/Nancy.csproj]
+Extensions/CollectionExtensions.cs(21,17): error CS0103: The name 'key' does not exist in the current context [/home/travis/build/NancyFx/Nancy/src/Nancy/Nancy.csproj]
+Extensions/CollectionExtensions.cs(23,24): error CS0029: Cannot implicitly convert type 'string[]' to 'System.Collections.Generic.IDictionarystring, System.Collections.Generic.IEnumerablestring>>' [/home/travis/build/NancyFx/Nancy/src/Nancy/Nancy.csproj]
+Extensions/CollectionExtensions.cs(25,20): error CS0029: Cannot implicitly convert type 'string[]' to 'System.Collections.Generic.IDictionarystring, System.Collections.Generic.IEnumerablestring>>' [/home/travis/build/NancyFx/Nancy/src/Nancy/Nancy.csproj]

@@ -1,0 +1,2 @@
+[4m/home/travis/build/freeCodeCamp/freeCodeCamp/client/src/components/Header/components/MenuLinks.js[24m
+  [2m28:14[22m  [31merror[39m  Replace `·className='top-right-nav-link'·external={true}·to='https://coderadio.freecodecamp.org/'` with `⏎··········className='top-right-nav-link'⏎··········external={true}⏎··········to='https://coderadio.freecodecamp.org/'⏎········`  [2mprettier/prettier[22m

@@ -1,0 +1,8 @@
+/home/travis/build/google/web-starter-kit/gulp-tasks/css.js[24m
+  [2m12:2[22m  [31merror[39m  Unnecessary semicolon  [2mno-extra-semi[22m
+
+[4m/home/travis/build/google/web-starter-kit/gulp-tasks/images.js[24m
+  [2m16:2[22m  [31merror[39m  Unnecessary semicolon  [2mno-extra-semi[22m
+
+[4m/home/travis/build/google/web-starter-kit/gulp-tasks/serviceWorker.js[24m
+  [2m4:16[22m  [31merror[39m  'serviceWorker' is defined but never used  [2mno-unused-vars

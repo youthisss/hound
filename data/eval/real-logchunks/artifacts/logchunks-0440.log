@@ -1,0 +1,37 @@
+error[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/BehaviorSetup.scala:10:8: object Logger is not a member of package akka.actor.typed[0m
+[0m[[0m[31merror[0m] [0m[0mimport akka.actor.typed.Logger[0m
+[0m[[0m[31merror[0m] [0m[0m       ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/BehaviorSetup.scala:66:31: not found: type Logger[0m
+[0m[[0m[31merror[0m] [0m[0m  private var _log: OptionVal[Logger] = OptionVal.Some(context.log) // changed when mdc is changed[0m
+[0m[[0m[31merror[0m] [0m[0m                              ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/BehaviorSetup.scala:67:12: not found: type Logger[0m
+[0m[[0m[31merror[0m] [0m[0m  def log: Logger = {[0m
+[0m[[0m[31merror[0m] [0m[0m           ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/BehaviorSetup.scala:72:29: value withMdc is not a member of org.slf4j.Logger[0m
+[0m[[0m[31merror[0m] [0m[0m        val l = context.log.withMdc(mdc)[0m
+[0m[[0m[31merror[0m] [0m[0m                            ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/EventSourcedBehaviorImpl.scala:96:17: overloaded method value error with alternatives:[0m
+[0m[[0m[31merror[0m] [0m[0m  (x$1: org.slf4j.Marker,x$2: String,x$3: Throwable)Unit and>[0m
+[0m[[0m[31merror[0m] [0m[0m  (x$1: org.slf4j.Marker,x$2: String,x$3: Object*)Unit and>[0m
+[0m[[0m[31merror[0m] [0m[0m  (x$1: org.slf4j.Marker,x$2: String,x$3: Any)Unit and>[0m
+[0m[[0m[31merror[0m] [0m[0m  (x$1: String,x$2: Object*)Unit and>[0m
+[0m[[0m[31merror[0m] [0m[0m  (x$1: String,x$2: Any,x$3: Any)Unit[0m
+[0m[[0m[31merror[0m] [0m[0m cannot be applied to (Throwable, String, akka.persistence.typed.SnapshotMetadata)[0m
+[0m[[0m[31merror[0m] [0m[0m        ctx.log.error(failure, "Save snapshot failed, snapshot metadata [{}].", meta)[0m
+[0m[[0m[31merror[0m] [0m[0m                ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/EventSourcedBehaviorImpl.scala:102:17: value warning is not a member of org.slf4j.Logger[0m
+[0m[[0m[31merror[0m] [0m[0m        ctx.log.warning("Failed to delete snapshot with meta [{}] due to [{}].", meta, failure)[0m
+[0m[[0m[31merror[0m] [0m[0m                ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/EventSourcedBehaviorImpl.scala:104:17: value warning is not a member of org.slf4j.Logger[0m
+[0m[[0m[31merror[0m] [0m[0m        ctx.log.warning("Failed to delete snapshots given criteria [{}] due to [{}].", criteria, failure)[0m
+[0m[[0m[31merror[0m] [0m[0m                ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/EventSourcedBehaviorImpl.scala:108:17: value warning is not a member of org.slf4j.Logger[0m
+[0m[[0m[31merror[0m] [0m[0m        ctx.log.warning("Failed to delete events to sequence number [{}] due to [{}].", toSequenceNr, failure)[0m
+[0m[[0m[31merror[0m] [0m[0m                ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/StashManagement.scala:48:29: value isWarningEnabled is not a member of org.slf4j.Logger[0m
+[0m[[0m[31merror[0m] [0m[0m            if (context.log.isWarningEnabled) {[0m
+[0m[[0m[31merror[0m] [0m[0m                            ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-persistence-typed/src/main/scala/akka/persistence/typed/internal/StashManagement.scala:53:27: value warning is not a member of org.slf4j.Logger[0m
+[0m[[0m[31merror[0m] [0m[0m              context.log.warning("Stash buffer is full, dropping message [{}]", dropName)[0m
+[0m[[0m[31merror[0m] [0m[0m                          ^[0m
+[0m[[0m[31merror[0m] [0m[0m10 errors found[0m

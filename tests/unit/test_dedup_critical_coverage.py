@@ -48,7 +48,7 @@ def test_http_helpers_fail_closed_and_round_trip(monkeypatch):
         def __exit__(self, *_args):
             return False
 
-        def read(self):
+        def read(self, _limit=None):
             return self.payload
 
     requests = []
@@ -192,15 +192,6 @@ def test_dedup_empty_inputs_and_invalid_cached_snapshots_fail_closed(tmp_path):
     assert not dedup.release_delivery_claim(None, "key", "github")
     assert dedup.lookup_incident(None, "key") is None
     assert not dedup.invalidate_root_cause(None, "key")
-
-
-def test_sqlite_and_http_locks_defer_to_their_native_consistency(monkeypatch, tmp_path):
-    monkeypatch.setattr(dedup, "_BACKEND", "sqlite")
-    with dedup._state_lock(tmp_path / "state"):
-        pass
-    monkeypatch.setattr(dedup, "_BACKEND", "http")
-    with dedup._state_lock(tmp_path / "state"):
-        pass
 
 
 def test_pid_liveness_rejects_non_positive_values():

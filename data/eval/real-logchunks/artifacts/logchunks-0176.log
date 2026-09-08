@@ -1,0 +1,4 @@
+src/Text/Pandoc/Ipynb.hs:98:10: Warning:
+    No explicit implementation for
+      ‘mappend’
+    In the instance declaration for ‘Monoid (Notebook a)’

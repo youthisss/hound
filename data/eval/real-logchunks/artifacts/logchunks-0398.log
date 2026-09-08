@@ -1,0 +1,5 @@
+/home/travis/build/discourse/discourse/app/assets/javascripts/discourse/controllers/preferences/users.js.es6[24m
+
+  [2m3:8[22m  [31merror[39m  'showModal' is defined but never used  [2mno-unused-vars[22m
+
+  [2m4:8[22m  [31merror[39m  'User' is defined but never used       [2mno-unused-vars

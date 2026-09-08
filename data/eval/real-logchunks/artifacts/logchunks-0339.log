@@ -1,0 +1,55 @@
+1) Composer\Test\Util\StreamContextFactoryTest::testHttpsProxyOverride
+Failed asserting that two arrays are equal.
+--- Expected
++++ Actual
+@@ @@
+ Array (
+     'http' => Array (
+-        'proxy' => 'ssl://woopproxy.net:443'
++        'proxy' => 'tcp://woopproxy.net:443'
+         'request_fulluri' => true
+         'method' => 'GET'
+         'max_redirects' => 20
+         'follow_location' => 1
+         'header' => Array (...)
+     )
+     'ssl' => Array (...)
+ )
+
+/home/travis/build/composer/composer/tests/Composer/Test/Util/StreamContextFactoryTest.php:189
+
+2) Composer\Test\Util\StreamContextFactoryTest::testSSLProxy with data set #0 ('ssl://proxyserver:443', 'https://proxyserver/')
+Failed asserting that two arrays are equal.
+--- Expected
++++ Actual
+@@ @@
+ Array (
+     'http' => Array (
+-        'proxy' => 'ssl://proxyserver:443'
++        'proxy' => 'tcp://proxyserver:443'
+         'request_fulluri' => true
+         'max_redirects' => 20
+         'follow_location' => 1
+         'header' => Array (...)
+     )
+ )
+
+/home/travis/build/composer/composer/tests/Composer/Test/Util/StreamContextFactoryTest.php:209
+
+3) Composer\Test\Util\StreamContextFactoryTest::testSSLProxy with data set #1 ('ssl://proxyserver:8443', 'https://proxyserver:8443')
+Failed asserting that two arrays are equal.
+--- Expected
++++ Actual
+@@ @@
+ Array (
+     'http' => Array (
+-        'proxy' => 'ssl://proxyserver:8443'
++        'proxy' => 'tcp://proxyserver:8443'
+         'request_fulluri' => true
+         'max_redirects' => 20
+         'follow_location' => 1
+         'header' => Array (...)
+     )
+ )
+
+/home/travis/build/composer/composer/tests/Composer/Test/Util/StreamContextFactoryTest.php:209

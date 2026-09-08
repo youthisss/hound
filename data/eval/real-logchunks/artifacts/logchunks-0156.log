@@ -1,0 +1,2 @@
+FAIL: TestSeparator (0.03s)
+    repo_test.go:75: expected entry to be in form of `* [link] - description.`, got '* [ghorg](https://github.com/gabrie30/ghorg) - Quickly clone an entire org/users repositories into one directory (GitHub, GitLab, or Bitbucket)'

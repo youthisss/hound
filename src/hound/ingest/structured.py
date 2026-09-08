@@ -7,8 +7,10 @@ from pathlib import Path
 from defusedxml import ElementTree as ET
 from defusedxml.common import DefusedXmlException
 
+from hound.fsio import read_bounded_bytes
 from hound.ingest.tests import MAX_FAILED_TESTS, MAX_TEST_FIELD_CHARS
 from hound.models import FailedTest
+from hound.pathutil import path_has_symlink
 
 MAX_ARTIFACT_BYTES = 2 * 1024 * 1024
 
@@ -16,10 +18,10 @@ MAX_ARTIFACT_BYTES = 2 * 1024 * 1024
 def _read_artifact(path: Path) -> bytes | None:
     """Read a bounded artifact so reports cannot exhaust the analyzer process."""
     try:
-        if path.stat().st_size > MAX_ARTIFACT_BYTES:
+        if path_has_symlink(path) or path.is_symlink():
             return None
-        return path.read_bytes()
-    except OSError:
+        return read_bounded_bytes(path, MAX_ARTIFACT_BYTES)
+    except (OSError, ValueError):
         return None
 
 
@@ -39,7 +41,7 @@ def _parse_junit(path: Path) -> tuple[str, str, str, str, list[FailedTest]] | No
         if raw is None or b"<!DOCTYPE" in raw.upper():
             return None
         root = ET.fromstring(raw)
-    except (DefusedXmlException, ET.ParseError):
+    except (DefusedXmlException, ET.ParseError, RecursionError):
         return None
     tests: list[FailedTest] = []
     flaky_tests: list[FailedTest] = []
@@ -96,7 +98,7 @@ def _parse_sarif(path: Path) -> tuple[str, str, str, str, list[FailedTest]] | No
         if raw is None:
             return None
         payload = json.loads(raw)
-    except (UnicodeDecodeError, ValueError):
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return None
     runs = payload.get("runs") if isinstance(payload, dict) else None
     if not isinstance(runs, list):
@@ -133,7 +135,7 @@ def _parse_test_json(path: Path) -> tuple[str, str, str, str, list[FailedTest]] 
             return None
         raw = raw_bytes.decode("utf-8")
         payload = json.loads(raw)
-    except (UnicodeDecodeError, ValueError):
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return _parse_go_json(path)
     tests: list[FailedTest] = []
     _collect_json_failures(payload, tests)

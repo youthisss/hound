@@ -1,0 +1,7 @@
+error[0m] [0m[0m/home/travis/build/akka/akka/akka-remote-tests/src/multi-jvm/scala/akka/remote/artery/TestMessage.scala:10:8: object internalByteString is not a member of package akka.protobufv3[0m
+[0m[[0m[31merror[0m] [0m[0mimport akka.protobufv3.internalByteString[0m
+[0m[[0m[31merror[0m] [0m[0m       ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-remote-tests/src/multi-jvm/scala/akka/remote/artery/TestMessage.scala:43:21: not found: value ByteString[0m
+[0m[[0m[31merror[0m] [0m[0m        .setPayload(ByteString.copyFrom(msg.payload))[0m
+[0m[[0m[31merror[0m] [0m[0m                    ^[0m
+[0m[[0m[31merror[0m] [0m[0mtwo errors found[0m

@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-oom-killed-variant",
+  "artifact": "oom-killed-variant.log",
+  "expected": {
+    "stage": "deploy",
+    "kind": "oom_killed",
+    "primary_event": {"stage": "deploy", "kind": "oom_killed"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

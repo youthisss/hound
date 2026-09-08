@@ -5,7 +5,7 @@ import secrets
 import json
 from dataclasses import asdict
 
-from hound.models import Artifacts, build_evidence_items
+from hound.models import Artifacts, visible_evidence_items
 
 LOG_TEXT_LIMIT = 12000
 ENRICHMENT_LIMIT = 16000
@@ -60,17 +60,15 @@ def build_user_prompt(artifacts: Artifacts) -> str:
     # Evidence comes first so the size fitter preserves the citation contract
     # before spending its bounded string budget on raw logs and enrichment.
     payload = {
-        "available_evidence": build_evidence_items(artifacts),
+        "available_evidence": visible_evidence_items(artifacts),
         **asdict(artifacts),
     }
     payload["source_evidence"] = [
         item for item in payload.get("source_evidence", []) if item.get("send_to_llm") is True
     ]
-    payload["available_evidence"] = [
-        item for item in payload["available_evidence"]
-        if item.get("provenance", {}).get("collector") != "source.context"
-        or (isinstance(item.get("value"), dict) and item["value"].get("send_to_llm") is True)
-    ]
+    # ``visible_evidence_items`` is the single source of truth for this
+    # boundary. Keeping the filter out of the serializer avoids prompt/merge
+    # drift when a new evidence collector is added.
     payload["log_text"] = artifacts.log_text[-LOG_TEXT_LIMIT:]
     payload["frames"] = payload["frames"][:15]
     payload["failed_tests"] = payload["failed_tests"][:10]

@@ -1,0 +1,11 @@
+Offenses:
+
+lib/jekyll/excerpt.rb:158:17: C: Performance/RegexpMatch: Use match? instead of =~ when MatchData is not used.
+        next if head =~ endtag_regex_stash(tag_name)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+lib/jekyll/readers/post_reader.rb:53:21: C: Performance/RegexpMatch: Use match? instead of =~ when MatchData is not used.
+        next unless entry =~ matcher
+                    ^^^^^^^^^^^^^^^^
+lib/jekyll/filters.rb:374:31: C: Performance/RegexpMatch: Use match? instead of =~ when MatchData is not used.
+      return property.to_f if property =~ number_like
+                              ^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,0 +1,105 @@
+standard: Use JavaScript Standard Style (https://github.com/feross/standard) 
+  /home/travis/build/jlord/git-it-electron/lib/build-challenges.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/build-pages.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/challenge-completed.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/challenge.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/challenges-completed.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/handle-external-links.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/helpers.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/languages.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/locale.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/spawn-git.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/translate-locale.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/user-data.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/branches_arent_just_for_birds.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/commit_to_it.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/forks_and_clones.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/get_git.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/githubbin.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/its_a_small_world.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/merge_tada.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/pull_never_out_of_date.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/remote_control.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/repository.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/lib/verify/requesting_you_pull_please.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/main.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/menus/darwin-menu.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL
+  /home/travis/build/jlord/git-it-electron/menus/other-menu.js:0:0: /home/travis/build/jlord/git-it-electron/node_modules/babel-eslint/babylon-to-espree/toToken.js:56
+    token.value = `/${value.pattern}/${value.flags}`;
+                  ^
+Unexpected token ILLEGAL

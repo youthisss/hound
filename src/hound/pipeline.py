@@ -25,17 +25,19 @@ from hound.ingest.enrich import collect_deployment_evidence
 from hound.ingest.git import correlated_commit_subjects, gather
 from hound.ingest.logs import extract_events, parse_log, read_log_window
 from hound.ingest.owners import resolve_owners
-from hound.ingest.redact import redact_text
+from hound.ingest.redact import redact_text, redact_value
 from hound.ingest.structured import parse_structured_artifact
 from hound.ingest.stacktrace import attach_snippets, dedupe_repo_paths, parse_stacktrace
 from hound.ingest.tests import parse_failed_tests
 from hound.feedback import default_feedback_store, find_known_issue
-from hound.fsio import atomic_write
+from hound.fsio import atomic_write, open_verified_regular
 from hound.models import ENGINES, Artifacts, GitInfo, RootCause, Triage, build_doc, validate
 from hound.output.report import ensure_outdir, write_json, write_md
 from hound.output.tickets import build_ticket, write_ticket
+from hound.pathutil import path_has_symlink
 from hound.source.context import collect_source_evidence
 from hound.source.impact import build_test_impact
+from hound.safety import validate_recommendation, validate_recommendations
 from hound.triage.component import assign
 from hound.triage.dedup import (
     check_duplicate, configure_store, context_fingerprint, fingerprint, lookup_incident,
@@ -49,7 +51,10 @@ def default_state_path(out: Path, config_state: str | None, no_dedup: bool, back
     if no_dedup:
         return None
     if config_state:
-        return str(Path(config_state).resolve())
+        configured = Path(config_state).expanduser()
+        if path_has_symlink(configured):
+            raise ValueError("refusing symlinked configured dedup state path")
+        return str(configured.resolve())
     state_dir = out / ".hound"
     state_file = state_dir / ("state.sqlite3" if backend == "sqlite" else "state.json")
     # A checked-out output directory is attacker-controlled in CI. Never let
@@ -83,22 +88,60 @@ def _root_cause_from_snapshot(snapshot: dict) -> RootCause | None:
         confidence = snapshot.get("confidence")
         engine = snapshot.get("engine")
         model = snapshot.get("model")
+        hypothesis = snapshot.get("hypothesis")
+        fix_suggestion = snapshot.get("fix_suggestion")
+        evidence = snapshot.get("evidence", [])
+        recommendations = snapshot.get("recommended_checks", [])
+        stored_missing = snapshot.get("missing_information", [])
+        if (
+            not isinstance(hypothesis, str)
+            or not hypothesis.strip()
+            or len(hypothesis) > 2000
+            or not isinstance(fix_suggestion, str)
+            or not isinstance(evidence, list)
+            or not all(isinstance(item, str) and len(item) <= 2000 for item in evidence)
+            or len(evidence) > 64
+            or not isinstance(recommendations, list)
+            or not isinstance(stored_missing, list)
+            or not all(isinstance(item, str) and len(item) <= 512 for item in stored_missing)
+            or len(stored_missing) > 32
+        ):
+            return None
+        if any(
+            any(ord(char) < 0x20 or ord(char) == 0x7F for char in value)
+            for value in [hypothesis, *evidence, *stored_missing]
+        ):
+            return None
+        # Older file/SQLite snapshots can legitimately contain a RootCause
+        # with no remediation text. Preserve the reuse contract without
+        # reintroducing an unvalidated value into a current report.
+        if not fix_suggestion.strip():
+            fix_suggestion = "Collect additional evidence before proposing remediation."
+        validate_recommendation(fix_suggestion, field="stored fix_suggestion")
+        validate_recommendations(recommendations, field="stored recommended_checks")
+        if any(redact_text(value)[1] for value in [hypothesis, fix_suggestion, *evidence, *recommendations]):
+            return None
         missing_information = list(dict.fromkeys([
-            *[str(item) for item in snapshot.get("missing_information", [])],
+            *stored_missing,
             "Stored hypothesis was reused; evidence references are scoped to the original run.",
         ]))
         original_run = snapshot.get("original_run", {})
         if not isinstance(original_run, dict):
             return None
+        scrubbed_run, run_hits = redact_value(original_run)
+        if run_hits or not isinstance(scrubbed_run, dict):
+            return None
         if original_run:
             provenance = "Original analysis run: " + json.dumps(original_run, sort_keys=True)
             if provenance not in missing_information:
                 missing_information.append(provenance)
+        if any(redact_text(value)[1] for value in missing_information):
+            return None
         return RootCause(
-            hypothesis=str(snapshot.get("hypothesis", "")),
+            hypothesis=hypothesis,
             confidence=confidence if confidence in {"medium", "low"} else "low",
-            evidence=[str(item) for item in snapshot.get("evidence", [])],
-            fix_suggestion=str(snapshot.get("fix_suggestion", "")),
+            evidence=evidence,
+            fix_suggestion=fix_suggestion,
             engine=engine if engine in ENGINES else "fallback",
             model=str(model) if isinstance(model, str) and model else None,
             usage={},
@@ -109,7 +152,7 @@ def _root_cause_from_snapshot(snapshot: dict) -> RootCause | None:
             evidence_refs=[],
             contradicting_evidence_refs=[],
             missing_information=missing_information,
-            recommended_checks=[str(item) for item in snapshot.get("recommended_checks", [])],
+            recommended_checks=recommendations,
             original_run=dict(original_run),
         )
     except (TypeError, ValueError):
@@ -193,7 +236,7 @@ def _source_digest(artifacts: Artifacts, repo_dir: str | Path | None) -> str:
         # bounded evidence still participates in the independent context hash.
         return "artifact-only-v1" if not artifacts.source_evidence and not any(frame.code for frame in artifacts.frames) else ""
     repo = Path(repo_dir).resolve()
-    if not repo.is_dir():
+    if path_has_symlink(repo_dir) or not repo.is_dir():
         return ""
     names = set(artifacts.git.changed_files)
     names.update(frame.file for frame in artifacts.frames if frame.file)
@@ -210,18 +253,26 @@ def _source_digest(artifacts: Artifacts, repo_dir: str | Path | None) -> str:
         for name in sorted(names):
             path = (repo / name.replace("\\", "/")).resolve()
             relative = path.relative_to(repo).as_posix()
+            if path_has_symlink(repo / name.replace("\\", "/")):
+                return ""
             if not path.exists():
                 contents.append((relative, None))
                 continue
             if not path.is_file():
                 return ""
             digest = hashlib.sha256()
-            with path.open("rb") as stream:
-                while chunk := stream.read(65536):
-                    total += len(chunk)
-                    if total > 16 * 1024 * 1024:
-                        return ""
-                    digest.update(chunk)
+            fd = open_verified_regular(path)
+            try:
+                with os.fdopen(fd, "rb") as stream:
+                    fd = -1
+                    while chunk := stream.read(65536):
+                        total += len(chunk)
+                        if total > 16 * 1024 * 1024:
+                            return ""
+                        digest.update(chunk)
+            finally:
+                if fd >= 0:
+                    os.close(fd)
             contents.append((relative, digest.hexdigest()))
     except (OSError, ValueError):
         return ""
@@ -287,7 +338,7 @@ def analyze(
     analysis_started = time.perf_counter()
     """Run the full pipeline for one log. Returns the validated RCA document."""
     log_path = Path(log_path)
-    if log_path.is_symlink() or not log_path.is_file():
+    if path_has_symlink(log_path) or log_path.is_symlink() or not log_path.is_file():
         raise FileNotFoundError(f"log file not found: {log_path}")
 
     config = _config or load_config(
@@ -554,25 +605,7 @@ def _ticket_from_doc(doc: dict):
 
 
 def _redact_document(value):
-    if isinstance(value, str):
-        return redact_text(value)
-    if isinstance(value, list):
-        hits = 0
-        items = []
-        for item in value:
-            redacted, item_hits = _redact_document(item)
-            items.append(redacted)
-            hits += item_hits
-        return items, hits
-    if isinstance(value, dict):
-        hits = 0
-        mapping: dict = {}
-        for key, item in value.items():
-            redacted, item_hits = _redact_document(item)
-            mapping[key] = redacted
-            hits += item_hits
-        return mapping, hits
-    return value, 0
+    return redact_value(value)
 
 
 def _redact_artifacts(artifacts: Artifacts) -> int:
@@ -584,15 +617,6 @@ def _redact_artifacts(artifacts: Artifacts) -> int:
         redacted_value, count = redact_text(value)
         hits += count
         return redacted_value
-
-    def scrub_nested(value):
-        if isinstance(value, str):
-            return scrub(value)
-        if isinstance(value, list):
-            return [scrub_nested(item) for item in value]
-        if isinstance(value, dict):
-            return {key: scrub_nested(item) for key, item in value.items()}
-        return value
 
     artifacts.log_text = scrub(artifacts.log_text)
     artifacts.summary = scrub(artifacts.summary)
@@ -612,16 +636,17 @@ def _redact_artifacts(artifacts: Artifacts) -> int:
         test.file = scrub(test.file)
         test.assertion = scrub(test.assertion)
     artifacts.enrichment = [scrub(item) for item in artifacts.enrichment]
-    for audit in artifacts.connector_audits:
-        for key, value in audit.items():
-            if isinstance(value, str):
-                audit[key] = scrub(value)
-    for collection in (artifacts.metric_samples, artifacts.trace_spans):
-        for item in collection:
-            for key, value in item.items():
-                if isinstance(value, str):
-                    item[key] = scrub(value)
-    artifacts.source_evidence = [scrub_nested(item) for item in artifacts.source_evidence]
+    for collection in (artifacts.connector_audits, artifacts.metric_samples, artifacts.trace_spans):
+        for index, item in enumerate(collection):
+            redacted, item_hits = redact_value(item)
+            collection[index] = redacted if isinstance(redacted, dict) else {}
+            hits += item_hits
+    source_evidence = list(artifacts.source_evidence)
+    artifacts.source_evidence = []
+    for item in source_evidence:
+        redacted, item_hits = redact_value(item)
+        artifacts.source_evidence.append(redacted if isinstance(redacted, dict) else {})
+        hits += item_hits
     artifacts.git.branch = scrub(artifacts.git.branch) if artifacts.git.branch else None
     artifacts.git.head = scrub(artifacts.git.head)
     artifacts.git.changed_files = [scrub(path) for path in artifacts.git.changed_files]
@@ -629,9 +654,7 @@ def _redact_artifacts(artifacts: Artifacts) -> int:
     artifacts.git.correlated_commits = [scrub(commit) for commit in artifacts.git.correlated_commits]
     for context in (artifacts.run, artifacts.deployment, artifacts.request):
         for key, value in vars(context).items():
-            if isinstance(value, str):
-                setattr(context, key, scrub(value))
-            elif isinstance(value, list):
-                scrubbed = [scrub(item) for item in value if isinstance(item, str)]
-                setattr(context, key, list(dict.fromkeys(scrubbed)))
+            redacted, item_hits = redact_value(value, key=key)
+            setattr(context, key, redacted)
+            hits += item_hits
     return hits

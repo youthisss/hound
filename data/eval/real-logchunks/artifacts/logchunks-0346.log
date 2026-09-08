@@ -1,0 +1,35 @@
+1) Symfony\Bridge\PhpUnit\Tests\ClockMockTest::testTime
+Failed asserting that 1564764243 is identical to 1234567890.
+
+2) Symfony\Bridge\PhpUnit\Tests\ClockMockTest::testSleep
+Failed asserting that 1564764245 is identical to 1234567892.
+
+3) Symfony\Bridge\PhpUnit\Tests\ClockMockTest::testMicrotime
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'0.12500000 1234567890'
++'0.25615200 1564764245'
+
+4) Symfony\Bridge\PhpUnit\Tests\ClockMockTest::testMicrotimeAsFloat
+Failed asserting that 1564764245.25681 is identical to 1234567890.125.
+
+5) Symfony\Bridge\PhpUnit\Tests\ClockMockTest::testUsleep
+Failed asserting that 1564764245.257137 is identical to 1234567890.125002.
+
+6) Symfony\Bridge\PhpUnit\Tests\ClockMockTest::testDate
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'1234567890'
++'1564764245'
+
+7) Symfony\Bridge\PhpUnit\Tests\ClockMockTest::testGmDate
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'1555075769'
++'1564764245'

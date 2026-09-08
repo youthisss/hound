@@ -100,3 +100,12 @@ def test_feedback_store_remains_cleanable_owned_state(tmp_path, capsys):
     capsys.readouterr()
     assert main(["clean", "--out", str(out), "--yes"]) == 0
     assert not out.exists()
+
+
+def test_feedback_store_preserves_corrupt_database(tmp_path):
+    store = tmp_path / "feedback.sqlite3"
+    store.write_bytes(b"not a sqlite database")
+    with pytest.raises(ValueError, match="original preserved"):
+        read_feedback(store)
+    recovery = next(tmp_path.glob("feedback.sqlite3.corrupt-*"))
+    assert (recovery / "feedback.sqlite3").read_bytes() == b"not a sqlite database"

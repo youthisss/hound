@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 import base64
+import re
 from http.client import InvalidURL
-from urllib.parse import urlsplit
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -12,6 +12,11 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from hound.models import Artifacts, RootCause, Ticket, Triage, build_evidence_items
 from hound.output.report import _atomic_write, ensure_outdir
 from hound.output.markdown import escape_code, escape_text
+from hound.urlutil import validate_http_url
+
+MAX_RESPONSE_BYTES = 256 * 1024
+_REPO_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+_ISSUE_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 LABELS = {
     "severity": "severity:{s}",
@@ -185,14 +190,16 @@ def create_github_ticket(
         raise GithubError("GH_REPO and GH_TOKEN are required for --gh")
     if "/" not in repo:
         raise GithubError(f"GH_REPO must be owner/name, got {repo!r}")
-    parsed = urlsplit(api_base)
-    local_hosts = {"localhost", "127.0.0.1", "::1"}
-    if parsed.scheme not in {"https", "http"} or not parsed.hostname:
-        raise GithubError(f"Invalid GH_API_BASE: {api_base}")
-    if parsed.scheme != "https" and parsed.hostname not in local_hosts:
-        raise GithubError(f"Insecure non-HTTPS GH_API_BASE disallowed: {api_base}")
+    try:
+        api_base = validate_http_url(api_base, label="GH_API_BASE")
+    except ValueError as exc:
+        if "must use HTTPS" in str(exc):
+            raise GithubError("Insecure non-HTTPS GH_API_BASE disallowed") from exc
+        raise GithubError(str(exc)) from exc
 
     owner, name = repo.split("/", 1)
+    if not _REPO_SEGMENT.fullmatch(owner) or not _REPO_SEGMENT.fullmatch(name):
+        raise GithubError("GH_REPO must contain safe owner/name segments")
     url = f"{api_base.rstrip('/')}/repos/{owner}/{name}/issues"
     payload = json.dumps(
         {"title": ticket.title, "body": ticket.body_md, "labels": ticket.labels}
@@ -209,14 +216,18 @@ def create_github_ticket(
     )
     try:
         with urlopen(request, timeout=30) as resp:  # noqa: S310 - user-supplied API base
-            data = json.loads(resp.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, InvalidURL, json.JSONDecodeError) as exc:
+            data = json.loads(_read_response(resp).decode("utf-8"))
+    except (HTTPError, URLError, OSError, InvalidURL, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         raise GithubError(str(exc)) from exc
     if not isinstance(data, dict):
         raise GithubError("GitHub API returned a non-object response")
     html_url = data.get("html_url")
     if not isinstance(html_url, str) or not html_url:
         raise GithubError("GitHub API returned no html_url")
+    try:
+        validate_http_url(html_url, label="GitHub html_url", require_https=True, allow_loopback_http=False)
+    except ValueError as exc:
+        raise GithubError("GitHub API returned an invalid html_url") from exc
     return html_url
 
 
@@ -230,9 +241,10 @@ def create_jira_ticket(
     """Create a Jira issue via REST API v2. Returns the issue key."""
     if not url or not project or not token:
         raise JiraError("JIRA_URL, JIRA_PROJECT, and JIRA_TOKEN are required for --jira")
-    parsed = urlsplit(url)
-    if parsed.scheme != "https" or not parsed.netloc:
-        raise JiraError(f"Insecure non-HTTPS JIRA_URL disallowed: {url}")
+    try:
+        url = validate_http_url(url, label="JIRA_URL", require_https=True, allow_loopback_http=False)
+    except ValueError as exc:
+        raise JiraError(str(exc)) from exc
 
     endpoint = f"{url.rstrip('/')}/rest/api/2/issue"
     payload = json.dumps(
@@ -260,13 +272,13 @@ def create_jira_ticket(
     )
     try:
         with urlopen(request, timeout=30) as resp:  # noqa: S310 - user-supplied URL
-            data = json.loads(resp.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, InvalidURL, json.JSONDecodeError) as exc:
+            data = json.loads(_read_response(resp).decode("utf-8"))
+    except (HTTPError, URLError, OSError, InvalidURL, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         raise JiraError(str(exc)) from exc
     if not isinstance(data, dict):
         raise JiraError("Jira API returned a non-object response")
     key = data.get("key")
-    if not isinstance(key, str) or not key:
+    if not isinstance(key, str) or not _ISSUE_KEY.fullmatch(key):
         raise JiraError("Jira API returned no issue key")
     return f"{url.rstrip('/')}/browse/{key}"
 
@@ -280,9 +292,10 @@ def create_gitlab_ticket(
     """Create a GitLab issue via REST API v4. Returns the issue web URL."""
     if not url or not project or not token:
         raise GitlabError("GITLAB_URL, GITLAB_PROJECT, and GITLAB_TOKEN are required for --gitlab")
-    parsed = urlsplit(url)
-    if parsed.scheme != "https" or not parsed.netloc:
-        raise GitlabError(f"Insecure non-HTTPS GITLAB_URL disallowed: {url}")
+    try:
+        url = validate_http_url(url, label="GITLAB_URL", require_https=True, allow_loopback_http=False)
+    except ValueError as exc:
+        raise GitlabError(str(exc)) from exc
 
     from urllib.parse import quote
 
@@ -301,12 +314,32 @@ def create_gitlab_ticket(
     )
     try:
         with urlopen(request, timeout=30) as resp:  # noqa: S310 - user-supplied URL
-            data = json.loads(resp.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, InvalidURL, json.JSONDecodeError) as exc:
+            data = json.loads(_read_response(resp).decode("utf-8"))
+    except (HTTPError, URLError, OSError, InvalidURL, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         raise GitlabError(str(exc)) from exc
     if not isinstance(data, dict):
         raise GitlabError("GitLab API returned a non-object response")
     web_url = data.get("web_url")
     if not isinstance(web_url, str) or not web_url:
         raise GitlabError("GitLab API returned no web_url")
+    try:
+        validate_http_url(web_url, label="GitLab web_url", require_https=True, allow_loopback_http=False)
+    except ValueError as exc:
+        raise GitlabError("GitLab API returned an invalid web_url") from exc
     return web_url
+
+
+def _read_response(response) -> bytes:
+    """Read a tracker response with a hard cap.
+
+    urllib's real response implements the bounded ``read(size)`` form. A
+    response object that does not support bounded reads is rejected rather than
+    being allowed to allocate an unbounded body.
+    """
+    try:
+        raw = response.read(MAX_RESPONSE_BYTES + 1)
+    except TypeError:
+        raise ValueError("tracker response does not support bounded reads") from None
+    if not isinstance(raw, (bytes, bytearray)) or len(raw) > MAX_RESPONSE_BYTES:
+        raise ValueError("tracker response exceeded the byte limit")
+    return bytes(raw)

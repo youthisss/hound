@@ -81,8 +81,63 @@ def test_validator_rejects_unresolved_or_vacuously_supported_hypothesis():
         validate(vacuous)
 
 
+def test_validator_closes_deployment_fields_and_customer_impact_enum():
+    artifacts = make_artifacts("pytest_fail.log")
+    root_cause = build_root_cause(artifacts)
+    doc = build_doc(
+        artifacts,
+        root_cause,
+        Triage(component="tests", dedup_key="a" * 64),
+        build_ticket(artifacts, root_cause, Triage(component="tests", dedup_key="a" * 64)),
+        "2026-01-01T00:00:00Z",
+    )
+
+    extra_field = copy.deepcopy(doc)
+    extra_field["context"]["deployment"]["unexpected"] = "must reject"
+    with pytest.raises(ValueError, match="deployment contains unsupported fields"):
+        validate(extra_field)
+
+    invalid_impact = copy.deepcopy(doc)
+    invalid_impact["context"]["deployment"]["customer_impact"] = "certain"
+    with pytest.raises(ValueError, match="customer_impact invalid"):
+        validate(invalid_impact)
+
+
+def test_validator_rejects_unknown_current_run_context_fields():
+    doc = json.loads((GOLDEN / "rca-v2.0.json").read_text(encoding="utf-8"))
+    doc["context"]["run"]["unmodeled_field"] = "must reject"
+
+    with pytest.raises(ValueError, match="run contains unsupported fields"):
+        validate(doc)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda doc: doc["analysis"]["evidence"][0].__setitem__("id", "ev-forged"), "evidence.id invalid"),
+        (lambda doc: doc["analysis"]["evidence"][0]["provenance"].__setitem__("source_type", "untrusted"), "provenance.source_type invalid"),
+        (lambda doc: doc["analysis"]["evidence"][0].__setitem__("value", float("nan")), "must contain a finite number"),
+        (lambda doc: doc["analysis"]["hypotheses"][0].__setitem__("statement", "forged primary cause"), "primary hypothesis must match"),
+    ],
+)
+def test_validator_rejects_forged_or_non_finite_analysis_values(mutation, message):
+    artifacts = make_artifacts("pytest_fail.log")
+    root_cause = build_root_cause(artifacts)
+    doc = build_doc(
+        artifacts,
+        root_cause,
+        Triage(component="tests", dedup_key="a" * 64),
+        build_ticket(artifacts, root_cause, Triage(component="tests", dedup_key="a" * 64)),
+        "2026-01-01T00:00:00Z",
+    )
+    assert doc["analysis"]["evidence"]
+    mutation(doc)
+    with pytest.raises(ValueError, match=message):
+        validate(doc)
+
+
 def test_schema_document_publishes_v2_analysis_contract():
-    schema = json.loads(Path("docs/schema/rca-v2.0.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads(Path("tests/fixtures/rca-v2.0.schema.json").read_text(encoding="utf-8"))
     assert schema["properties"]["schema_version"] == {"const": "2.0"}
     assert schema["additionalProperties"] is False
     for section in ("meta", "failure", "context", "root_cause", "triage", "ticket"):
@@ -93,7 +148,7 @@ def test_schema_document_publishes_v2_analysis_contract():
 
 
 def test_current_writer_matches_published_json_schema():
-    schema = json.loads(Path("docs/schema/rca-v2.0.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads(Path("tests/fixtures/rca-v2.0.schema.json").read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     artifacts = make_artifacts("pytest_fail.log")
     root_cause = build_root_cause(artifacts)

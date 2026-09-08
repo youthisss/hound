@@ -1,0 +1,22 @@
+/home/travis/build/jashkenas/coffeescript/test/strict.coffee:81
+    eq("\x008", `\08`);
+                  
+
+SyntaxError: Octal escape sequences are not allowed in strict mode.
+    at createScript (vm.js:80:10)
+    at Object.runInThisContext (vm.js:139:10)
+    at Module._compile (module.js:617:28)
+    at Object.CoffeeScript.run (/home/travis/build/jashkenas/coffeescript/lib/coffeescript/index.js:67:23)
+    at runTests (/home/travis/build/jashkenas/coffeescript/Cakefile:665:22)
+    at Object.action (/home/travis/build/jashkenas/coffeescript/Cakefile:679:12)
+    at invoke (/home/travis/build/jashkenas/coffeescript/lib/coffeescript/cake.js:57:26)
+    at Object.exports.run (/home/travis/build/jashkenas/coffeescript/lib/coffeescript/cake.js:87:20)
+    at Object.anonymous> (/home/travis/build/jashkenas/coffeescript/bin/cake:22:42)
+    at Module._compile (module.js:653:30)
+    at Object.Module._extensions..js (module.js:664:10)
+    at Module.load (module.js:566:32)
+    at tryModuleLoad (module.js:506:12)
+    at Function.Module._load (module.js:498:3)
+    at Function.Module.runMain (module.js:694:10)
+    at startup (bootstrap_node.js:204:16)
+    at bootstrap_node.js:625:3

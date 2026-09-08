@@ -1,6 +1,8 @@
 import json
 import os
 
+import pytest
+
 from hound.config import Config
 from hound.cli import main, run_analyze, build_parser
 from hound.output.report import write_md
@@ -152,6 +154,7 @@ def test_flaky_priority_5(tmp_path):
     assert doc["triage"]["priority"] == 5
 
 
+@pytest.mark.slow
 def test_log_read_capped(tmp_path):
     out = tmp_path / "out"
     big = tmp_path / "big.log"
@@ -548,8 +551,9 @@ def test_slack_escapes_mentions_and_links(monkeypatch):
         def __exit__(self, *args):
             return False
 
-        def read(self):
-            return b"ok"
+        def read(self, limit=None):
+            data = b"ok"
+            return data if limit is None else data[:limit]
 
     def fake_urlopen(request, timeout=30):
         captured.update(json.loads(request.data.decode("utf-8")))
@@ -982,20 +986,15 @@ def test_git_commands_disable_repository_helpers(tmp_path, monkeypatch):
 
     calls = []
 
-    class Result:
-        returncode = 0
-        stderr = ""
-
-        def __init__(self, stdout):
-            self.stdout = stdout
+    from hound.process import BoundedCompletedProcess
 
     outputs = iter(("true", "main", "abc123", "", ""))
 
     def fake_run(command, **kwargs):
         calls.append((command, kwargs["env"]))
-        return Result(next(outputs))
+        return BoundedCompletedProcess(command, 0, next(outputs))
 
-    monkeypatch.setattr("hound.ingest.git.subprocess.run", fake_run)
+    monkeypatch.setattr("hound.ingest.git.run_bounded", fake_run)
     monkeypatch.setenv("GIT_EXTERNAL_DIFF", "malicious")
     gather(str(tmp_path))
     assert calls

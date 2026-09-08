@@ -1,0 +1,132 @@
+1) Input_test::test_get_exist_with_xss_clean
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'Hello, i try to [removed]alert&#40;'Hack'&#41;;[removed] your site'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Input_test.php:51
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+2) Input_test::test_post_exist_with_xss_clean
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'Hello, i try to [removed]alert&#40;'Hack'&#41;;[removed] your site'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Input_test.php:82
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+3) Input_test::test_fetch_from_array
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'Hello, i try to [removed]alert&#40;'Hack'&#41;;[removed] your site'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Input_test.php:136
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+4) Security_test::test_xss_clean
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'Hello, i try to [removed]alert&#40;'Hack'&#41;;[removed] your site'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Security_test.php:71
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+5) Security_test::test_xss_clean_string_array
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'Hello, i try to [removed]alert&#40;'Hack'&#41;;[removed] your site'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Security_test.php:86
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+6) Security_test::test_xss_clean_image_invalid
+Failed asserting that '' is false.
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Security_test.php:110
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+7) Security_test::test_xss_clean_entity_double_encoded
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'<a>Clickhere</a>'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Security_test.php:118
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+8) Security_test::test_xss_clean_js_img_removal
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'<img>'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Security_test.php:137
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+9) Security_test::test_xss_clean_sanitize_naughty_html_tags
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'&lt;unclosedTag'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Security_test.php:144
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+10) Security_test::test_xss_clean_sanitize_naughty_html_attributes
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'<foo xss=removed>'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Security_test.php:168
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+11) Cookie_helper_test::test_get_cookie
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'bar'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/helpers/cookie_helper_test.php:37
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+12) Security_helper_tests::test_xss_clean
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'foo'
++''
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/helpers/security_helper_test.php:15
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351
+
+13) Upload_test::test_do_xss_clean
+Failed asserting that '' is true.
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/libraries/Upload_test.php:265
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351

@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-registry-auth-variant",
+  "artifact": "registry-auth-variant.log",
+  "expected": {
+    "stage": "deploy",
+    "kind": "registry_auth_failure",
+    "primary_event": {"stage": "deploy", "kind": "registry_auth_failure"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

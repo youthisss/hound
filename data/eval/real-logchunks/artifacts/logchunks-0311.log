@@ -1,0 +1,1 @@
+/Users/travis/build/realm/realm-cocoa/Realm/ObjectServerTests/SwiftPermissionsTests.swift:156:13: warning: Redundant Discardable Let Violation: Prefer `_ = foo()` over `let _ = foo()` when discarding a result from a function. (redundant_discardable_let)

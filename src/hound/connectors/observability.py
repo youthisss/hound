@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -11,6 +12,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from hound.connectors.model import ConnectorAudit
 from hound.models import Artifacts
+from hound.urlutil import validate_http_url
 
 TIMEOUT_SECONDS = 10
 MAX_RESPONSE_BYTES = 256 * 1024
@@ -47,6 +49,8 @@ def collect_observability_bundle(
 ) -> ObservabilityBundle:
     """Query bounded pre/post windows and trace IDs already present in evidence."""
     bundle = ObservabilityBundle()
+    prometheus_url = _validated_base_url(prometheus_url, "prometheus", bundle)
+    tempo_url = _validated_base_url(tempo_url, "tempo", bundle)
     service = artifacts.deployment.service or artifacts.deployment.target
     window = _deployment_window(artifacts.deployment.started_at, artifacts.deployment.finished_at, window_minutes)
     if prometheus_url and service and _SERVICE_LABEL.fullmatch(service) and window:
@@ -109,6 +113,7 @@ def _get_json(
     if token:
         headers["Authorization"] = f"Bearer {token}"
     try:
+        validate_http_url(url, label="connector endpoint", allow_query=True)
         with urlopen(Request(url, headers=headers), timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 - validated config URL
             raw = response.read(MAX_RESPONSE_BYTES + 1)
         if len(raw) > MAX_RESPONSE_BYTES:
@@ -139,12 +144,18 @@ def _parse_prometheus(payload: dict, start: datetime, end: datetime) -> list[dic
             try:
                 timestamp = float(value[0])
                 numeric = float(value[1])
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if not math.isfinite(timestamp) or not math.isfinite(numeric):
+                continue
+            try:
+                observed_at = datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
+            except (OverflowError, OSError, ValueError):
                 continue
             samples.append({
                 "metric": name,
                 "value": numeric,
-                "timestamp": datetime.fromtimestamp(timestamp, timezone.utc).isoformat(),
+                "timestamp": observed_at,
                 "source": "prometheus",
                 "window_start": start.isoformat(),
                 "window_end": end.isoformat(),
@@ -244,8 +255,27 @@ def _integer(value: object) -> int:
         if isinstance(value, (str, bytes, bytearray, int, float)):
             return int(value or 0)
         return 0
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return 0
+
+
+def _validated_base_url(value: str, connector: str, bundle: ObservabilityBundle) -> str:
+    if not value:
+        return ""
+    normalized = value.rstrip("/")
+    try:
+        return validate_http_url(normalized, label=f"{connector} URL")
+    except ValueError:
+        bundle.audits.append(_audit(
+            connector,
+            "configuration",
+            "",
+            "denied",
+            datetime.now(timezone.utc).isoformat(),
+            time.monotonic(),
+            error="invalid connector URL",
+        ))
+        return ""
 
 
 def _audit(

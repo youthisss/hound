@@ -1,0 +1,3 @@
+FAIL: TestSimulation (10.07s)
+    peer_test.go:235: failed to start the first server. err: listen udp [REDACTED:ip_address]:41777: bind: address already in use
+    peer_test.go:507: Failed to start all the servers, running: 7

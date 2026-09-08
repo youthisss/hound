@@ -19,6 +19,8 @@ from hound.qa.gate import GateResult, evaluate_gate, load_gate_policy
 from hound.qa.normalize import import_artifact
 from hound.qa.sarif import merge_sarif, parse_sarif_artifact
 from hound.executables import trusted_executable
+from hound.pathutil import path_has_symlink
+from hound.process import run_bounded
 
 MAX_ARTIFACT_FILES = 1000
 MAX_TOTAL_ARTIFACT_BYTES = 128 * 1024 * 1024
@@ -26,6 +28,7 @@ MAX_COLLECTION_SECONDS = 10.0
 MAX_GATE_SECONDS = 30.0
 MAX_NORMALIZED_TEST_RESULTS = 10000
 MAX_HISTORY_BYTES = 256 * 1024 * 1024
+MAX_GIT_REF_OUTPUT_BYTES = 64 * 1024
 _TEST_SUFFIXES = {".xml", ".json", ".log", ".txt"}
 _COVERAGE_SUFFIXES = {".xml", ".json", ".info", ".lcov"}
 
@@ -42,6 +45,8 @@ def _observed_at(path: Path) -> str | None:
 
 
 def _history_snapshot(source: Path, destination: Path, deadline: float) -> dict[str, object]:
+    if path_has_symlink(source) or source.is_symlink():
+        raise ValueError("history store must not use symlinks")
     try:
         source_size = source.stat().st_size
     except OSError as exc:
@@ -157,23 +162,20 @@ def _validate_git_context(repo: Path, baseline: str, head: str, timeout: float) 
         if not revision or revision.startswith("-") or "\x00" in revision:
             raise ValueError(f"{label} Git ref is invalid")
         try:
-            process = subprocess.run(
+            process = run_bounded(
                 [
                     executable, "-C", str(repo),
                     "-c", "core.fsmonitor=false",
                     "-c", f"core.hooksPath={os.devnull}",
                     "rev-parse", "--verify", "--end-of-options", f"{revision}^{{commit}}",
                 ],
-                capture_output=True,
-                text=True,
                 timeout=max(0.1, min(15.0, timeout)),
-                check=False,
-                shell=False,
+                max_output_bytes=MAX_GIT_REF_OUTPUT_BYTES,
                 env=_git_environment(),
             )
         except (OSError, subprocess.SubprocessError) as exc:
             raise ValueError(f"could not validate {label} Git ref: {exc}") from exc
-        if process.returncode != 0:
+        if process.returncode != 0 or process.truncated:
             raise ValueError(f"{label} Git ref does not resolve to a commit: {revision}")
         resolved.append(process.stdout.strip())
     return resolved[0], resolved[1]

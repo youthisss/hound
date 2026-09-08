@@ -1,0 +1,2 @@
+src/grammar-registry.js:635 Replace `process.platform·===·'darwin'·&&·parseInt(require('os').release())·<·16` with `⏎······process.platform·===·'darwin'·&&⏎······parseInt(require('os').release())·<·16⏎····` (prettier/prettier)
+src/grammar-registry.js:636 Insert `;` (prettier/prettier)

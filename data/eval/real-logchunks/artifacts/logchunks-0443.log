@@ -1,0 +1,6 @@
+error[0m] [0m[0m * the type hierarchy of interface akka.cluster.protobuf.msg.ClusterMessages#ConfigCheckOrBuilder is different in current version. Missing types {akka.protobuf.GeneratedMessage$ExtendableMessageOrBuilder}[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingTypesProblem]("akka.cluster.protobuf.msg.ClusterMessages$ConfigCheckOrBuilder")[0m
+[0m[[0m[31merror[0m] [0m[0m * the type hierarchy of class akka.cluster.protobuf.msg.ClusterMessages#ConfigCheck#Builder is different in current version. Missing types {akka.protobuf.GeneratedMessage$ExtendableBuilder}[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingTypesProblem]("akka.cluster.protobuf.msg.ClusterMessages$ConfigCheck$Builder")[0m
+[0m[[0m[31merror[0m] [0m[0m * the type hierarchy of class akka.cluster.protobuf.msg.ClusterMessages#ConfigCheck is different in current version. Missing types {akka.protobuf.GeneratedMessage$ExtendableMessage}[0m
+[0m[[0m[31merror[0m] [0m[0m   filter with: ProblemFilters.exclude[MissingTypesProblem]("akka.cluster.protobuf.msg.ClusterMessages$ConfigCheck")[0m

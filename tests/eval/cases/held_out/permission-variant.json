@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-permission-variant",
+  "artifact": "permission-variant.log",
+  "expected": {
+    "stage": "deploy",
+    "kind": "permission_error",
+    "primary_event": {"stage": "deploy", "kind": "permission_error"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

@@ -1,0 +1,43 @@
+[1mdiff --git a/layers/+misc/copy-as-format/README.org b/layers/+misc/copy-as-format/README.org[m
+[1mindex 44487bb..15cb914 100644[m
+[1m--- a/layers/+misc/copy-as-format/README.org[m
+[1m+++ b/layers/+misc/copy-as-format/README.org[m
+[36m@@ -1,5 +1,13 @@[m
+ #+TITLE: copy-as-format layer[m
+ [m
+[32m+[m[32m* Table of Contents                      :TOC_4_gh:noexport:[m
+[32m+[m[32m- [[#table-of-contents][Table of Contents]][m
+[32m+[m[32m- [[#description][Description]][m
+[32m+[m[32m  - [[#features][Features:]][m
+[32m+[m[32m- [[#install][Install]][m
+[32m+[m[32m- [[#configuration][Configuration]][m
+[32m+[m[32m- [[#key-bindings][Key bindings]][m
+[32m+[m
+ * Table of Contents[m
+ - [[#description][Description]][m
+   - [[#features][Features:]][m
+[36m@@ -20,16 +28,19 @@[m [mfile.[m
+ [m
+ * Configuration[m
+ You can choose default formatter.[m
+[32m+[m
+ #+BEGIN_SRC elisp[m
+ (setq copy-as-format-default "markdown")[m
+ #+END_SRC[m
+ [m
+ Also, you can enable copying of buffer's file name for asciidoc formatter.[m
+[32m+[m
+ #+BEGIN_SRC elisp[m
+ (setq copy-as-format-asciidoc-include-file-name t)[m
+ #+END_SRC[m
+ [m
+ And you can add alist of file name patterns to language names used for asciidoc syntax highlighting.[m
+[32m+[m
+ #+BEGIN_SRC elisp[m
+ (setq copy-as-format-asciidoc-language-alist '(("^.*\\.java$" "java")[m
+                                                ("^.*\\.clj[cs]?$" "clojure")))[m
+[36m@@ -54,4 +65,3 @@[m [mAnd you can add alist of file name patterns to language names used for asciidoc[m
+ | ~SPC x f p~ | copy-as-format-pod       |[m
+ | ~SPC x f r~ | copy-as-format-rst       |[m
+ | ~SPC x f s~ | copy-as-format-slack     |[m
+[31m-[m

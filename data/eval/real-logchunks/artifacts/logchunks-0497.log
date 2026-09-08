@@ -1,0 +1,21 @@
+[31m❌  [0m/Users/travis/build/Alamofire/Alamofire/Source/ParameterEncoding.swift:269:57: [31mthrown expression type 'AFError.ParameterEncoderFailureReason' does not conform to 'Error'[0m
+nl
+nl
+nl
+nl            throw AFError.ParameterEncoderFailureReason.missingRequiredComponent(.httpMethod(rawValue: "POST"))
+
+[36m                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+nl
+nl
+nl
+nl
+nl
+nl
+nl
+nl[31m❌  [0m/Users/travis/build/Alamofire/Alamofire/Source/ParameterEncoding.swift:302:57: [31mthrown expression type 'AFError.ParameterEncoderFailureReason' does not conform to 'Error'[0m
+nl
+nl
+nl
+nl            throw AFError.ParameterEncoderFailureReason.missingRequiredComponent(.httpMethod(rawValue: "POST"))
+
+[36m                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m

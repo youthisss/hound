@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-readiness-timeout-variant",
+  "artifact": "readiness-timeout-variant.log",
+  "expected": {
+    "stage": "deploy",
+    "kind": "readiness_timeout",
+    "primary_event": {"stage": "deploy", "kind": "readiness_timeout"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

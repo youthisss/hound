@@ -1,0 +1,5 @@
+005+     Parameter #1 [ <optional> $flags ]
+
+005-     Parameter #1 [ <optional> $ar_flags ]
+========DONE========
+FAIL Bug#71412 ArrayIterator reflection parameter info [ext/spl/tests/bug71412.phpt]

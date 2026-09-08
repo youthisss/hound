@@ -1,0 +1,30 @@
+Traceback (most recent call last):
+  File "/home/travis/miniconda/envs/testenv/bin/pytest", line 11, in module>
+    sys.exit(main())
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/_pytest/config.py", line 52, in main
+    config = _prepareconfig(args, plugins)
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/_pytest/config.py", line 163, in _prepareconfig
+    pluginmanager=pluginmanager, args=args)
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/pluggy/__init__.py", line 617, in __call__
+    return self._hookexec(self, self._nonwrappers + self._wrappers, kwargs)
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/pluggy/__init__.py", line 222, in _hookexec
+    return self._inner_hookexec(hook, methods, kwargs)
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/pluggy/__init__.py", line 216, in lambda>
+    firstresult=hook.spec_opts.get('firstresult'),
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/pluggy/callers.py", line 196, in _multicall
+    gen.send(outcome)
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/_pytest/helpconfig.py", line 68, in pytest_cmdline_parse
+    config = outcome.get_result()
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/pluggy/callers.py", line 76, in get_result
+    raise ex[1].with_traceback(ex[2])
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/pluggy/callers.py", line 180, in _multicall
+    res = hook_impl.function(*args)
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/_pytest/config.py", line 936, in pytest_cmdline_parse
+    self.parse(args)
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/_pytest/config.py", line 1086, in parse
+    self._preparse(args, addopts=addopts)
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/_pytest/config.py", line 1048, in _preparse
+    self.pluginmanager.load_setuptools_entrypoints('pytest11')
+  File "/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages/pluggy/__init__.py", line 402, in load_setuptools_entrypoints
+    "Plugin %r could not be loaded: %s!" % (ep.name, e))
+pluggy.PluginValidationError: Plugin 'pytest_cov' could not be loaded: (pytest 3.5.0 (/home/travis/miniconda/envs/testenv/lib/python3.4/site-packages), Requirement.parse('pytest>=3.6'))!

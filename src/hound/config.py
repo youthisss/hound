@@ -10,12 +10,15 @@ from urllib.parse import urlsplit
 
 import yaml
 
-from hound.fsio import atomic_write
+from hound.fsio import atomic_write, read_bounded_text
 from hound.models import KINDS
+from hound.pathutil import path_has_symlink
 from hound.trust import policy_for, resolve_source_class
+from hound.urlutil import validate_http_url
 
 DEFAULT_MODEL = "auto"
 DEFAULT_CONFIG_PATH = Path(".hound.yml")
+MAX_CONFIG_BYTES = 2 * 1024 * 1024
 
 CONFIG_SCHEMA: dict[str, object] = {
     "llm": {
@@ -98,19 +101,13 @@ def _configured_string(mapping: dict, key: str, label: str) -> str | None:
 def _validate_http_url(value: object, label: str) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{label} must be a string")
-    try:
-        parsed = urlsplit(value)
-        hostname = parsed.hostname
-        parsed.port  # Force validation of malformed ports.
-    except ValueError as exc:
-        raise ValueError(f"{label} must be an HTTP(S) URL") from exc
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not hostname:
-        raise ValueError(f"{label} must be an HTTP(S) URL")
-    if parsed.username is not None or parsed.password is not None:
-        raise ValueError(f"{label} must not include URL credentials")
-    if parsed.scheme != "https" and hostname.lower() not in {"localhost", "127.0.0.1", "::1"}:
-        raise ValueError(f"{label} must use HTTPS unless it targets loopback")
-    return value
+    return validate_http_url(value, label=label)
+
+
+def _validate_delivery_url(value: object, label: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a string")
+    return validate_http_url(value, label=label, require_https=True, allow_loopback_http=False)
 
 #: Known provider presets (all OpenAI-compatible). Key = name users pass in
 #: HOUND_API_PROVIDER (or `llm.provider` in YAML). `env` = env var names that
@@ -118,6 +115,7 @@ def _validate_http_url(value: object, label: str) -> str:
 PROVIDERS: dict[str, dict] = {
     "openai": {
         "base_url": "https://api.openai.com/v1",
+        "supports_model_discovery": True,
         "env": {"api_key": "OPENAI_API_KEY", "model": "OPENAI_MODEL", "base_url": "OPENAI_BASE_URL"},
     },
     # Note: Anthropic's native API is not OpenAI-compatible. This preset only
@@ -125,34 +123,42 @@ PROVIDERS: dict[str, dict] = {
     # front of Anthropic (or a gateway that translates the protocol).
     "anthropic": {
         "base_url": None,
+        "supports_model_discovery": False,
         "env": {"api_key": "ANTHROPIC_API_KEY", "model": "ANTHROPIC_MODEL", "base_url": "ANTHROPIC_BASE_URL"},
     },
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "supports_model_discovery": True,
         "env": {"api_key": "GEMINI_API_KEY", "model": "GEMINI_MODEL", "base_url": "GEMINI_BASE_URL"},
     },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
+        "supports_model_discovery": True,
         "env": {"api_key": "GROQ_API_KEY", "model": "GROQ_MODEL", "base_url": "GROQ_BASE_URL"},
     },
     "ollama": {
         "base_url": "http://localhost:11434/v1",
+        "supports_model_discovery": True,
         "env": {"model": "OLLAMA_MODEL", "base_url": "OLLAMA_BASE_URL"},
     },
     "deepseek": {
         "base_url": "https://api.deepseek.com/v1",
+        "supports_model_discovery": True,
         "env": {"api_key": "DEEPSEEK_API_KEY", "model": "DEEPSEEK_MODEL", "base_url": "DEEPSEEK_BASE_URL"},
     },
     "9router": {
         "base_url": "http://127.0.0.1:20128/v1",
+        "supports_model_discovery": True,
         "env": {"api_key": "NINE_ROUTER_API_KEY", "model": "NINE_ROUTER_MODEL", "base_url": "NINE_ROUTER_BASE_URL"},
     },
     "azure": {
         "base_url": None,  # Azure needs a custom base URL, always
+        "supports_model_discovery": False,
         "env": {"api_key": "AZURE_OPENAI_API_KEY", "model": "AZURE_OPENAI_MODEL", "base_url": "AZURE_OPENAI_BASE_URL"},
     },
     "custom": {
         "base_url": None,
+        "supports_model_discovery": True,
         "env": {"api_key": "CUSTOM_API_KEY", "model": "CUSTOM_MODEL", "base_url": "CUSTOM_BASE_URL"},
     },
 }
@@ -179,6 +185,7 @@ def _effective_providers() -> dict[str, dict]:
                 "base_url": definition.get("base_url"),
                 "default_model": definition.get("default_model", ""),
                 "models": definition.get("models", []),
+                "supports_model_discovery": definition.get("supports_model_discovery", True),
                 "env": {},
             }
     return providers
@@ -200,6 +207,15 @@ def resolve_model_name(provider: str, model: str, *, base_url: str | None = None
     preset = _effective_providers()[provider]
     default = str(preset.get("default_model") or "").strip()
     configured = [str(value) for value in preset.get("models", []) if str(value).strip()]
+    if preset.get("supports_model_discovery") is False:
+        if default:
+            return default
+        if configured:
+            return configured[0]
+        raise ValueError(
+            f"provider {provider!r} does not support model discovery; "
+            "select a model/deployment explicitly"
+        )
     discovered = cached_models(provider, base_url=base_url)
     available = list(dict.fromkeys([*configured, *discovered]))
     if default:
@@ -299,8 +315,13 @@ def load_config(
 ) -> Config:
     yaml_cfg: dict = {}
     if config_path:
+        config_file = Path(config_path).expanduser()
+        if path_has_symlink(config_file) or config_file.is_symlink():
+            raise ValueError("config path must not contain symlinked path components")
         try:
-            raw_text = Path(config_path).read_text(encoding="utf-8")
+            if config_file.stat().st_size > MAX_CONFIG_BYTES:
+                raise ValueError("config exceeds the 2 MiB limit")
+            raw_text = read_bounded_text(config_file, MAX_CONFIG_BYTES, encoding="utf-8")
             parsed = yaml.safe_load(raw_text)
         except (OSError, yaml.YAMLError) as exc:
             raise ValueError(f"could not read config {config_path}: {exc}") from exc
@@ -574,11 +595,13 @@ def load_config(
     gh_api_base = _configured_string(gh, "api_base", "github.api_base")
     if gh_api_base:
         cfg.gh_api_base = _validate_http_url(gh_api_base, "github.api_base")
+    elif not effective_offline and cfg.gh_api_base:
+        cfg.gh_api_base = _validate_http_url(cfg.gh_api_base, "github.api_base")
 
     jira = _mapping_section(yaml_cfg, "jira")
     jira_url = _configured_string(jira, "url", "jira.url")
     if jira_url:
-        cfg.jira_url = _validate_http_url(jira_url, "jira.url")
+        cfg.jira_url = _validate_delivery_url(jira_url, "jira.url")
     if jira.get("project"):
         cfg.jira_project = str(jira["project"])
     if jira.get("token"):
@@ -591,6 +614,8 @@ def load_config(
         cfg.jira_token = jira_env
     if os.environ.get("JIRA_URL") and not cfg.jira_url:
         cfg.jira_url = os.environ.get("JIRA_URL", "")
+    if cfg.jira_url and not effective_offline:
+        cfg.jira_url = _validate_delivery_url(cfg.jira_url, "jira.url")
     if os.environ.get("JIRA_PROJECT") and not cfg.jira_project:
         cfg.jira_project = os.environ.get("JIRA_PROJECT", "")
     if os.environ.get("JIRA_EMAIL") and not cfg.jira_email:
@@ -599,7 +624,7 @@ def load_config(
     gitlab = _mapping_section(yaml_cfg, "gitlab")
     gitlab_url = _configured_string(gitlab, "url", "gitlab.url")
     if gitlab_url:
-        cfg.gitlab_url = _validate_http_url(gitlab_url, "gitlab.url")
+        cfg.gitlab_url = _validate_delivery_url(gitlab_url, "gitlab.url")
     if gitlab.get("project"):
         cfg.gitlab_project = str(gitlab["project"])
     if gitlab.get("token"):
@@ -609,15 +634,19 @@ def load_config(
         cfg.gitlab_token = os.environ.get("GITLAB_TOKEN", "")
     if os.environ.get("GITLAB_URL") and not cfg.gitlab_url:
         cfg.gitlab_url = os.environ.get("GITLAB_URL", "")
+    if cfg.gitlab_url and not effective_offline:
+        cfg.gitlab_url = _validate_delivery_url(cfg.gitlab_url, "gitlab.url")
     if os.environ.get("GITLAB_PROJECT") and not cfg.gitlab_project:
         cfg.gitlab_project = os.environ.get("GITLAB_PROJECT", "")
 
     slack = _mapping_section(yaml_cfg, "slack")
     slack_webhook = _configured_string(slack, "webhook_url", "slack.webhook_url")
     if slack_webhook:
-        cfg.slack_webhook = _validate_http_url(slack_webhook, "slack.webhook_url")
+        cfg.slack_webhook = _validate_delivery_url(slack_webhook, "slack.webhook_url")
     if os.environ.get("SLACK_WEBHOOK_URL") and not cfg.slack_webhook:
         cfg.slack_webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+    if cfg.slack_webhook and not effective_offline:
+        cfg.slack_webhook = _validate_delivery_url(cfg.slack_webhook, "slack.webhook_url")
 
     observability = _mapping_section(yaml_cfg, "observability")
     _configured_string(observability, "prometheus_url", "observability.prometheus_url")
@@ -657,10 +686,14 @@ def set_model_config(value: str, config_path: str | Path = DEFAULT_CONFIG_PATH) 
     value = value.strip()
     if not value:
         raise ValueError("provider or model must not be empty")
-    path = Path(config_path)
+    path = Path(config_path).expanduser()
+    if path_has_symlink(path) or path.is_symlink():
+        raise ValueError("config path must not contain symlinked path components")
     data: dict = {}
     if path.exists():
-        parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if path.stat().st_size > MAX_CONFIG_BYTES:
+            raise ValueError("config exceeds the 2 MiB limit")
+        parsed = yaml.safe_load(read_bounded_text(path, MAX_CONFIG_BYTES, encoding="utf-8"))
         if parsed is not None and not isinstance(parsed, dict):
             raise ValueError(f"config root must be a mapping: {path}")
         data = parsed or {}
@@ -676,5 +709,7 @@ def set_model_config(value: str, config_path: str | Path = DEFAULT_CONFIG_PATH) 
         llm["model"] = value
     data["llm"] = llm
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path_has_symlink(path.parent) or path.is_symlink():
+        raise ValueError("config path must not contain symlinked path components")
     atomic_write(path, yaml.safe_dump(data, sort_keys=False))
     return path

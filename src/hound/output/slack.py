@@ -5,9 +5,9 @@ import json
 from http.client import InvalidURL
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
-from urllib.parse import urlsplit
 
 from hound.models import Ticket
+from hound.urlutil import validate_http_url
 
 
 class SlackError(Exception):
@@ -26,9 +26,15 @@ def send_slack(ticket: Ticket, webhook_url: str) -> None:
     """POST a compact alert for ``ticket`` to a Slack incoming webhook."""
     if not webhook_url:
         raise SlackError("SLACK_WEBHOOK_URL is required for --slack-webhook")
-    parsed = urlsplit(webhook_url)
-    if parsed.scheme != "https" or not parsed.netloc:
-        raise SlackError("SLACK_WEBHOOK_URL must be a valid HTTPS URL")
+    try:
+        webhook_url = validate_http_url(
+            webhook_url,
+            label="SLACK_WEBHOOK_URL",
+            require_https=True,
+            allow_loopback_http=False,
+        )
+    except ValueError as exc:
+        raise SlackError(str(exc)) from exc
 
     safe_title = _escape_mrkdwn(ticket.title)
     safe_body = _escape_mrkdwn(ticket.body_md[:2000])
@@ -44,8 +50,8 @@ def send_slack(ticket: Ticket, webhook_url: str) -> None:
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urlopen(request, timeout=30) as resp:  # noqa: S310 - user-supplied webhook URL
-            resp.read()
+        with urlopen(request, timeout=30):  # noqa: S310 - user-supplied webhook URL
+            pass
     except (HTTPError, URLError, OSError, InvalidURL) as exc:
         raise SlackError(str(exc)) from exc
 

@@ -1,0 +1,19 @@
+in module [33m$PSCI[0m
+at internal>:0:0 - 0:0 (line 0, column 0 - line 0, column 0)
+
+  Could not match type
+  [33m        [0m
+  [33m  String[0m
+  [33m        [0m
+  with type
+  [33m           [0m
+  [33m  Effect t0[0m
+  [33m           [0m
+
+while checking that type [33mString[0m
+  is at least as general as type [33mEffect t0[0m
+while checking that expression [33mshow it[0m
+  has type [33mEffect t0[0m
+in value declaration [33m$main[0m
+
+where [33mt0[0m is an unknown type

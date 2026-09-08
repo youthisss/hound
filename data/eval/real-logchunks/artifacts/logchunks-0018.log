@@ -1,0 +1,7 @@
+From test_popupwin.vim:
+	Found errors in Test_popup_beval():
+	Run 1:
+	Caught exception in Test_popup_beval(): Vim(call):E958: Job already finished @ function RunTheTest[40]..Test_popup_beval[40]..VerifyScreenDump, line 19
+	Run 2:
+	Caught exception in Test_popup_beval(): Vim(call):E958: Job already finished @ function RunTheTest[40]..Test_popup_beval[40]..VerifyScreenDump, line 19
+	Flaky test failed too often, giving up

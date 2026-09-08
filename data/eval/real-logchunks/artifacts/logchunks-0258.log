@@ -1,0 +1,1 @@
+/tmp/emacs/bin/emacs: error while loading shared libraries: libgnutls.so.26: cannot open shared object file: No such file or directory

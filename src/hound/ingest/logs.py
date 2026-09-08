@@ -1,14 +1,19 @@
 """Detect CI/CD stage, failure kind, and extract summary/message."""
 from __future__ import annotations
 
+import io
+import json
+import os
 import re
 from collections import deque
 from datetime import datetime
 from pathlib import Path
 
+from hound.fsio import open_verified_regular
 from hound.models import FailureEvent
 
 READ_LIMIT = 2 * 1024 * 1024
+MAX_READ_LIMIT = 16 * 1024 * 1024
 HEAD_LINES = 200
 SCAN_LINE_LIMIT = 64 * 1024
 CONTEXT_LINES = 20
@@ -31,7 +36,8 @@ PYTEST_FAILED = re.compile(r"\bFAILED\b")
 BUILD_MARKERS = re.compile(
     r"compil|gcc |make[:\s]|undefined reference|cannot find|go build|"
     r"npm run build|tsc |cargo build|ImportError|ModuleNotFoundError|"
-    r"error TS\d+|::error::|could not install packages|\bat\s+[\w.$]+\([^)]*\.java:\d+\)",
+    r"error TS\d+|error [A-Z]{1,5}\d+\b|error\[E\d+\]|::error::|"
+    r"could not install packages|\bat\s+[\w.$]+\([^)]*\.java:\d+\)",
     re.IGNORECASE,
 )
 CI_MARKERS = re.compile(
@@ -43,11 +49,12 @@ DEPLOY_MARKERS = re.compile(
     r"\bdeployment\b.*\b(?:rollout|progress deadline|updated replicas|readiness|failed)\b|"
     r"\bdeploy(?:ing|ment)?\s+(?:api|app|service|workload|release)\b|kubectl\b|helm\b|terraform (?:apply|plan)|"
     r"argo ?cd|rollout status|release \S+ (?:failed|pending)|"
-    r"(?:readiness|liveness) probe|imagepullbackoff|errimagepull|"
+    r"(?:readiness|liveness) probe|healthcheck|health check|imagepullbackoff|errimagepull|"
     r"back-off pulling image|migration (?:failed|error)|"
     r"\b(?:deployment|release|rollout|helm)\b[^\n]*\brollback\b|\brollback(?:ing|ed)?\s+(?:deployment|release|rollout)\b|"
     r"\b(?:ecs|codedeploy|cloudformation|ansible|pulumi|nomad|flux|gcloud run|cloud deploy|serverless|sls|docker stack|docker compose|systemctl)\b|"
-    r"\b(?:crashloopbackoff|oomkilled|create_failed|rollback_in_progress|play recap|allocation failed|helmrelease|failedscheduling|unschedulable|resourcequota|exceeded quota|image pull access denied|registry authentication|required environment variable|configmap .* not found|secret .* not found)\b",
+    r"\b(?:crashloopbackoff|oomkilled|create_failed|rollback_in_progress|play recap|allocation failed|helmrelease|failedscheduling|unschedulable|resourcequota|exceeded quota|image pull access denied|registry authentication|required environment variable|configmap .* not found|secret .* not found)\b|"
+    r"\bcontainer\b[^\n]{0,80}\b(?:exit(?:ed)?|status)\s*(?:code\s*)?137\b",
     re.IGNORECASE,
 )
 
@@ -55,10 +62,15 @@ IMPORT_RE = re.compile(r"(?:ImportError|ModuleNotFoundError|No module named)", r
 COMPILE_RE = re.compile(
     r"[^:\n]+\.(?:c|cc|cpp|cxx|h|hpp|go|rs|java):\d+(?::\d+)?:\s*error:|"
     r"::error::|undefined reference|\bundefined:\s*[A-Za-z_]|cannot find|cannot open source|"
-    r"error TS\d+|compilation error|no member named|\[build failed\]",
+    r"error TS\d+|error [A-Z]{1,5}\d+\b|error\[E\d+\]|compilation error|"
+    r"no member named|\[build failed\]",
     re.IGNORECASE,
 )
-TIMEOUT_RE = re.compile(r"TimeoutError|timed?\s?out|timeout exceeded|deadline exceeded", re.IGNORECASE)
+TIMEOUT_RE = re.compile(
+    r"TimeoutError|timed?\s+out|timeout exceeded|deadline exceeded|"
+    r"context deadline|worker timeout",
+    re.IGNORECASE,
+)
 _TEST_RESULT = re.compile(
     r"(?m)^\s*(?:"
     r"(?P<suffix_name>\S+::\S+)\s+(?P<suffix_result>FAILED|PASSED|RERUN)\b|"
@@ -87,13 +99,31 @@ TEST_FAIL_RE = re.compile(
 )
 CRASH_RE = re.compile(r"segmentation fault|segfault|SIGSEGV|SIGABRT|panic:", re.IGNORECASE)
 IMAGE_PULL_RE = re.compile(r"imagepullbackoff|errimagepull|back-off pulling image|failed to pull image", re.IGNORECASE)
-REGISTRY_AUTH_RE = re.compile(r"(?:pull access denied|authentication required|unauthorized).*(?:image|registry)|(?:image|registry).*(?:authentication required|unauthorized)", re.IGNORECASE)
-OOM_RE = re.compile(r"oomkilled|out of memory|memory cgroup out of memory", re.IGNORECASE)
+REGISTRY_AUTH_RE = re.compile(
+    r"(?:pull access denied|authentication required|unauthorized)[^\n]{0,120}(?:image|registry|repository)|"
+    r"(?:image|registry|repository)[^\n]{0,120}(?:authentication required|unauthorized|access denied)|"
+    r"(?:failed to authorize|oauth[^\n]*(?:token|auth)|token exchange failed)[^\n]{0,120}(?:pull|image|registry)",
+    re.IGNORECASE,
+)
+OOM_RE = re.compile(
+    r"oomkilled|out of memory|memory cgroup out of memory|"
+    r"(?:container|process|command)\b[^\n]{0,80}\b(?:exit(?:ed)?|status)"
+    r"(?:\s+with)?\s*(?:code\s*)?137\b",
+    re.IGNORECASE,
+)
 CRASH_LOOP_RE = re.compile(r"crashloopbackoff|back-off restarting failed container", re.IGNORECASE)
-LIVENESS_RE = re.compile(r"liveness probe failed", re.IGNORECASE)
+LIVENESS_RE = re.compile(r"(?:liveness\s+probe|probe\s+liveness)[^\n]{0,80}\bfailed\b", re.IGNORECASE)
+HEALTH_RE = re.compile(r"(?:health\s*check|healthcheck)[^\n]{0,80}\bfailed\b", re.IGNORECASE)
+READINESS_PROBE_RE = re.compile(r"(?:readiness\s+probe|probe\s+readiness)[^\n]{0,80}\bfailed\b", re.IGNORECASE)
 SCHEDULING_RE = re.compile(r"(?:failedscheduling|0/\d+ nodes are available|unschedulable)", re.IGNORECASE)
 QUOTA_RE = re.compile(r"(?:exceeded quota|resourcequota|insufficient (?:cpu|memory))", re.IGNORECASE)
-NETWORK_RE = re.compile(r"(?:dns|network).*(?:failed|error|unreachable)|(?:connection refused|no route to host)", re.IGNORECASE)
+NETWORK_RE = re.compile(
+    r"(?:dns|network|name resolution)[^\n]{0,100}(?:failed|error|unreachable|refused)|"
+    r"failed to resolve host|temporary failure in name resolution|ENOTFOUND|"
+    r"connection refused|connection reset|no route to host|network is unreachable|"
+    r"networkpolicy[^\n]*denied",
+    re.IGNORECASE,
+)
 CONFIG_RE = re.compile(r"(?:configmap|secret).*(?:not found|missing)|(?:missing|required) (?:environment variable|configuration)", re.IGNORECASE)
 MIGRATION_RE = re.compile(r"migration (?:failed|error)|failed migration|migrate.*(?:failed|error)", re.IGNORECASE)
 PERMISSION_RE = re.compile(r"forbidden|permission denied|unauthorized|access denied", re.IGNORECASE)
@@ -113,12 +143,17 @@ CI_FOOTER_RE = re.compile(r"process completed with exit code\s*[1-9]\d*", re.IGN
 DEP_RES_RE = re.compile(
     r"\bERESOLVE\b|unable to resolve dependency tree|could not resolve dependency|"
     r"ResolutionImpossible|have conflicting dependencies|"
-    r"Fix the upstream dependency conflict|(?:peer )?dependency conflict between",
+    r"Fix the upstream dependency conflict|(?:peer )?dependency conflict between|"
+    r"could not resolve all files|could not find .* artifact|"
+    r"poetry[^\n]*(?:solver|version solving|because)|"
+    r"failed to select a version for|failed to select a version|"
+    r"cargo[^\n]*(?:failed to select|failed to resolve)",
     re.IGNORECASE,
 )
 DISK_FULL_RE = re.compile(
     r"No space left on device|\[Errno 28\]|\bENOSPC\b|"
-    r"disk space.*exhausted|100%.*(?:disk|storage).*used",
+    r"disk space.*exhausted|100%.*(?:disk|storage).*used|"
+    r"not enough space|ephemeral-storage|disk quota exceeded",
     re.IGNORECASE,
 )
 TLS_CERT_RE = re.compile(
@@ -128,7 +163,8 @@ TLS_CERT_RE = re.compile(
 )
 RATE_LIMIT_RE = re.compile(
     r"HTTP 429|429 Too Many Requests|secondary rate limit|rate limit exceeded|"
-    r"\btoomanyrequests\b|API rate limit",
+    r"\btoomanyrequests\b|API rate limit|ThrottlingException|"
+    r"Retry-After\s*[:=]|\bstatus\s*[:=]\s*429\b",
     re.IGNORECASE,
 )
 
@@ -169,9 +205,35 @@ _K8S_WARNING_EVENT_RE = re.compile(
     r"errimagepull|imagepullbackoff|denied|deadline|timeout)\b",
     re.IGNORECASE,
 )
+_ANSI_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+_CI_PREFIX_RE = re.compile(r"^\s*(?:##\[(?:error|warning|command)\]|(?:ERROR|WARN(?:ING)?):)\s*", re.IGNORECASE)
+
+
+def normalize_log_text(text: str) -> str:
+    """Normalize common runner wrappers without changing semantic line order."""
+    text = _ANSI_RE.sub("", text.replace("\r\n", "\n").replace("\r", "\n"))
+    normalized: list[str] = []
+    for line in text.splitlines():
+        line = _CI_PREFIX_RE.sub("", line)
+        # Some collectors serialize one event per line. Unwrap only a small,
+        # well-known set of message fields; arbitrary JSON remains untouched.
+        stripped = line.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
+            try:
+                value = json.loads(stripped)
+            except (TypeError, ValueError):
+                value = None
+            if isinstance(value, dict):
+                for key in ("message", "msg", "log", "error", "output"):
+                    if isinstance(value.get(key), str):
+                        line = value[key]
+                        break
+        normalized.append(line)
+    return "\n".join(normalized)
 
 
 def detect_stage(text: str) -> str:
+    text = normalize_log_text(text)
     if DEPLOY_MARKERS.search(text):
         return "deploy"
     # Dependency conflicts happen during install/restore steps: build stage,
@@ -197,6 +259,7 @@ def detect_stage(text: str) -> str:
 
 
 def detect_kind(text: str, stage: str) -> str:
+    text = normalize_log_text(text)
     if stage == "deploy":
         if REGISTRY_AUTH_RE.search(text):
             return "registry_auth_failure"
@@ -208,7 +271,7 @@ def detect_kind(text: str, stage: str) -> str:
             return "crash_loop"
         if LIVENESS_RE.search(text):
             return "liveness_probe_failed"
-        if re.search(r"readiness probe failed", text, re.IGNORECASE):
+        if READINESS_PROBE_RE.search(text):
             return "readiness_probe_failed"
         if SCHEDULING_RE.search(text):
             return "scheduling_failed"
@@ -224,10 +287,12 @@ def detect_kind(text: str, stage: str) -> str:
             return "permission_error"
         if ROLLBACK_RE.search(text) and not re.search(r"(?:rollback|rolled back).*(?:succeed|complete)", text, re.IGNORECASE):
             return "rollback"
-        if READINESS_RE.search(text):
-            return "health_check_failed"
         if DEPLOY_TIMEOUT_RE.search(text):
             return "readiness_timeout"
+        if HEALTH_RE.search(text):
+            return "health_check_failed"
+        if READINESS_RE.search(text):
+            return "health_check_failed"
         if DEPLOY_FAILURE_RE.search(text):
             return "deployment_failed"
     # Cross-stage signals first (FR-28): specific infrastructure patterns
@@ -266,6 +331,7 @@ def _candidate_lines(lines: list[str]) -> list[str]:
 
 
 def extract_message(text: str) -> str:
+    text = normalize_log_text(text)
     lines = _candidate_lines(text.splitlines())
     strong_hits = [ln.strip() for ln in lines if STRONG_ERROR_RE.search(ln)]
     if _CHAINED_TRACEBACK_RE.search(text) and len(strong_hits) >= 2:
@@ -317,24 +383,179 @@ def extract_summary(text: str, kind: str, message: str) -> str:
     return message[:200]
 
 
+_DEPLOY_KINDS = {
+    "deployment_failed", "rollback", "health_check_failed", "image_pull_error",
+    "migration_failed", "permission_error", "readiness_timeout", "oom_killed",
+    "crash_loop", "liveness_probe_failed", "readiness_probe_failed",
+    "scheduling_failed", "quota_exceeded", "network_failure",
+    "registry_auth_failure", "config_missing",
+}
+
+
+def _match_position(pattern: re.Pattern[str], text: str) -> int | None:
+    match = pattern.search(text)
+    return match.start() if match else None
+
+
+def _stage_near(text: str, position: int, kind: str) -> str:
+    """Infer stage from the bounded prefix around one candidate, not the tail."""
+    line_end = text.find("\n", position)
+    if line_end < 0:
+        line_end = len(text)
+    window = text[max(0, position - 2500):line_end]
+    if kind in _DEPLOY_KINDS:
+        return "deploy"
+    if kind in {"test_failure", "flaky"}:
+        return "test"
+    if kind in {"dependency_resolution", "disk_full", "tls_certificate_error"}:
+        # A runner footer such as "job failed" can identify the CI scope even
+        # when the concrete failure is a package, storage, or certificate
+        # problem. Preserve that scope instead of forcing every cross-stage
+        # signal into build.
+        if CI_MARKERS.search(window) or CI_FOOTER_RE.search(window):
+            return "ci"
+        return "build"
+    if kind in {"compilation_error", "import_error"}:
+        return "build"
+    if kind == "api_rate_limited":
+        return "deploy" if DEPLOY_MARKERS.search(window) else "ci"
+    if kind == "ci_failure":
+        return "ci"
+    if kind == "timeout":
+        if DEPLOY_MARKERS.search(window):
+            return "deploy"
+        if CI_MARKERS.search(window) or CI_FOOTER_RE.search(window):
+            return "ci"
+        if TEST_MARKERS.search(window) or PYTEST_FAILED.search(window):
+            return "test"
+        if COMPILE_RE.search(window) or BUILD_MARKERS.search(window):
+            return "build"
+        # CI wrappers often print the job scope before/after the exception
+        # block. If no nearer test/build/deploy marker exists, a bounded global
+        # CI marker is stronger than returning unknown.
+        if CI_MARKERS.search(text) or CI_FOOTER_RE.search(text):
+            return "ci"
+        return "unknown"
+    return "unknown"
+
+
+def _failure_candidates(text: str) -> list[tuple[int, int, str, str]]:
+    """Collect ordered, specific failure candidates from one normalized log.
+
+    The first strong candidate wins. This prevents cleanup/recovery commands at
+    the end of a noisy log from replacing the earlier causal failure while
+    preserving the existing global message extractor for chained tracebacks.
+    The second tuple field is a specificity tie-breaker (lower is stronger).
+    """
+    candidates: list[tuple[int, int, str, str]] = []
+
+    def add(pattern: re.Pattern[str], kind: str, priority: int) -> None:
+        position = _match_position(pattern, text)
+        if position is not None:
+            candidates.append((position, priority, kind, _stage_near(text, position, kind)))
+
+    # Specific deployment signals must win ties against generic exit-status
+    # and deployment-failed patterns.
+    add(REGISTRY_AUTH_RE, "registry_auth_failure", 10)
+    add(IMAGE_PULL_RE, "image_pull_error", 11)
+    add(OOM_RE, "oom_killed", 12)
+    add(CRASH_LOOP_RE, "crash_loop", 13)
+    add(LIVENESS_RE, "liveness_probe_failed", 14)
+    add(READINESS_PROBE_RE, "readiness_probe_failed", 15)
+    add(SCHEDULING_RE, "scheduling_failed", 16)
+    add(QUOTA_RE, "quota_exceeded", 17)
+    add(CONFIG_RE, "config_missing", 18)
+    add(MIGRATION_RE, "migration_failed", 19)
+    add(DEPLOY_TIMEOUT_RE, "readiness_timeout", 20)
+    add(HEALTH_RE, "health_check_failed", 21)
+    if not re.search(r"(?:rollback|rolled back)[^\n]{0,100}(?:succeed|complete|successfully)", text, re.IGNORECASE):
+        add(ROLLBACK_RE, "rollback", 22)
+    add(NETWORK_RE, "network_failure", 23)
+    add(PERMISSION_RE, "permission_error", 24)
+    add(DEPLOY_FAILURE_RE, "deployment_failed", 25)
+
+    add(DEP_RES_RE, "dependency_resolution", 30)
+    add(DISK_FULL_RE, "disk_full", 31)
+    add(TLS_CERT_RE, "tls_certificate_error", 32)
+    add(IMPORT_RE, "import_error", 33)
+    add(COMPILE_RE, "compilation_error", 34)
+
+    flaky_position = _match_position(re.compile(r"\bRERUN\b|[✕●]\s+", re.IGNORECASE), text)
+    if _is_flaky_test(text):
+        candidates.append((flaky_position if flaky_position is not None else 0, 40, "flaky", "test"))
+    else:
+        add(TEST_FAIL_RE, "test_failure", 41)
+
+    add(TIMEOUT_RE, "timeout", 35)
+    add(RATE_LIMIT_RE, "api_rate_limited", 36)
+    add(CI_FAILURE_RE, "ci_failure", 60)
+    return candidates
+
+
+_AGGREGATE_DEPLOY_KINDS = {"readiness_timeout", "health_check_failed", "deployment_failed"}
+_DIRECT_DEPLOY_KINDS = {
+    "registry_auth_failure", "image_pull_error", "oom_killed", "crash_loop",
+    "liveness_probe_failed", "readiness_probe_failed", "scheduling_failed",
+    "quota_exceeded", "config_missing", "migration_failed", "network_failure",
+    "permission_error",
+}
+
+
+def _choose_primary_candidate(
+    text: str,
+    candidates: list[tuple[int, int, str, str]],
+) -> tuple[int, int, str, str]:
+    """Choose the earliest credible candidate, not an aggregate rollout footer.
+
+    Kubernetes commonly prints a rollout deadline before the pod event that
+    explains it. A direct pod/resource signal later in the bounded artifact is
+    more specific evidence of cause than that aggregate timeout. This narrow
+    override preserves earliest-event behavior for independent failures and
+    keeps rollback/cleanup output downstream.
+    """
+    # ``parse_log`` has already applied its chained-test timeout exception
+    # before calling this helper, so preserve that caller-provided order.
+    ordered = candidates
+    first = ordered[0]
+    if first[2] not in _AGGREGATE_DEPLOY_KINDS or first[3] != "deploy":
+        return first
+    direct = [
+        item for item in ordered[1:]
+        if item[3] == "deploy" and item[2] in _DIRECT_DEPLOY_KINDS
+    ]
+    if not direct:
+        return first
+    return min(direct, key=lambda item: (item[0], item[1]))
+
+
+def _is_summary_test_candidate(text: str, position: int) -> bool:
+    line_start = text.rfind("\n", 0, position) + 1
+    line_end = text.find("\n", position)
+    if line_end < 0:
+        line_end = len(text)
+    line = text[line_start:line_end]
+    return bool(
+        re.search(r"(?:FAILED\s+\S+::\S+|\S+::\S+\s+FAILED)\b", line, re.IGNORECASE)
+        and not re.search(r"assert|assertion|exception|error|timeout|timed?\s*out", line, re.IGNORECASE)
+    )
+
+
 def parse_log(text: str) -> tuple[str, str, str, str]:
     """Return (stage, kind, summary, message)."""
-    test_failure = TEST_FAIL_RE.search(text)
-    deploy_failure = re.search(
-        r"(?:deployment|release|rollout|terraform apply).*?(?:failed|error)|"
-        r"(?:imagepullbackoff|errimagepull|failed to pull image|oomkilled|crashloopbackoff|"
-        r"failedscheduling|exceeded quota|progress deadline|deadline exceeded)",
-        text,
-        re.IGNORECASE,
-    )
-    # Cleanup can invoke kubectl after a test has already failed. In that
-    # case, preserve the causal test classification instead of global deploy
-    # marker priority taking over.
-    if test_failure and deploy_failure and test_failure.start() < deploy_failure.start():
-        stage = "test"
+    text = normalize_log_text(text)
+    candidates = _failure_candidates(text)
+    if candidates:
+        ordered = sorted(candidates, key=lambda item: (item[0], item[1]))
+        timeout = next((item for item in ordered if item[2] == "timeout"), None)
+        if timeout is not None:
+            test_candidate = next((item for item in ordered if item[2] == "test_failure"), None)
+            if test_candidate is not None and _is_summary_test_candidate(text, test_candidate[0]):
+                ordered.remove(timeout)
+                ordered.insert(0, timeout)
+        _position, _priority, kind, stage = _choose_primary_candidate(text, ordered)
     else:
         stage = detect_stage(text)
-    kind = detect_kind(text, stage)
+        kind = detect_kind(text, stage)
     if kind == "unknown":
         stage = "unknown"
     message = extract_message(text)
@@ -526,10 +747,32 @@ def read_log_window(
     Deterministic: same input always yields the same window.
     """
     p = Path(path)
-    size = p.stat().st_size
-    if size <= read_limit + 4096:
-        return p.read_text(encoding="utf-8", errors="replace")
+    if type(read_limit) is not int or not 1 <= read_limit <= MAX_READ_LIMIT:
+        raise ValueError(f"read_limit must be an integer in [1, {MAX_READ_LIMIT}]")
+    if type(head_lines) is not int or not 0 <= head_lines <= 10_000:
+        raise ValueError("head_lines must be an integer in [0, 10000]")
 
+    fd = open_verified_regular(p)
+    try:
+        with os.fdopen(fd, "rb") as binary:
+            fd = -1
+            size = os.fstat(binary.fileno()).st_size
+            small_limit = read_limit + 4096
+            if size <= small_limit:
+                raw = binary.read(small_limit + 1)
+                if len(raw) <= small_limit:
+                    return _normalize_newlines(raw.decode("utf-8", errors="replace"))
+                # The file grew after the descriptor was admitted.  Rewind the
+                # same verified descriptor and use the streaming window path.
+                binary.seek(0)
+            with io.TextIOWrapper(binary, encoding="utf-8", errors="replace", newline=None) as stream:
+                return _normalize_newlines(_window_from_stream(stream, read_limit, head_lines))
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def _window_from_stream(stream, read_limit: int, head_lines: int) -> str:
     head: list[str] = []
     head_size = 0
     head_budget = min(max(read_limit // 4, 1), 256 * 1024)
@@ -540,44 +783,48 @@ def read_log_window(
     tail: deque[str] = deque()
     tail_size = 0
 
-    with p.open("r", encoding="utf-8", errors="replace") as stream:
-        for index, line in enumerate(_bounded_lines(stream)):
-            if index < head_lines and head_size < head_budget:
-                kept = line[:head_budget - head_size]
-                head.append(kept)
-                head_size += len(kept)
+    for index, line in enumerate(_bounded_lines(stream)):
+        if index < head_lines and head_size < head_budget:
+            kept = line[:head_budget - head_size]
+            head.append(kept)
+            head_size += len(kept)
 
-            tail.append(line)
-            tail_size += len(line)
-            while tail and tail_size > read_limit:
-                excess = tail_size - read_limit
-                if len(tail[0]) <= excess:
-                    tail_size -= len(tail.popleft())
-                else:
-                    tail[0] = tail[0][excess:]
-                    tail_size -= excess
+        tail.append(line)
+        tail_size += len(line)
+        while tail and tail_size > read_limit:
+            excess = tail_size - read_limit
+            if len(tail[0]) <= excess:
+                tail_size -= len(tail.popleft())
+            else:
+                tail[0] = tail[0][excess:]
+                tail_size -= excess
 
-            marker = ERROR_LINE_RE.search(line) is not None
-            if marker and context_size < read_limit:
-                for candidate in (*previous, line):
-                    kept = candidate[:read_limit - context_size]
-                    context.append(kept)
-                    context_size += len(kept)
-                    if context_size >= read_limit:
-                        break
-                trailing = CONTEXT_LINES
-            elif trailing > 0 and context_size < read_limit:
-                kept = line[:read_limit - context_size]
+        marker = ERROR_LINE_RE.search(line) is not None
+        if marker and context_size < read_limit:
+            for candidate in (*previous, line):
+                kept = candidate[:read_limit - context_size]
                 context.append(kept)
                 context_size += len(kept)
-                trailing -= 1
-            previous.append(line)
+                if context_size >= read_limit:
+                    break
+            trailing = CONTEXT_LINES
+        elif trailing > 0 and context_size < read_limit:
+            kept = line[:read_limit - context_size]
+            context.append(kept)
+            context_size += len(kept)
+            trailing -= 1
+        previous.append(line)
 
     sections = ["".join(head)]
     if context:
         sections.append("\n--- failure context ---\n" + "".join(context))
     sections.append("\n--- log tail ---\n" + "".join(tail))
     return "".join(sections)
+
+
+def _normalize_newlines(value: str) -> str:
+    """Expose a platform-neutral log contract to parsers and reports."""
+    return value.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _bounded_lines(stream):

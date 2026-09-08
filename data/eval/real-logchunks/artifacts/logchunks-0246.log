@@ -1,0 +1,16 @@
+operator: notOk
+    expected: false
+    actual:   1
+    at: Test.<anonymous> (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/test/test-react-order.js:57:7)
+    stack: |-
+      Error: no errors
+          at Test.assert [as _assert] (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/node_modules/tape/lib/test.js:226:54)
+          at Test.bound [as _assert] (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/node_modules/tape/lib/test.js:77:32)
+          at Test.notOK (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/node_modules/tape/lib/test.js:358:10)
+          at Test.bound (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/node_modules/tape/lib/test.js:77:32)
+          at Test.<anonymous> (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/test/test-react-order.js:57:7)
+          at Test.bound [as _cb] (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/node_modules/tape/lib/test.js:77:32)
+          at Test.run (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/node_modules/tape/lib/test.js:96:10)
+          at Test.bound [as run] (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/node_modules/tape/lib/test.js:77:32)
+          at Test._end (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/node_modules/tape/lib/test.js:165:11)
+          at Test.bound [as _end] (/home/travis/build/airbnb/javascript/packages/eslint-config-airbnb/node_modules/tape/lib/test.js:77:32)

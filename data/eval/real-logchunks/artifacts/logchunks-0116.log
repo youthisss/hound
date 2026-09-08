@@ -1,0 +1,6 @@
+** (throw) "Duplicate links found"
+    check.exs:68: Awesome.uniq_links/2
+    (elixir) lib/code.ex:370: Code.require_file/2
+    (mix) lib/mix/tasks/run.ex:82: Mix.Tasks.Run.run/1
+    (mix) lib/mix/task.ex:294: Mix.Task.run_task/3
+    (mix) lib/mix/cli.ex:58: Mix.CLI.run_task/2

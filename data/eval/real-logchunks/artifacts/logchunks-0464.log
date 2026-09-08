@@ -1,0 +1,20 @@
+[1m[31m__________________________ test_web5_dhparam_is_used ___________________________[0m
+
+docker_compose = docker.client.DockerClient object at 0x7fe6b7c1fa90>
+
+[1m    @require_openssl("1.0.2")[0m
+[1m    def test_web5_dhparam_is_used(docker_compose):[0m
+[1m        sut_container = docker_client.containers.get("nginxproxy")[0m
+[1m        assert sut_container.status == "running"[0m
+[1m    [0m
+[1m        host = "%s:443" % sut_container.attrs["NetworkSettings"]["IPAddress"][0m
+[1m        r = subprocess.check_output([0m
+[1m            "echo '' | openssl s_client -connect %s -cipher 'EDH' | grep 'Server Temp Key'" % host, shell=True)[0m
+[1m>       assert "Server Temp Key: DH, 2048 bits\n" == r[0m
+[1m[31mE       assert 'Server Temp ..., 2048 bits\n' == 'Server Temp K...9, 253 bits\n'[0m
+[1m[31mE         - Server Temp Key: DH, 2048 bits[0m
+[1m[31mE         ?                  ^^   ^^^[0m
+[1m[31mE         + Server Temp Key: X25519, 253 bits[0m
+[1m[31mE         ?                  ^^^^^^   ^^[0m
+
+[1m[31mtest_ssl/test_dhparam.py[0m:93: AssertionError

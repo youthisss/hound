@@ -1,0 +1,10 @@
+1) Log_test::test_format_line
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+ 'LEVEL - Timestamp --> Message
+ '
+
+/home/travis/build/bcit-ci/CodeIgniter/tests/codeigniter/core/Log_test.php:61
+/home/travis/build/bcit-ci/CodeIgniter/tests/mocks/ci_testcase.php:351

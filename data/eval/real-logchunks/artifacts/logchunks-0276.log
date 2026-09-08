@@ -1,0 +1,12 @@
+[1mdiff --git a/layers/+lang/elm/README.org b/layers/+lang/elm/README.org[m
+[1mindex 1d2fdfb..d6eb235 100644[m
+[1m--- a/layers/+lang/elm/README.org[m
+[1m+++ b/layers/+lang/elm/README.org[m
+[36m@@ -171,7 +171,6 @@[m [mthe automatic indentation level was not the one you expected simply hit TAB to[m
+ cycle through the list (note that hitting any other key will cancel the cycle).[m
+ [m
+ ** Test runner settings[m
+[31m-[m
+ You may want to customize the default suffix for test files. For example, if you[m
+ prefer to put your tests in =HelloSpec.elm= instead of =HelloTest.elm=, set the[m
+ following variable:[m

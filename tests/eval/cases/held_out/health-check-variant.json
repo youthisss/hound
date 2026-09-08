@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-health-check-variant",
+  "artifact": "health-check-variant.log",
+  "expected": {
+    "stage": "deploy",
+    "kind": "health_check_failed",
+    "primary_event": {"stage": "deploy", "kind": "health_check_failed"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

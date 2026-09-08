@@ -4,17 +4,20 @@ set -eu
 out=""
 log=""
 repo=""
+context=""
 previous=""
 for argument in "$@"; do
     case "$argument" in
         --output-dir=*|--out=*) out="${argument#*=}" ;;
         --log=*) log="${argument#*=}" ;;
         --repo-dir=*|--repo=*) repo="${argument#*=}" ;;
+        --context=*) context="${argument#*=}" ;;
     esac
     case "$previous" in
         --output-dir|--out) out="$argument" ;;
         --log) log="$argument" ;;
         --repo-dir|--repo) repo="$argument" ;;
+        --context) context="$argument" ;;
     esac
     previous="$argument"
 done
@@ -60,6 +63,15 @@ if [ -n "${GITHUB_WORKSPACE:-}" ]; then
         require_workspace_path "$repo_path" "repo"
         if [ ! -d "$repo_path" ]; then
             echo "error: action repo must be an existing directory" >&2
+            exit 2
+        fi
+    fi
+
+    if [ -n "$context" ]; then
+        context_path=$(resolve_workspace_path "$context")
+        require_workspace_path "$context_path" "context"
+        if [ ! -f "$context_path" ]; then
+            echo "error: action context must be an existing regular file" >&2
             exit 2
         fi
     fi

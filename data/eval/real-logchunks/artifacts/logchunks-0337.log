@@ -1,0 +1,29 @@
+1) Composer\Test\Repository\ComposerRepositoryTest::testCanonicalizeUrl with data set #0 ('https://example.org/path/to/file', '/path/to/file', 'https://example.org')
+Argument 4 passed to Composer\Repository\ComposerRepository::__construct() must be an instance of Composer\Util\HttpDownloader, none given, called in /home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php on line 231 and defined
+
+/home/travis/build/composer/composer/src/Composer/Repository/ComposerRepository.php:71
+/home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php:231
+
+2) Composer\Test\Repository\ComposerRepositoryTest::testCanonicalizeUrl with data set #1 ('https://example.org/canonic_url', 'https://example.org/canonic_url', 'https://should-not-see-me.test')
+Argument 4 passed to Composer\Repository\ComposerRepository::__construct() must be an instance of Composer\Util\HttpDownloader, none given, called in /home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php on line 231 and defined
+
+/home/travis/build/composer/composer/src/Composer/Repository/ComposerRepository.php:71
+/home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php:231
+
+3) Composer\Test\Repository\ComposerRepositoryTest::testCanonicalizeUrl with data set #2 ('file:///path/to/repository/file', '/path/to/repository/file', 'file:///path/to/repository')
+Argument 4 passed to Composer\Repository\ComposerRepository::__construct() must be an instance of Composer\Util\HttpDownloader, none given, called in /home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php on line 231 and defined
+
+/home/travis/build/composer/composer/src/Composer/Repository/ComposerRepository.php:71
+/home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php:231
+
+4) Composer\Test\Repository\ComposerRepositoryTest::testCanonicalizeUrl with data set #3 ('invalid_repo_url', '/path/to/file', 'invalid_repo_url')
+Argument 4 passed to Composer\Repository\ComposerRepository::__construct() must be an instance of Composer\Util\HttpDownloader, none given, called in /home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php on line 231 and defined
+
+/home/travis/build/composer/composer/src/Composer/Repository/ComposerRepository.php:71
+/home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php:231
+
+5) Composer\Test\Repository\ComposerRepositoryTest::testCanonicalizeUrl with data set #4 ('https://example.org/path/to/u...lename', '/path/to/unusual_$0_filename', 'https://example.org')
+Argument 4 passed to Composer\Repository\ComposerRepository::__construct() must be an instance of Composer\Util\HttpDownloader, none given, called in /home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php on line 231 and defined
+
+/home/travis/build/composer/composer/src/Composer/Repository/ComposerRepository.php:71
+/home/travis/build/composer/composer/tests/Composer/Test/Repository/ComposerRepositoryTest.php:231

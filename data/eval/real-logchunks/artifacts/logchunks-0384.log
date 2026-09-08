@@ -1,0 +1,16 @@
+Running ‘test-all.R’ [10s/15s]
+ ERROR
+Running the tests in ‘tests/test-all.R’ failed.
+Last 13 lines of output:
+  > library(shiny)
+  > 
+  > test_check("shiny")
+  ── 1. Error: app with both r/ and R/ prefers R/ (@test-app.R#41)  ──────────────
+  object 'upperHelper' not found
+  1: expect_equal(upperHelper, "abc", envir = renv) at testthat/test-app.R:41
+  2: quasi_label(enquo(object), label, arg = "object")
+  3: eval_bare(get_expr(quo), get_env(quo))
+  
+  ══ testthat results  ═══════════════════════════════════════════════════════════
+  [ OK: 823 | SKIPPED: 0 | WARNINGS: 0 | FAILED: 1 ]
+  1. Error: app with both r/ and R/ prefers R/ (@test-app.R#41)

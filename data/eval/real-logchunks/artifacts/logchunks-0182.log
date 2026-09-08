@@ -1,0 +1,2 @@
+shellcheck.hs:442:19: error:
+    Variable not in scope: doesPathExist [REDACTED:ipv6_address] [Char] -> IO Bool

@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sqlite3
 import sys
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import asdict, replace
 from urllib.parse import urlsplit
 from uuid import uuid4
 from pathlib import Path
@@ -21,6 +22,7 @@ from hound.config import PROVIDERS, load_config, set_model_config
 from hound.formatters import format_document, format_runs
 from hound.models import KINDS, SCHEMA_VERSION, Ticket
 from hound.pipeline import default_state_path
+from hound.pathutil import path_has_symlink
 from hound.service import SUPPORTED_LOG_SUFFIXES, is_sidecar
 from hound.triage.dedup import configure_store
 from hound.trust import SOURCE_CLASSES
@@ -139,6 +141,12 @@ def _add_common(parser: argparse.ArgumentParser, *, batch: bool = False) -> None
     parser.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
     parser.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
                         help="trust profile for this artifact source")
+    # Container/Action inputs need a value-bearing form so an action can pass a
+    # boolean without conditionally constructing an argv entry. Keep these
+    # hidden; the public CLI uses the flag forms above.
+    parser.add_argument("--source-context-value", choices=("true", "false"), default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--enrich-value", choices=("true", "false"), default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--redact-value", choices=("true", "false"), default=None, help=argparse.SUPPRESS)
     parser.add_argument("--llm-preview", action="store_true",
                         help="write the final redacted LLM payload without contacting a provider")
     parser.add_argument("--max-llm-calls", type=_positive_int, default=None,
@@ -183,12 +191,12 @@ def build_parser() -> argparse.ArgumentParser:
     tui.add_argument("--config", default=None, help="optional YAML config")
     tui.add_argument("--allow-unredacted", dest="no_redact", action="store_true", help="disable redaction (unsafe)")
     tui.add_argument("--no-dedup", action="store_true", help="disable dedup state persistence")
-    tui.add_argument("--source-context", action="store_true", help="attach repository source near log frames (trusted logs only)")
+    tui.add_argument("--source-context", action="store_true", default=None, help="attach repository source near log frames (trusted logs only)")
     tui.add_argument("--context", default=None, help="trusted JSON run/deployment context sidecar")
-    tui.add_argument("--enrich", action="store_true", help="collect bounded read-only Kubernetes/Helm evidence")
+    tui.add_argument("--enrich", action="store_true", default=None, help="collect bounded read-only Kubernetes/Helm evidence")
     tui.add_argument("--source-class", choices=sorted(SOURCE_CLASSES), default=None,
                      help="trust profile for these artifacts")
-    tui.add_argument("--jobs", type=_positive_int, default=1, help="parallel workers for Analyze all (default: 1)")
+    tui.add_argument("--jobs", type=_positive_int, default=None, help="parallel workers for Analyze all (default: saved preference or 1)")
     tui.add_argument("--max-llm-calls", type=_positive_int, default=None, help="strict LLM call cap for Analyze all")
     tui.add_argument("--max-cost-usd", type=_positive_float, default=None, help="estimated cost guardrail for Analyze all")
     _add_llm_args(tui)
@@ -279,6 +287,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--review-status", choices=("pending", "reviewed", "rejected"), default="pending"
     )
     feedback_record.add_argument("--reviewer", default="", help="reviewer identifier; secrets are redacted")
+    feedback_record.add_argument("--validation-id", default=None, help="associated validation audit record ID")
+    feedback_record.add_argument("--root-cause-correction", default="", help="engineer correction or notes on root cause")
+    feedback_record.add_argument("--notes", default="", help="additional review notes")
     feedback_export = feedback_sub.add_parser("export", help="export sanitized feedback or candidate manifests")
     feedback_export.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
     feedback_export.add_argument("--history-db", dest="store", default=None, help="feedback SQLite path")
@@ -289,6 +300,87 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-fixtures", action="store_true",
         help="export reviewed records as manual regression-fixture candidates",
     )
+    delivery_cmd = sub.add_parser("delivery", help="inspect and explicitly recover external delivery records")
+    delivery_sub = delivery_cmd.add_subparsers(dest="delivery_command", required=True)
+    delivery_list = delivery_sub.add_parser("list", help="list bounded delivery ledger records")
+    _add_delivery_store_args(delivery_list)
+    delivery_list.add_argument("--state", choices=("pending", "confirmed", "failed", "unknown"))
+    delivery_list.add_argument("--incident-key", default=None)
+    delivery_list.add_argument("--destination", default=None)
+    delivery_list.add_argument("--limit", type=_positive_int, default=100)
+    delivery_list.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    delivery_inspect = delivery_sub.add_parser("inspect", help="inspect one delivery record")
+    _add_delivery_store_args(delivery_inspect)
+    delivery_inspect.add_argument("--incident-key", required=True)
+    delivery_inspect.add_argument("--destination", required=True)
+    delivery_inspect.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    delivery_reconcile = delivery_sub.add_parser("reconcile", help="confirm an unknown delivery with its external ID")
+    _add_delivery_store_args(delivery_reconcile)
+    delivery_reconcile.add_argument("--incident-key", required=True)
+    delivery_reconcile.add_argument("--destination", required=True)
+    delivery_reconcile.add_argument("--external-id", required=True)
+    delivery_reconcile.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    delivery_retry = delivery_sub.add_parser("retry-failed", help="explicitly retry a known failed delivery")
+    _add_delivery_store_args(delivery_retry)
+    delivery_retry.add_argument("--incident-key", required=True)
+    delivery_retry.add_argument("--destination", required=True)
+    delivery_retry.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    delivery_mark_failed = delivery_sub.add_parser(
+        "mark-failed",
+        help="close a pending or unknown delivery after verifying the remote object does not exist",
+    )
+    _add_delivery_store_args(delivery_mark_failed)
+    delivery_mark_failed.add_argument("--incident-key", required=True)
+    delivery_mark_failed.add_argument("--destination", required=True)
+    delivery_mark_failed.add_argument("--error", required=True, help="bounded operator reason for the verified absence")
+    delivery_mark_failed.add_argument(
+        "--confirm-absent",
+        action="store_true",
+        help="confirm that the external system has no corresponding object",
+    )
+    delivery_mark_failed.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    incidents_cmd = sub.add_parser("incidents", help="inspect and invalidate cached dedup RCA snapshots")
+    incidents_sub = incidents_cmd.add_subparsers(dest="incidents_command", required=True)
+    incidents_list = incidents_sub.add_parser("list", help="list deduplicated incidents without changing counts")
+    _add_incident_store_args(incidents_list)
+    incidents_list.add_argument("--kind", default=None)
+    incidents_list.add_argument("--filed", action="store_true", help="show only incidents with a legacy filed flag")
+    incidents_list.add_argument("--limit", type=_positive_int, default=100)
+    incidents_list.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    incidents_inspect = incidents_sub.add_parser("inspect", help="inspect recurrence and RCA reuse provenance")
+    _add_incident_store_args(incidents_inspect)
+    incidents_inspect.add_argument("--key", required=True, dest="incident_key")
+    incidents_inspect.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    incidents_invalidate = incidents_sub.add_parser("invalidate", help="clear only the cached RCA snapshot")
+    _add_incident_store_args(incidents_invalidate)
+    incidents_invalidate.add_argument("--key", required=True, dest="incident_key")
+    incidents_invalidate.add_argument("--yes", action="store_true", help="confirm snapshot invalidation")
+    incidents_invalidate.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    client_cmd = sub.add_parser("client", help="submit, inspect, poll, or cancel an HTTP job")
+    client_sub = client_cmd.add_subparsers(dest="client_command", required=True)
+    client_submit = client_sub.add_parser("submit", help="submit a relative log path to hound serve")
+    _add_client_connection_args(client_submit)
+    client_submit.add_argument("--log", required=True, help="relative log path configured for the server")
+    client_submit.add_argument("--offline", action="store_true")
+    client_submit.add_argument("--idempotency-key", default=None)
+    client_submit.add_argument("--wait", action="store_true", help="poll until the job is terminal")
+    client_submit.add_argument("--poll-seconds", type=_positive_float, default=0.2)
+    client_submit.add_argument("--wait-timeout", type=_positive_float, default=None)
+    client_submit.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    client_inspect = client_sub.add_parser("inspect", help="inspect one server job")
+    _add_client_connection_args(client_inspect)
+    client_inspect.add_argument("job_id")
+    client_inspect.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    client_poll = client_sub.add_parser("poll", help="poll one server job until it is terminal")
+    _add_client_connection_args(client_poll)
+    client_poll.add_argument("job_id")
+    client_poll.add_argument("--poll-seconds", type=_positive_float, default=0.2)
+    client_poll.add_argument("--wait-timeout", type=_positive_float, default=None)
+    client_poll.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    client_cancel = client_sub.add_parser("cancel", help="cancel a queued or running server job")
+    _add_client_connection_args(client_cancel)
+    client_cancel.add_argument("job_id")
+    client_cancel.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     qa_cmd = sub.add_parser("insights", help="QA capabilities: test history store, import/export, queries, and classification")
     qa_sub = qa_cmd.add_subparsers(dest="qa_command", required=True)
     qa_analyze = qa_sub.add_parser("analyze", help="classify test results from an artifact or directory against history")
@@ -395,6 +487,22 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _add_delivery_store_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    parser.add_argument("--store", default=None, help="explicit delivery ledger SQLite path")
+
+
+def _add_incident_store_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="analysis output directory")
+    parser.add_argument("--config", default=None, help="optional explicit Hound config")
+
+
+def _add_client_connection_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--url", required=True, help="Hound server base URL")
+    parser.add_argument("--token", default=None, help="Bearer token, defaults to HOUND_SERVER_TOKEN")
+    parser.add_argument("--timeout", type=_positive_float, default=15.0)
+
+
 def _add_analyze_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo-dir", dest="repo", default=None, help="path to local git checkout")
     parser.add_argument("--output-dir", dest="out", default=DEFAULT_OUT, help="artifact directory (default: hound-output)")
@@ -433,6 +541,12 @@ def run_analyze(args: argparse.Namespace) -> int:
         return 2
     path = Path(input_path).expanduser()
     legacy_file = path.is_file()
+    if getattr(args, "source_context_value", None) is not None:
+        args.source_context = args.source_context_value == "true"
+    if getattr(args, "enrich_value", None) is not None:
+        args.enrich = args.enrich_value == "true"
+    if getattr(args, "redact_value", None) is not None:
+        args.no_redact = args.redact_value == "false"
     if args.offline_value is not None:
         args.offline = args.offline_value == "true"
     if args.offline and any(
@@ -598,6 +712,9 @@ def run_feedback(args: argparse.Namespace) -> int:
                 actual_outcome=args.actual_outcome,
                 review_status=args.review_status,
                 reviewer=args.reviewer,
+                validation_id=args.validation_id,
+                root_cause_correction=args.root_cause_correction,
+                notes=args.notes,
             )
             print(json.dumps(payload, indent=2, ensure_ascii=False))
             return 0
@@ -619,6 +736,190 @@ def run_feedback(args: argparse.Namespace) -> int:
         return 2
     except (DatabaseError, OSError) as exc:
         print(f"error: feedback operation failed: {exc}", file=sys.stderr)
+        return 3
+
+
+def run_delivery(args: argparse.Namespace) -> int:
+    """Inspect or explicitly recover the separate external-delivery ledger."""
+    from hound.output.delivery import DeliveryLedger
+
+    path = Path(args.store) if args.store else Path(args.out) / ".hound" / "deliveries.sqlite3"
+    try:
+        ledger = DeliveryLedger(path)
+        payload: object
+        if args.delivery_command == "list":
+            records = ledger.list_records(
+                state=args.state,
+                incident_key=args.incident_key,
+                destination=args.destination,
+                limit=args.limit,
+            )
+            payload = {"count": len(records), "records": [asdict(record) for record in records]}
+            if args.json:
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+            else:
+                if not records:
+                    print("no delivery records")
+                for record in records:
+                    external = f" external_id={record.external_id}" if record.external_id else ""
+                    error = f" error={record.error}" if record.error else ""
+                    print(
+                        f"{record.incident_key} {record.destination} {record.state} "
+                        f"attempts={record.attempts}{external}{error}"
+                    )
+            return 0
+        selected = ledger.get(args.incident_key, args.destination)
+        if selected is None:
+            print("error: delivery record not found. Next action: verify incident key and destination.", file=sys.stderr)
+            return 2
+        if args.delivery_command == "inspect":
+            payload = asdict(selected)
+        elif args.delivery_command == "reconcile":
+            ledger.reconcile(args.incident_key, args.destination, args.external_id)
+            updated = ledger.get(args.incident_key, args.destination)
+            if updated is None:
+                raise KeyError("delivery record disappeared after reconciliation")
+            payload = asdict(updated)
+        elif args.delivery_command == "retry-failed":
+            if not ledger.retry_failed(args.incident_key, args.destination):
+                print(
+                    f"error: delivery is {selected.state}; only failed deliveries may be retried. "
+                    "Next action: reconcile unknown outcomes first.",
+                    file=sys.stderr,
+                )
+                return 2
+            updated = ledger.get(args.incident_key, args.destination)
+            if updated is None:
+                raise KeyError("delivery record disappeared after retry")
+            payload = asdict(updated)
+        elif args.delivery_command == "mark-failed":
+            if not args.confirm_absent:
+                print(
+                    "error: mark-failed requires --confirm-absent after checking the external system; "
+                    "unknown outcomes must not be retried blindly",
+                    file=sys.stderr,
+                )
+                return 2
+            ledger.mark_failed(args.incident_key, args.destination, args.error)
+            updated = ledger.get(args.incident_key, args.destination)
+            if updated is None:
+                raise KeyError("delivery record disappeared after marking failed")
+            payload = asdict(updated)
+        else:
+            print(f"error: unknown delivery command: {args.delivery_command}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(payload, ensure_ascii=False))
+        return 0
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"error: delivery operation failed: {exc}. Next action: inspect the ledger and retry explicitly.", file=sys.stderr)
+        return 2
+    except sqlite3.Error as exc:
+        print(f"error: delivery persistence failed: {exc}. Next action: restore a verified ledger backup.", file=sys.stderr)
+        return 3
+
+
+def _dedup_admin_state(args: argparse.Namespace) -> str:
+    config = load_config(config_path=getattr(args, "config", None), offline=True)
+    configure_store(
+        backend=config.state_backend or "file",
+        max_entries=config.dedup_max_entries,
+        retention_days=config.dedup_retention_days,
+    )
+    state = default_state_path(
+        Path(args.out),
+        config.state_file,
+        False,
+        backend=config.state_backend,
+    )
+    if state is None:
+        raise ValueError("dedup administration requires a persistent state store")
+    return state
+
+
+def run_incidents(args: argparse.Namespace) -> int:
+    """Read incident recurrence and invalidate only stale RCA snapshots."""
+    from hound.triage.dedup import invalidate_root_cause, list_incidents, lookup_incident
+    from hound.ingest.redact import redact_value
+
+    try:
+        state = _dedup_admin_state(args)
+        payload: object
+        if args.incidents_command == "list":
+            entries = list_incidents(
+                state,
+                kind=args.kind,
+                filed=True if args.filed else None,
+                limit=args.limit,
+            )
+            safe_entries = [redact_value(entry)[0] for entry in entries]
+            payload = {"count": len(safe_entries), "state": state, "incidents": safe_entries}
+        elif args.incidents_command == "inspect":
+            entry = lookup_incident(state, args.incident_key)
+            if entry is None:
+                print("error: incident not found. Next action: list incidents and copy the exact key.", file=sys.stderr)
+                return 2
+            payload = redact_value(entry)[0]
+        elif args.incidents_command == "invalidate":
+            if not args.yes:
+                print("error: invalidation requires --yes; history is never deleted", file=sys.stderr)
+                return 2
+            if not invalidate_root_cause(state, args.incident_key):
+                print("error: incident or RCA snapshot not found. Next action: inspect the key.", file=sys.stderr)
+                return 2
+            payload = {"invalidated": True, "incident_key": args.incident_key, "state": state}
+        else:
+            print(f"error: unknown incidents command: {args.incidents_command}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(payload, ensure_ascii=False))
+        return 0
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"error: incident operation failed: {exc}. Next action: validate config and state path.", file=sys.stderr)
+        return 2
+    except sqlite3.Error as exc:
+        print(f"error: incident persistence failed: {exc}. Next action: restore a verified state backup.", file=sys.stderr)
+        return 3
+
+
+def run_client(args: argparse.Namespace) -> int:
+    from hound.server_client import ServerClient, ServerClientError
+
+    token = args.token or os.environ.get("HOUND_SERVER_TOKEN") or os.environ.get("TH_SERVER_TOKEN", "")
+    try:
+        client = ServerClient(args.url, token, timeout=args.timeout)
+        if args.client_command == "submit":
+            payload = client.submit(args.log, offline=args.offline, idempotency_key=args.idempotency_key)
+            if args.wait:
+                payload = client.wait(
+                    payload["job_id"],
+                    poll_seconds=args.poll_seconds,
+                    timeout=args.wait_timeout,
+                )
+        elif args.client_command == "inspect":
+            payload = client.inspect(args.job_id)
+        elif args.client_command == "poll":
+            payload = client.wait(args.job_id, poll_seconds=args.poll_seconds, timeout=args.wait_timeout)
+        elif args.client_command == "cancel":
+            payload = client.cancel(args.job_id)
+        else:
+            print(f"error: unknown client command: {args.client_command}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(payload, ensure_ascii=False))
+        return 3 if payload.get("status") == "failed" else 0
+    except ValueError as exc:
+        print(f"error: client input: {exc}. Next action: correct the URL, token, path, or job ID.", file=sys.stderr)
+        return 2
+    except ServerClientError as exc:
+        next_action = "retry when the server is available" if exc.retryable else "inspect the server response and request"
+        print(f"error: server client [{exc.code}]: {exc}. Next action: {next_action}.", file=sys.stderr)
         return 3
 
 
@@ -661,6 +962,7 @@ def _render_qa_classifications(classifications: list[dict]) -> str:
 def run_qa(args: argparse.Namespace) -> int:
     import sqlite3
 
+    from hound.fsio import read_bounded_text
     from hound.qa.classifier import classify_run_results
     from hound.qa.history import (
         count_by_status,
@@ -671,7 +973,10 @@ def run_qa(args: argparse.Namespace) -> int:
         failure_rate,
         first_last_seen,
         history_for_test,
+        HISTORY_SCHEMA_VERSION,
+        import_history,
         list_tests,
+        MAX_HISTORY_IMPORT_BYTES,
         retain,
         upsert_results,
     )
@@ -731,6 +1036,20 @@ def run_qa(args: argparse.Namespace) -> int:
             return 0
         if args.qa_command == "import":
             source = Path(args.path)
+            if source.is_file() and source.suffix.lower() == ".json":
+                try:
+                    manifest = json.loads(read_bounded_text(source, MAX_HISTORY_IMPORT_BYTES, encoding="utf-8"))
+                except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError, RecursionError):
+                    manifest = None
+                if (
+                    isinstance(manifest, dict)
+                    and manifest.get("export_version") == "1.0"
+                    and manifest.get("schema_version") == HISTORY_SCHEMA_VERSION
+                    and isinstance(manifest.get("records"), list)
+                ):
+                    written = import_history(store, source)
+                    print(json.dumps({"imported": written, "store": str(store)}, indent=2, ensure_ascii=False))
+                    return 0
             import_results: list = []
             imported_any = False
             if source.is_dir():
@@ -850,7 +1169,11 @@ def run_list_runs(args: argparse.Namespace) -> int:
 def run_clean(args: argparse.Namespace) -> int:
     from hound.output.report import OUTPUT_MARKER, OUTPUT_MARKER_CONTENT
 
-    root = Path(args.out).resolve()
+    raw_root = Path(args.out).expanduser()
+    if path_has_symlink(raw_root) or raw_root.is_symlink():
+        print(f"error: refusing unsafe symlinked output path: {raw_root}", file=sys.stderr)
+        return 2
+    root = raw_root.resolve()
     if not root.exists():
         return 0
     if not args.yes:
@@ -884,11 +1207,19 @@ def _is_owned_output_tree(root: Path, marker_name: str, marker_content: str) -> 
                 if child.name == ".hound":
                     allowed = re.compile(
                         r"state\.json|state\.sqlite3|state\.lock|jobs\.sqlite3|"
-                        r"feedback\.sqlite3|state\.json\.corrupt-\d+|"
-                        r"state\.sqlite3-(wal|shm)|jobs\.sqlite3-(wal|shm)|feedback\.sqlite3-(wal|shm)"
+                        r"feedback\.sqlite3|validations\.sqlite3|history\.sqlite3|deliveries\.sqlite3|state\.json\.corrupt-\d+|"
+                        r"state\.sqlite3-(wal|shm)|jobs\.sqlite3-(wal|shm)|feedback\.sqlite3-(wal|shm)|"
+                        r"validations\.sqlite3-(wal|shm)|"
+                        r"history\.sqlite3-(wal|shm)|deliveries\.sqlite3-(wal|shm)|"
+                        r"server\.lock"
+                    )
+                    recovery = re.compile(
+                        r"(?:state|jobs|feedback|validations|history|deliveries)\.sqlite3\.corrupt-\d+"
                     )
                     if any(
-                        item.is_symlink() or item.is_dir() or allowed.fullmatch(item.name) is None
+                        item.is_symlink()
+                        or (item.is_dir() and recovery.fullmatch(item.name) is None)
+                        or (not item.is_dir() and allowed.fullmatch(item.name) is None)
                         for item in child.iterdir()
                     ):
                         return False
@@ -978,9 +1309,9 @@ def run_log(args: argparse.Namespace) -> int:
                 state_path=default_state_path(output_root, analysis_config.state_file, getattr(args, "no_dedup", False), backend=analysis_config.state_backend),
                 _config=analysis_config,
                 max_retries=getattr(args, "max_retries", None),
-                source_context=getattr(args, "source_context", False),
+                source_context=getattr(args, "source_context", None),
                 context_path=getattr(args, "context", None),
-                enrich=getattr(args, "enrich", False),
+                enrich=getattr(args, "enrich", None),
                 source_class=getattr(args, "source_class", None),
             )
             print(format_document(document, "text"), file=sys.stderr)
@@ -1327,15 +1658,15 @@ def run_tui(args: argparse.Namespace) -> int:
         base_url=getattr(args, "base_url", None),
         api_key=getattr(args, "api_key", None),
         max_retries=getattr(args, "max_retries", None),
-        source_context=getattr(args, "source_context", False),
+        source_context=getattr(args, "source_context", None),
         context_path=getattr(args, "context", None),
-        enrich=getattr(args, "enrich", False),
+        enrich=getattr(args, "enrich", None),
         source_class=getattr(args, "source_class", None),
-        jobs=getattr(args, "jobs", 1),
+        jobs=getattr(args, "jobs", None),
         max_llm_calls=getattr(args, "max_llm_calls", None),
         max_cost_usd=getattr(args, "max_cost_usd", None),
         redact=False if getattr(args, "no_redact", False) else None,
-        no_dedup=getattr(args, "no_dedup", False),
+        no_dedup=True if getattr(args, "no_dedup", False) else None,
     )
     app.run()
     return 0
@@ -1455,7 +1786,7 @@ def run_config_show(args: argparse.Namespace) -> int:
 
 def run_models(args: argparse.Namespace) -> int:
     """Expose catalog discovery without coupling an analysis run to discovery."""
-    from hound.providers import cache_models, cached_models, discover_models
+    from hound.providers import cache_models, cached_models, discover_models, provider_supports_model_discovery
 
     try:
         config = load_config(
@@ -1467,6 +1798,14 @@ def run_models(args: argparse.Namespace) -> int:
         if args.refresh:
             if not config.base_url:
                 raise ValueError(f"provider {config.provider!r} requires a base URL for model discovery")
+            if not provider_supports_model_discovery(config.provider):
+                raise ValueError(
+                    f"provider {config.provider!r} does not support generic model discovery; "
+                    "configure a model/deployment"
+                )
+            # Keep the established two-argument provider hook compatible with
+            # user integrations. Provider-specific endpoint behavior is derived
+            # from the already resolved base URL by the built-in implementation.
             models = discover_models(config.base_url, config.api_key)
             cache_models(config.provider, config.base_url, models)
         else:
@@ -1504,7 +1843,10 @@ def run_doctor(args: argparse.Namespace) -> int:
     def add(name: str, ok: bool, detail: str) -> None:
         checks.append({"name": name, "ok": ok, "detail": detail})
 
-    add("python", sys.version_info >= (3, 10), f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    python_supported = (3, 10) <= (sys.version_info.major, sys.version_info.minor) < (3, 13)
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    python_detail = python_version if python_supported else f"{python_version}; requires >=3.10,<3.13"
+    add("python", python_supported, python_detail)
     add("hound", True, __version__)
     try:
         config = load_config(config_path=args.config)
@@ -1627,10 +1969,10 @@ def main(argv: list[str] | None = None) -> int:
             base_url=None,
             api_key=None,
             max_retries=None,
-            source_context=False,
+            source_context=None,
             context=None,
-            enrich=False,
-            jobs=1,
+            enrich=None,
+            jobs=None,
             max_llm_calls=None,
             max_cost_usd=None,
             no_dedup=False,
@@ -1670,6 +2012,12 @@ def main(argv: list[str] | None = None) -> int:
         return run_config(args)
     if args.command == "feedback":
         return run_feedback(args)
+    if args.command == "delivery":
+        return run_delivery(args)
+    if args.command == "incidents":
+        return run_incidents(args)
+    if args.command == "client":
+        return run_client(args)
     if args.command in {"qa", "insights", "gate"}:
         return run_qa(args)
     if args.command == "doctor":

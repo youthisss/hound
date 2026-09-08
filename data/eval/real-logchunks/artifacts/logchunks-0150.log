@@ -1,0 +1,2 @@
+FAIL: TestSeparator (0.03s)
+    repo_test.go:75: expected entry to be in form of `* [link] - description.`, got '* [gohive](https://github.com/loveleshsharma/gohive) - A High-Performance and easy to use goroutine pool for Go'

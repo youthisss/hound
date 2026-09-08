@@ -1,0 +1,2 @@
++docker build -t :current .
+invalid argument ":current" for t: invalid reference format

@@ -10,6 +10,7 @@ from hound.connectors.model import ConnectorAudit, ConnectorBundle, ConnectorEvi
 from hound.executables import trusted_executable
 from hound.ingest.redact import redact_text
 from hound.models import DeploymentContext
+from hound.process import BoundedCompletedProcess, run_bounded
 
 TIMEOUT_SECONDS = 10
 MAX_ITEMS = 8
@@ -52,15 +53,10 @@ def collect_deployment_bundle(context: DeploymentContext) -> ConnectorBundle:
             bundle.audits.append(_audit(spec, "unavailable", observed_at, started, error="executable not found"))
             continue
         try:
-            result = subprocess.run(
+            result = _run_bounded(
                 [executable, *spec.command[1:]],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
                 timeout=TIMEOUT_SECONDS,
-                check=False,
-                shell=False,
+                max_output_bytes=MAX_ITEM_BYTES,
             )
         except subprocess.TimeoutExpired:
             bundle.audits.append(_audit(spec, "timeout", observed_at, started, error="operation timed out"))
@@ -74,7 +70,7 @@ def collect_deployment_bundle(context: DeploymentContext) -> ConnectorBundle:
         limit = min(MAX_ITEM_BYTES, remaining)
         sanitized, redaction_count = redact_text(raw)
         encoded = sanitized.encode("utf-8", errors="replace")
-        truncated = len(encoded) > limit
+        truncated = bool(getattr(result, "truncated", False)) or len(encoded) > limit
         sanitized = encoded[:limit].decode("utf-8", errors="replace") if limit else ""
         output_bytes = len(sanitized.encode("utf-8"))
         total_bytes += output_bytes
@@ -103,6 +99,11 @@ def collect_deployment_bundle(context: DeploymentContext) -> ConnectorBundle:
         if total_bytes >= MAX_TOTAL_BYTES:
             break
     return bundle
+
+
+def _run_bounded(command: list[str], *, timeout: float, max_output_bytes: int) -> BoundedCompletedProcess:
+    """Keep the command seam patchable while enforcing bounded real capture."""
+    return run_bounded(command, timeout=timeout, max_output_bytes=max_output_bytes)
 
 
 def _build_specs(context: DeploymentContext) -> list[_CommandSpec]:

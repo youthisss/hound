@@ -1,0 +1,11 @@
+Error:
+InsertAllTest#test_insert_logs_message_including_model_name:
+ArgumentError: ActiveRecord::ConnectionAdapters::SQLite3Adapter does not support skipping duplicates
+    /home/travis/build/rails/rails/activerecord/lib/active_record/insert_all.rb:80:in `ensure_valid_options_for_connection!'
+    /home/travis/build/rails/rails/activerecord/lib/active_record/insert_all.rb:20:in `initialize'
+    /home/travis/build/rails/rails/activerecord/lib/active_record/persistence.rb:124:in `new'
+    /home/travis/build/rails/rails/activerecord/lib/active_record/persistence.rb:124:in `insert_all'
+    /home/travis/build/rails/rails/activerecord/lib/active_record/persistence.rb:67:in `insert'
+    /home/travis/build/rails/rails/activerecord/test/cases/insert_all_test.rb:148:in `block in test_insert_logs_message_including_model_name'
+    /home/travis/build/rails/rails/activerecord/test/cases/insert_all_test.rb:225:in `capture_log_output'
+    /home/travis/build/rails/rails/activerecord/test/cases/insert_all_test.rb:147:in `test_insert_logs_message_including_model_name'

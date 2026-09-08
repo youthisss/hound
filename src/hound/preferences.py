@@ -6,9 +6,11 @@ from pathlib import Path
 import yaml
 from platformdirs import user_config_path
 
-from hound.fsio import atomic_write
+from hound.fsio import atomic_write, read_bounded_text
+from hound.pathutil import path_has_symlink
 
 PREFERENCES_PATH = user_config_path("hound") / "tui.yml"
+MAX_PREFERENCES_BYTES = 256 * 1024
 
 _DEFAULTS = {
     "offline": True,
@@ -23,16 +25,19 @@ _DEFAULTS = {
     "jobs": 1,
     "max_llm_calls": None,
     "max_cost_usd": None,
+    "redact": None,
+    "no_dedup": False,
+    "max_retries": None,
 }
 
 
 def load_tui_preferences(path: Path = PREFERENCES_PATH) -> dict:
     defaults = dict(_DEFAULTS)
-    if not path.exists():
+    if path_has_symlink(path) or path.is_symlink() or not path.exists():
         return defaults
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
+        data = yaml.safe_load(read_bounded_text(path, MAX_PREFERENCES_BYTES, encoding="utf-8")) or {}
+    except (OSError, ValueError, yaml.YAMLError):
         return defaults
     if not isinstance(data, dict):
         return defaults
@@ -58,6 +63,16 @@ def load_tui_preferences(path: Path = PREFERENCES_PATH) -> dict:
         except (TypeError, ValueError):
             return None
 
+    def optional_retry_count() -> int | None:
+        value = data.get("max_retries")
+        if value is None:
+            return None
+        try:
+            retries = int(value)
+        except (TypeError, ValueError):
+            return None
+        return retries if 0 <= retries <= 10 else None
+
     return {
         "offline": data.get("offline") if isinstance(data.get("offline"), bool) else True,
         "provider": optional_text("provider"),
@@ -71,6 +86,9 @@ def load_tui_preferences(path: Path = PREFERENCES_PATH) -> dict:
         "jobs": optional_positive_int("jobs", 1) or 1,
         "max_llm_calls": optional_positive_int("max_llm_calls", None),
         "max_cost_usd": optional_positive_float("max_cost_usd"),
+        "redact": data.get("redact") if isinstance(data.get("redact"), bool) else None,
+        "no_dedup": data.get("no_dedup") if isinstance(data.get("no_dedup"), bool) else False,
+        "max_retries": optional_retry_count(),
     }
 
 
@@ -89,11 +107,14 @@ def save_tui_preferences(
     jobs: int = 1,
     max_llm_calls: int | None = None,
     max_cost_usd: float | None = None,
+    redact: bool | None = None,
+    no_dedup: bool = False,
+    max_retries: int | None = None,
 ) -> Path:
     """Persist the complete non-secret TUI settings snapshot atomically."""
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(path, yaml.safe_dump({
-        "version": 2,
+        "version": 3,
         "offline": bool(offline),
         "provider": provider,
         "model": model,
@@ -106,5 +127,8 @@ def save_tui_preferences(
         "jobs": jobs,
         "max_llm_calls": max_llm_calls,
         "max_cost_usd": max_cost_usd,
+        "redact": redact,
+        "no_dedup": bool(no_dedup),
+        "max_retries": max_retries,
     }, sort_keys=False))
     return path

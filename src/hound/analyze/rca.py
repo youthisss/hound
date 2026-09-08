@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
+import re
 
 from hound.config import Config, resolve_model_name
-from hound.models import Artifacts, RootCause, build_evidence_items
+from hound.models import Artifacts, RootCause, visible_evidence_items
 from hound.analyze.fallback import build_root_cause
 from hound.analyze.llm import analyze_with_llm
+from hound.safety import validate_recommendation, validate_recommendations
 
 _VALID_CONFIDENCE = {"high", "medium", "low"}
 
@@ -82,11 +84,13 @@ def _merge_llm(
     hypothesis = data["hypothesis"].strip()
     confidence = data["confidence"]
     fix = data["fix_suggestion"].strip()
+    validate_recommendation(fix, field="fix_suggestion")
+    validate_recommendations(data["recommended_checks"], field="recommended_checks")
 
     # Rule-derived evidence is the deterministic baseline; tag its origin so
     # downstream consumers can tell hard facts from LLM claims.
     evidence = ["[rule] " + e for e in fallback.evidence]
-    available = {item["id"]: item for item in build_evidence_items(artifacts)}
+    available = {item["id"]: item for item in visible_evidence_items(artifacts)}
     for ref in data["evidence_refs"]:
         item = available.get(ref)
         if item is not None:
@@ -149,10 +153,28 @@ def _valid_llm_result(data: object, artifacts: Artifacts) -> bool:
         return False
     if not isinstance(data["fix_suggestion"], str) or not data["fix_suggestion"].strip():
         return False
+    for key in ("hypothesis", "fix_suggestion"):
+        value = data[key]
+        if not isinstance(value, str) or len(value) > 2000 or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+            return False
     for key in ("evidence_refs", "contradicting_evidence_refs", "missing_information", "recommended_checks"):
         if not isinstance(data[key], list) or not all(isinstance(item, str) for item in data[key]):
             return False
-    available = {item["id"] for item in build_evidence_items(artifacts)}
+        if len(data[key]) > 8:
+            return False
+    try:
+        validate_recommendation(data["fix_suggestion"], field="fix_suggestion")
+        validate_recommendations(data["recommended_checks"], field="recommended_checks")
+    except ValueError:
+        return False
+    if any(
+        len(item) > 512 or any(ord(char) < 0x20 or ord(char) == 0x7F for char in item)
+        for item in data["missing_information"]
+    ):
+        return False
+    if any(not re.fullmatch(r"ev-[0-9]{3,6}", item) for key in ("evidence_refs", "contradicting_evidence_refs") for item in data[key]):
+        return False
+    available = {item["id"] for item in visible_evidence_items(artifacts)}
     if not set(data["evidence_refs"]).issubset(available):
         return False
     if not set(data["contradicting_evidence_refs"]).issubset(available):

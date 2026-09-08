@@ -1,0 +1,8 @@
+1) test consolidation extracts implementations with binary (Protocol.ConsolidationTest)
+     [1m[30mtest/elixir/protocol/consolidation_test.exs:158[0m
+     [31mAssertion with in failed[0m
+     [36mcode:  [0massert List in protos
+     [36mleft:  [0m[31mList[0m
+     [36mright: [0m[32m[][0m
+     [36mstacktrace:[0m
+       test/elixir/protocol/consolidation_test.exs:160: (test)

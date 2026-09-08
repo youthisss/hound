@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-rollback-variant",
+  "artifact": "rollback-variant.log",
+  "expected": {
+    "stage": "deploy",
+    "kind": "rollback",
+    "primary_event": {"stage": "deploy", "kind": "rollback"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

@@ -1,0 +1,8 @@
+ERROR: no certificate subject alternative name matches
+	requested host name 'openface-models.storage.cmusatyalab.org'.
+To connect to openface-models.storage.cmusatyalab.org insecurely, use `--no-check-certificate'.
++ nn4.small2.v1.t7: Error in wget.
+ERROR: no certificate subject alternative name matches
+	requested host name 'openface-models.storage.cmusatyalab.org'.
+To connect to openface-models.storage.cmusatyalab.org insecurely, use `--no-check-certificate'.
++ celeb-classifier.nn4.small2.v1.pkl: Error in wget.

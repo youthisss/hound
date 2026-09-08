@@ -1,0 +1,7 @@
+Error:
+ClientTest#test_unsubscribe_client:
+RuntimeError: 1 messages unprocessed
+    /home/travis/build/rails/rails/actioncable/test/client_test.rb:170:in `close'
+    /home/travis/build/rails/rails/actioncable/test/client_test.rb:276:in `block in test_unsubscribe_client'
+    /home/travis/build/rails/rails/actioncable/test/client_test.rb:68:in `with_puma_server'
+    /home/travis/build/rails/rails/actioncable/test/client_test.rb:261:in `test_unsubscribe_client'

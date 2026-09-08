@@ -1,0 +1,18 @@
+git clone --depth=50 --branch=myleshorton-readme https://github.com/getlantern/lantern.git getlantern/lantern
+Cloning into 'getlantern/lantern'...
+warning: Could not find remote branch myleshorton-readme to clone.
+fatal: Remote branch myleshorton-readme not found in upstream origin
+
+[31;1mThe command "eval git clone --depth=50 --branch=myleshorton-readme https://github.com/getlantern/lantern.git getlantern/lantern " failed. Retrying, 2 of 3.[0m
+
+Cloning into 'getlantern/lantern'...
+warning: Could not find remote branch myleshorton-readme to clone.
+fatal: Remote branch myleshorton-readme not found in upstream origin
+
+[31;1mThe command "eval git clone --depth=50 --branch=myleshorton-readme https://github.com/getlantern/lantern.git getlantern/lantern " failed. Retrying, 3 of 3.[0m
+
+Cloning into 'getlantern/lantern'...
+warning: Could not find remote branch myleshorton-readme to clone.
+fatal: Remote branch myleshorton-readme not found in upstream origin
+
+[31;1mThe command "eval git clone --depth=50 --branch=myleshorton-readme https://github.com/getlantern/lantern.git getlantern/lantern " failed 3 times.

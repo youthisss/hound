@@ -1,0 +1,5 @@
+/home/travis/build/purescript/purescript/sdist-test/[;1msrc/Language/PureScript/Errors.hs:336:32: [;1m[31merror:[0m[0m[;1m [[;1m[31m-Wunused-matches, -Werror=unused-matches[0m[0m[;1m][0m[0m[;1m[0m
+[0m    Defined but not used: ‘unknownName’[0m[0m[0m
+[0m[;1m[34m    |[0m[0m[0m
+[0m[;1m[34m336 |[0m[0m       UnknownName alternatives [;1m[31munknownName[0m[0m -> suggest $ T.unlines $ (\(mn, ref) -> importSuggestion mn [ref] Nothing) $> alternatives[0m
+[0m[;1m[34m    |[0m[0m[;1m[31m                                ^^^^^^^^^^^

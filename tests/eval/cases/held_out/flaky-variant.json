@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-flaky-variant",
+  "artifact": "flaky-variant.log",
+  "expected": {
+    "stage": "test",
+    "kind": "flaky",
+    "primary_event": {"stage": "test", "kind": "flaky"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["low"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

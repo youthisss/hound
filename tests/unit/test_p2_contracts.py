@@ -25,7 +25,7 @@ def test_canonical_command_names_and_legacy_aliases(monkeypatch):
         "gate", "tests/fixtures/pytest_fail.log",
         "--baseline-ref", "main",
         "--repo-dir", ".",
-        "--policy", "docs/plans/hound-qa-devops-improvement-plan.md",
+        "--policy", "tests/fixtures/pytest_fail.log",
     ])
     assert args_gate.qa_command == "gate"
     assert args_gate.baseline == "main"

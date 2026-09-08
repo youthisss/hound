@@ -4,6 +4,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from hound.fsio import read_bounded_bytes
+from hound.pathutil import path_has_symlink
+
 MAX_DEPTH = 2
 MAX_FILES = 20
 MAX_FILE_BYTES = 64 * 1024
@@ -19,6 +22,20 @@ def build_test_impact(
 ) -> dict:
     """Return static candidates and ranked tests; never alter CI execution."""
     repo = Path(repo_dir).resolve()
+    if path_has_symlink(repo_dir):
+        return {
+            "advisory": True,
+            "language": "python",
+            "max_depth": MAX_DEPTH,
+            "call_graph": [],
+            "recommendations": [],
+            "missing_coverage": not bool(coverage_map),
+            "uncertainty": "repository path contains a symlink; static context was omitted",
+            "runtime_trace_contract": {
+                "required": ["trace_id", "span_id", "service", "source.file", "source.symbol"],
+                "implemented": False,
+            },
+        }
     coverage_map = coverage_map or {}
     historical_correlation = historical_correlation or {}
     graph = _python_graph(repo, source_evidence)
@@ -96,10 +113,10 @@ def _python_graph(repo: Path, source_evidence: list[dict]) -> list[dict]:
         try:
             resolved = path.resolve(strict=True)
             resolved.relative_to(repo)
-            if path.is_symlink() or resolved.stat().st_size > MAX_FILE_BYTES:
+            if path_has_symlink(path):
                 continue
-            tree = ast.parse(resolved.read_text(encoding="utf-8", errors="replace"))
-        except (OSError, ValueError, SyntaxError):
+            tree = ast.parse(read_bounded_bytes(resolved, MAX_FILE_BYTES).decode("utf-8", errors="replace"))
+        except (OSError, ValueError, SyntaxError, UnicodeDecodeError, RecursionError):
             continue
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

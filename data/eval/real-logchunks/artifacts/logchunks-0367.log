@@ -1,0 +1,7 @@
+PackagesNotFoundError: The following packages are not available from current channels:
+
+  - python=3.4
+  - scipy=0.16.1
+  - numpy=1.10.4
+  - cython=0.25.2
+  - pillow=4.0.0

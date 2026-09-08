@@ -1,0 +1,37 @@
+standard: Use JavaScript Standard Style (https://standardjs.com)
+standard: Run `standard --fix` to automatically fix some problems.
+  /home/travis/build/jlord/git-it-electron/lib/build-challenges.js:194:23: Object properties must go on a new line if they aren't all on the same line.
+  /home/travis/build/jlord/git-it-electron/lib/build-challenges.js:195:25: Object properties must go on a new line if they aren't all on the same line.
+  /home/travis/build/jlord/git-it-electron/lib/challenges-completed.js:34:25: Unnecessary return statement.
+  /home/travis/build/jlord/git-it-electron/lib/translate-locale.js:8:49: Use path.join() or path.resolve() instead of + to create paths.
+  /home/travis/build/jlord/git-it-electron/lib/verify/branches_arent_just_for_birds.js:24:14: 'repopath' is assigned to itself.
+  /home/travis/build/jlord/git-it-electron/lib/verify/branches_arent_just_for_birds.js:26:32: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/branches_arent_just_for_birds.js:26:46: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/branches_arent_just_for_birds.js:33:41: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/branches_arent_just_for_birds.js:33:55: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/branches_arent_just_for_birds.js:55:46: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/branches_arent_just_for_birds.js:55:60: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/commit_to_it.js:19:18: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/commit_to_it.js:19:28: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/forks_and_clones.js:30:23: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/forks_and_clones.js:30:33: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/forks_and_clones.js:48:40: Unnecessary escape character: \:.
+  /home/travis/build/jlord/git-it-electron/lib/verify/forks_and_clones.js:48:42: Unnecessary escape character: \/.
+  /home/travis/build/jlord/git-it-electron/lib/verify/forks_and_clones.js:56:40: Unnecessary escape character: \:.
+  /home/travis/build/jlord/git-it-electron/lib/verify/forks_and_clones.js:56:42: Unnecessary escape character: \/.
+  /home/travis/build/jlord/git-it-electron/lib/verify/its_a_small_world.js:29:29: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/its_a_small_world.js:29:40: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/merge_tada.js:26:22: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/merge_tada.js:26:32: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/merge_tada.js:45:22: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/merge_tada.js:45:32: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/pull_never_out_of_date.js:17:27: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/pull_never_out_of_date.js:17:37: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/remote_control.js:21:37: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/remote_control.js:21:47: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/repository.js:20:18: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/repository.js:20:28: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/requesting_you_pull_please.js:29:29: A space is required after '{'.
+  /home/travis/build/jlord/git-it-electron/lib/verify/requesting_you_pull_please.js:29:40: A space is required before '}'.
+  /home/travis/build/jlord/git-it-electron/main.js:57:3: 'fs.exists' was deprecated since v4.0.0. Use 'fs.stat()' or 'fs.access()' instead.
+  /home/travis/build/jlord/git-it-electron/main.js:65:3: 'fs.exists' was deprecated since v4.0.0. Use 'fs.stat()' or 'fs.access()' instead.

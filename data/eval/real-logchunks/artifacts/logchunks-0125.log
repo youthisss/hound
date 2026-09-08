@@ -1,0 +1,23 @@
+1) test adapters starts on configured port and serves requests and stops for dev (Phoenix.Integration.EndpointTest)
+     [1m[30mtest/phoenix/integration/endpoint_test.exs:140[0m
+     [31m** (ExUnit.TimeoutError) test timed out after 60000ms. You can change the timeout:
+     
+       1. per test by setting "@tag timeout: x"
+       2. per case by setting "@moduletag timeout: x"
+       3. globally via "ExUnit.start(timeout: x)" configuration
+       4. or set it to infinity per run by calling "mix test --trace"
+          (useful when using IEx.pry)
+     
+     Timeouts are given as integers in milliseconds.
+     [0m
+     [36mcode: [0mcapture_log fn ->
+     [36mstacktrace:[0m
+       (inets) httpc.erl:626: :httpc.handle_answer/3
+       (inets) httpc.erl:567: :httpc.handle_request/9
+       test/support/http_client.exs:42: Phoenix.Integration.HTTPClient.request/4
+       test/phoenix/integration/endpoint_test.exs:170: anonymous fn/0 in Phoenix.Integration.EndpointTest."test adapters starts on configured port and serves requests and stops for dev"/1
+       (ex_unit) lib/ex_unit/capture_log.ex:78: ExUnit.CaptureLog.capture_log/2
+       test/phoenix/integration/endpoint_test.exs:145: (test)
+       (ex_unit) lib/ex_unit/runner.ex:306: ExUnit.Runner.exec_test/1
+       (stdlib) timer.erl:166: :timer.tc/1
+       (ex_unit) lib/ex_unit/runner.ex:245: anonymous fn/4 in ExUnit.Runner.spawn_test/3

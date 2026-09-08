@@ -1,0 +1,4 @@
+** (Mix) mix format failed due to --check-formatted.
+The following files were not formatted:
+
+  * lib/elixir/test/elixir/module/types/infer_test.exs

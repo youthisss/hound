@@ -1,0 +1,16 @@
+1) Composer\Test\ApplicationTest::testDevWarning
+Function ReflectionType::__toString() is deprecated
+
+/home/travis/build/composer/composer/tests/Composer/Test/ApplicationTest.php:25
+
+2) Composer\Test\ApplicationTest::testDevWarningPrevented
+Function ReflectionType::__toString() is deprecated
+
+/home/travis/build/composer/composer/tests/Composer/Test/ApplicationTest.php:83
+/home/travis/build/composer/composer/tests/Composer/Test/ApplicationTest.php:118
+
+3) Composer\Test\ApplicationTest::testDevWarningPreventedAlias
+Function ReflectionType::__toString() is deprecated
+
+/home/travis/build/composer/composer/tests/Composer/Test/ApplicationTest.php:83
+/home/travis/build/composer/composer/tests/Composer/Test/ApplicationTest.php:123

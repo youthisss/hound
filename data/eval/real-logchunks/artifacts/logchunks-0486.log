@@ -1,0 +1,5 @@
+Error: Parse error on line 35:
+... encoding:`cmd /u`  `- Create file w
+---------------------^
+Expecting 'NEWLINE', 'TEXT', 'DASH', 'BACKTICK', got 'COMMAND_TEXT'
+pages/windows/cmd.md:34: TLDR103 Command example is missing its closing backtick

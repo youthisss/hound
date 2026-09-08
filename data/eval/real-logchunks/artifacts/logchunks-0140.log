@@ -1,0 +1,10 @@
+ejabberd_SUITE:init_per_group failed
+Reason: {test_case_failed,{failed_to_create_sql_tables,pgsql,
+                      {aborted,
+                          [{severity,'ERROR'},
+                           {86,<<"ERROR">>},
+                           {code,<<"42501">>},
+                           {message,<<"must be owner of relation mqtt_pub">>},
+                           {file,<<"aclchk.c">>},
+                           {line,3416},
+                           {routine,<<"aclcheck_error">>}]}}}

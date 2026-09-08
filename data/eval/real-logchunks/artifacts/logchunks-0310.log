@@ -1,0 +1,25 @@
+Undocumented Realm swift declarations:
+
+{
+
+  "warnings": [
+
+    {
+
+      "file": "/Users/travis/build/realm/realm-cocoa/RealmSwift/Error.swift",
+
+      "line": 37,
+
+      "symbol": "Realm.Error.Code",
+
+      "symbol_kind": "source.lang.swift.decl.typealias",
+
+      "warning": "undocumented"
+
+    }
+
+  ],
+
+  "source_directory": "/Users/travis/build/realm/realm-cocoa"
+
+}

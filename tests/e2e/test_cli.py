@@ -95,3 +95,18 @@ def test_action_offline_input_is_forwarded():
     assert "${{ inputs.offline }}" in action
     assert "    - --repo-dir" in action
     assert "    - --output-dir" in action
+
+
+def test_action_safe_optional_inputs_are_value_forwarded():
+    action = (Path(__file__).resolve().parents[2] / "action.yml").read_text(encoding="utf-8")
+    for name, option in (
+        ("provider", "--provider"),
+        ("model", "--model"),
+        ("source-context", "--source-context-value"),
+        ("context", "--context"),
+        ("enrich", "--enrich-value"),
+        ("redact", "--redact-value"),
+    ):
+        assert f"  {name}:" in action
+        assert f"    - {option}" in action
+        assert f"${{{{ inputs.{name} }}}}" in action

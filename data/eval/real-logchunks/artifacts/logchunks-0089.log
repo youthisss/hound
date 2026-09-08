@@ -1,0 +1,4 @@
+Error: Inconsistent indentation: 3 spaces were used for indentation, but the rest of the document was indented using 2 spaces.
+        on line 8 of sass/layout/footer.sass
+        from line 5 of sass/layout/_all.sass
+        from line 9 of bulma.sass

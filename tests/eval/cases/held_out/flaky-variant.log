@@ -1,0 +1,3 @@
+pytest
+RERUN tests/test_retry.py::test_event
+PASSED tests/test_retry.py::test_event

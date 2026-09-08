@@ -1,0 +1,6 @@
+Error: Parse error on line 12:
+... as the sourcedir.- **Common builders:
+---------------------^
+Expecting 'BACKTICK', got 'DASH'
+pages/common/sphinx-build.md:10: TLDR003 Descriptions should start with a capital letter
+pages/common/sphinx-build.md:10: TLDR005 Example descriptions should end in a colon

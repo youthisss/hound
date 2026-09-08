@@ -1,0 +1,8 @@
+Failure:
+ApplicationTests::DBConsoleTest#test_use_value_defined_in_environment_file_in_database_yml [test/application/dbconsole_test.rb:40]:
+"sqlite>" expected, but got:
+
+.
+Expected "" to include "sqlite>".
+
+bin/rails test test/application/dbconsole_test.rb:21

@@ -1,0 +1,2 @@
+t/https.t ........ Connection error: Connect timeout at t/https.t line 17.
+# Looks like your test exited with 11 before it could output anything.

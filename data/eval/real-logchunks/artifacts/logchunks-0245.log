@@ -1,0 +1,8 @@
+react/README.md: 750: MD034/no-bare-urls Bare URL used [Context: "https://reactjs.org/blog/2017/..."]
+react/README.md: 757: MD029/ol-prefix Ordered list item prefix [Expected: 1; Actual: 2; Style: 1/1/1]
+react/README.md: 758: MD029/ol-prefix Ordered list item prefix [Expected: 1; Actual: 3; Style: 1/1/1]
+react/README.md: 786: MD034/no-bare-urls Bare URL used [Context: "https://reactjs.org/blog/2018/..."]
+react/README.md: 787: MD034/no-bare-urls Bare URL used [Context: "https://reactjs.org/blog/2018/..."]
+react/README.md: 822: MD034/no-bare-urls Bare URL used [Context: "https://reactjs.org/blog/2018/..."]
+react/README.md: 846: MD034/no-bare-urls Bare URL used [Context: "https://reactjs.org/blog/2019/..."]
+react/README.md: 847: MD034/no-bare-urls Bare URL used [Context: "https://reactjs.org/docs/hooks..."]

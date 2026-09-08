@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-quota-variant",
+  "artifact": "quota-variant.log",
+  "expected": {
+    "stage": "deploy",
+    "kind": "quota_exceeded",
+    "primary_event": {"stage": "deploy", "kind": "quota_exceeded"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

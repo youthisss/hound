@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from hound.fsio import read_bounded_text
 from hound.qa.classifier import QAClassification
 from hound.qa.coverage import NormalizedCoverage
 from hound.qa.sarif import NormalizedSarifReport
@@ -131,10 +132,8 @@ def load_gate_policy(path: str | Path) -> dict[str, Any]:
     policy_path = Path(path)
     if not policy_path.is_file() or policy_path.is_symlink():
         raise ValueError(f"quality-gate policy is not a readable regular file: {policy_path}")
-    if policy_path.stat().st_size > 1024 * 1024:
-        raise ValueError("quality-gate policy exceeds the 1 MiB limit")
     try:
-        raw = policy_path.read_text(encoding="utf-8")
+        raw = read_bounded_text(policy_path, 1024 * 1024, encoding="utf-8")
         data = (
             json.loads(raw, object_pairs_hook=_unique_json_object)
             if policy_path.suffix.lower() == ".json"

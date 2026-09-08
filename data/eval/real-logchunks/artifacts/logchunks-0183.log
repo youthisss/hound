@@ -1,0 +1,2 @@
+Unable to find image 'koalaman/shellcheck:current' locally
+docker: Error response from daemon: manifest for koalaman/shellcheck:current not found.

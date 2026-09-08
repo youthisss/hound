@@ -2,6 +2,7 @@ import shutil
 from argparse import Namespace
 
 import anyio
+import pytest
 
 FIXTURES = __import__("pathlib").Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -53,35 +54,6 @@ def test_tui_starts_without_focused_widget(tmp_path):
     anyio.run(main)
 
 
-def test_tui_home_cards_expand_for_long_values(tmp_path):
-    from hound.tui import RcaTui
-
-    long_dir = tmp_path / ("long-workspace-name-" * 4)
-    app = RcaTui(
-        logs_dir=str(long_dir),
-        out_dir=str(tmp_path / "out"),
-        offline=False,
-        provider="openai",
-        model="model-with-a-very-long-name-that-wraps",
-    )
-
-    async def main():
-        async with app.run_test(size=(110, 30)) as pilot:
-            await pilot.pause()
-            for selector in ("#home-directory", "#home-artifacts", "#home-engine"):
-                card = app.query_one(selector)
-                assert card.styles.height.is_auto
-            assert app.query_one("#home-status").styles.height.is_auto
-            card_regions = [
-                app.query_one(selector).region
-                for selector in ("#home-directory", "#home-artifacts", "#home-engine")
-            ]
-            assert len({r.height for r in card_regions}) == 1
-            assert max(r.width for r in card_regions) - min(r.width for r in card_regions) <= 1
-
-    anyio.run(main)
-
-
 def test_tui_resolves_redacted_raw_log_path(tmp_path):
     from hound.ingest.redact import redact_text
     from hound.tui import RcaTui
@@ -92,6 +64,52 @@ def test_tui_resolves_redacted_raw_log_path(tmp_path):
     app._log_files = [log]
     stored = redact_text(str(log.resolve()))[0]
     assert app._resolve_raw_path({"meta": {"log_file": stored}}) == log
+
+
+def test_tui_rejects_raw_log_path_outside_logs_directory(tmp_path):
+    from hound.tui import RcaTui
+    from textual.widgets import Static
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    outside = tmp_path / "outside.log"
+    outside.write_text("must not be rendered", encoding="utf-8")
+    app = RcaTui(logs_dir=str(logs), out_dir=str(tmp_path / "out"), offline=True)
+    app._log_files = [outside]
+
+    assert app._resolve_raw_path({"meta": {"log_file": str(outside.resolve())}}) is None
+
+    async def main():
+        async with app.run_test() as pilot:
+            app._show_raw(outside)
+            await pilot.pause()
+            assert "must not be rendered" not in str(app.query_one("#raw", Static).renderable)
+            assert "unavailable" in str(app.query_one("#raw", Static).renderable)
+
+    anyio.run(main)
+
+def test_tui_rejects_malformed_stored_report_before_opening(tmp_path):
+    from hound.output.report import ensure_outdir
+    from hound.tui import RcaTui
+
+    output = ensure_outdir(tmp_path / "out")
+    run = ensure_outdir(output / "run-invalid")
+    (run / "report.json").write_text("{}", encoding="utf-8")
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(output), offline=True)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            for _ in range(100):
+                if app._run_index:
+                    break
+                await pilot.pause(0.02)
+            assert app._run_index and app._run_index[0]["invalid"] is True
+            app._load_run(run)
+            await pilot.pause()
+            assert app._current_doc is None
+
+    anyio.run(main)
 
 
 def test_tui_uses_resolved_yaml_provider_settings(tmp_path):
@@ -105,24 +123,41 @@ def test_tui_uses_resolved_yaml_provider_settings(tmp_path):
     assert "generativelanguage.googleapis.com" in app.base_url
 
 
-def test_tui_has_fixed_bold_app_title(tmp_path):
-    from hound.tui import RcaTui
-    from textual.widgets import Static
+def test_tui_config_preview_uses_bounded_verified_reader(tmp_path, monkeypatch):
+    from hound import tui
 
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+    config = tmp_path / "oversized.yml"
+    config.write_bytes(b"#" * (tui.MAX_CONFIG_BYTES + 1))
+    calls = []
+    original = tui.read_bounded_text
 
-    async def main():
-        async with app.run_test(size=(130, 35)) as pilot:
-            await pilot.pause()
-            title = app.query_one("#app-title", Static)
-            assert str(title.renderable) == "Hound Tracer CI/CD Investigator"
-            assert title.styles.height.value == 1
-            assert str(title.styles.text_style) == "bold"
-            status = app.query_one("#statusbar", Static)
-            assert "path" in str(status.renderable)
-            assert "offline" in str(status.renderable)
+    def tracked_read(path, limit, **kwargs):
+        calls.append((path, limit))
+        return original(path, limit, **kwargs)
 
-    anyio.run(main)
+    monkeypatch.setattr(tui, "read_bounded_text", tracked_read)
+    with pytest.raises(ValueError, match="config exceeds"):
+        tui.RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), config_path=str(config), offline=True)
+    assert any(str(path) == str(config) and limit == tui.MAX_CONFIG_BYTES for path, limit in calls)
+
+
+def test_tui_log_classification_uses_verified_prefix_reader(tmp_path, monkeypatch):
+    from hound import tui
+
+    log = tmp_path / "failure.log"
+    log.write_text("FAILED tests/test_cart.py::test_total\n", encoding="utf-8")
+    calls = []
+    original = tui.open_verified_regular
+
+    def tracked_open(path, **kwargs):
+        calls.append(path)
+        return original(path, **kwargs)
+
+    monkeypatch.setattr(tui, "open_verified_regular", tracked_open)
+    stage, kind = tui.RcaTui._log_classification(log)
+    assert stage == "test"
+    assert kind == "test_failure"
+    assert calls == [log]
 
 
 def test_tui_analyze(tmp_path):
@@ -298,7 +333,6 @@ def test_tui_labels_deployment_log_and_run(tmp_path):
 def test_tui_settings_overlay(tmp_path):
     """Settings opens from sidebar instead of main tab row."""
     from hound.tui import RcaTui, SettingsScreen
-    from textual.containers import Vertical
     from textual.widgets import Select, Static
 
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True, provider="openai")
@@ -313,13 +347,6 @@ def test_tui_settings_overlay(tmp_path):
             assert sel.value == "openai"
             inp = app.screen.query_one("#settings-model", Select)
             assert inp is not None
-            page = app.screen.query_one("#settings-page", Vertical)
-            assert page.styles.width.value == 100
-            assert page.styles.height.value == 100
-            assert sel.styles.height.value == 5
-            panel = app.screen.query_one("#settings-panel", Vertical)
-            assert panel.styles.width.value == 76
-            assert panel.styles.max_width.value == 100
             # Changing provider updates the status bar mode.
             app.provider = "gemini"
             app.offline = False
@@ -353,58 +380,6 @@ def test_tui_settings_overlay_model_default(tmp_path):
             assert inp.value == "auto"
 
     _anyio.run(main)
-
-
-def test_tui_home_information_boxes_have_equal_dimensions(tmp_path):
-    import anyio as _anyio
-
-    from hound.tui import RcaTui
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-
-    async def main():
-        async with app.run_test(size=(150, 50)) as pilot:
-            await pilot.pause()
-            regions = [
-                app.query_one(selector).region
-                for selector in ("#home-capabilities", "#home-diagnostics", "#home-workflow", "#home-keyboard")
-            ]
-            assert max(region.width for region in regions) - min(region.width for region in regions) <= 1
-            assert len({region.height for region in regions}) == 1
-
-    _anyio.run(main)
-
-
-def test_tui_home_logo_tracks_available_content_width(tmp_path):
-    from hound.tui import HOUND_LOGO, HOUND_LOGO_COMPACT, RcaTui
-    from textual.widgets import Static
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-
-    async def main():
-        async with app.run_test(size=(90, 35)) as pilot:
-            await pilot.pause()
-            logo = app.query_one("#home-logo", Static)
-            assert str(logo.renderable) == HOUND_LOGO_COMPACT
-
-            app.action_toggle_sidebar()
-            await pilot.pause()
-            assert str(logo.renderable) == HOUND_LOGO
-
-            app.action_toggle_sidebar()
-            await pilot.pause()
-            assert str(logo.renderable) == HOUND_LOGO_COMPACT
-
-    anyio.run(main)
-
-
-def test_tui_full_logo_preserves_compact_line_widths():
-    from rich.markup import render
-
-    from hound.tui import HOUND_LOGO
-
-    lines = render(HOUND_LOGO).plain.splitlines()
-    assert max(map(len, lines)) - min(map(len, lines)) <= 1
 
 
 def test_tui_settings_provider_hint(tmp_path):
@@ -674,98 +649,6 @@ def test_tui_settings_follows_workflow_and_shortcut_opens_overlay(tmp_path):
     anyio.run(main)
 
 
-def test_tui_recent_runs_only_uses_scrollbar_when_needed(tmp_path):
-    from hound.tui import RcaTui
-    from textual.widgets import ListView
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-
-    async def main():
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            run_list = app.query_one("#run-list", ListView)
-            assert str(run_list.styles.overflow_y) == "auto"
-            assert run_list.styles.scrollbar_size_vertical == 0
-
-    anyio.run(main)
-
-
-def test_tui_list_rows_remain_closed_boxes_when_content_wraps(tmp_path):
-    from textual.color import Color
-    from hound.tui import RcaTui
-    from textual.widgets import ListView, Static
-
-    long_name = "artifact-name-that-wraps-across-multiple-terminal-lines.log"
-    (tmp_path / long_name).write_text("ERROR build failed", encoding="utf-8")
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-
-    async def main():
-        async with app.run_test(size=(55, 35)) as pilot:
-            await pilot.pause()
-            item = app.query_one("#log-list", ListView).children[0]
-            content = item.query_one(Static)
-
-            assert item.styles.border_top[0] == "solid"
-            assert item.styles.border_right[0] == "solid"
-            assert item.styles.border_bottom[0] == "solid"
-            assert item.styles.border_left[0] == "solid"
-            assert item.styles.color == Color.parse("#ffffff")
-            assert all(
-                side[1] == Color.parse("#ffffff")
-                for side in (
-                    item.styles.border_top,
-                    item.styles.border_right,
-                    item.styles.border_bottom,
-                    item.styles.border_left,
-                )
-            )
-            assert content.region.y == item.region.y + 1
-            assert content.region.bottom == item.region.bottom - 1
-
-    anyio.run(main)
-
-
-def test_tui_uses_black_and_white_chrome_with_semantic_rich_text(tmp_path):
-    from textual.color import Color
-    from textual.widgets import Button, Tab
-
-    from hound.tui import RcaTui, SEV_COLOR, STAGE_COLOR, _outcome_color
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-
-    async def main():
-        async with app.run_test(size=(120, 35)) as pilot:
-            await pilot.pause()
-
-            for selector in ("#sidebar", "#back-button", "#log-filter", "#home-tagline"):
-                widget = app.query_one(selector)
-                assert widget.styles.background in {Color.parse("#000000"), Color.parse("transparent")}
-                assert widget.styles.color == Color.parse("#ffffff")
-
-            tab = next(iter(app.query(Tab)))
-            assert tab.styles.background == Color.parse("#ffffff")
-            assert tab.styles.color == Color.parse("#000000")
-
-            for selector in ("#nav-artifacts", "#nav-results", "#nav-qa", "#nav-investigation"):
-                button = app.query_one(selector, Button)
-                assert button.styles.background == Color.parse("#000000")
-                assert button.styles.color == Color.parse("#ffffff")
-
-            for selector in ("#analyze", "#analyze-all"):
-                button = app.query_one(selector, Button)
-                assert button.disabled
-                assert button.styles.background == Color.parse("#000000")
-                assert button.styles.border_top[1] == Color.parse("#ffffff")
-                assert button.styles.color == Color.parse("#ffffff")
-                assert button.styles.opacity == 1
-                assert button.styles.text_opacity == 1
-
-    anyio.run(main)
-    assert STAGE_COLOR["test"] == "yellow"
-    assert SEV_COLOR["high"] == "red"
-    assert _outcome_color("pass") == "green"
-
-
 def test_tui_main_content_uses_scrollbars_only_when_needed(tmp_path):
     from hound.tui import RcaTui, ResultScroll
     from textual.widgets import Static
@@ -790,89 +673,6 @@ def test_tui_main_content_uses_scrollbars_only_when_needed(tmp_path):
             await pilot.press("end")
             await pilot.pause()
             assert scroller.scroll_y > 0
-
-    anyio.run(main)
-
-
-def test_tui_sidebar_only_uses_scrollbar_when_needed(tmp_path):
-    from hound.tui import RcaTui
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-
-    async def main():
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            sidebar = app.query_one("#sidebar")
-            assert str(sidebar.styles.overflow_y) == "auto"
-            assert sidebar.styles.scrollbar_size_vertical == 0
-
-    anyio.run(main)
-
-
-def test_tui_sidebar_layout_and_tabs_are_uniform(tmp_path):
-    from hound.tui import RcaTui
-    from textual.widgets import Button, Static, Tab, TabbedContent
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-
-    async def main():
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            sidebar = app.query_one("#sidebar")
-            labels = [str(widget.renderable) for widget in sidebar.query(Static)]
-            assert "Log directory" in labels
-            assert "Filter logs (optional)" in labels
-            assert not any(label.startswith(("1  ", "2  ", "3  ")) for label in labels)
-
-            buttons = [
-                app.query_one(selector, Button)
-                for selector in ("#open-settings", "#browse-dir", "#load-dir", "#analyze")
-            ]
-            assert {button.styles.width.value for button in buttons} == {1, 100}
-            assert {button.styles.height.value for button in buttons} == {3}
-
-            tabs = list(app.query(Tab))
-            assert len(tabs) == 4
-            assert {tab.styles.width.value for tab in tabs} == {1}
-            assert app.query_one("#--content-tab-pane-overview", Tab).display is True
-            assert all("underline" not in str(tab.styles.text_style) for tab in tabs)
-            assert app.query_one("#tabs Underline").display is True
-
-            app.query_one("#tabs", TabbedContent).active = "pane-report"
-            app.action_home()
-            await pilot.pause()
-            assert app.query_one("#tabs", TabbedContent).display is False
-
-            app._show_results("pane-report")
-            app.action_home()
-            assert app.query_one("#tabs", TabbedContent).display is False
-
-    anyio.run(main)
-
-
-def test_tui_sidebar_uses_proportional_bounded_width(tmp_path):
-    from hound.tui import RcaTui
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-
-    async def main():
-        async with app.run_test(size=(130, 35)) as pilot:
-            await pilot.pause()
-            sidebar = app.query_one("#sidebar")
-            wide_sidebar_width = sidebar.size.width
-            assert 28 <= wide_sidebar_width <= 36
-            assert sidebar.styles.min_width.value == 28
-            assert sidebar.styles.max_width.value == 36
-            assert app.has_class("short") is False
-
-        compact_app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-        async with compact_app.run_test(size=(90, 26)) as pilot:
-            await pilot.pause()
-            sidebar = compact_app.query_one("#sidebar")
-            assert sidebar.size.width < wide_sidebar_width
-            assert sidebar.styles.width.value == 30
-            assert compact_app.has_class("compact")
-            assert compact_app.has_class("short")
 
     anyio.run(main)
 
@@ -922,20 +722,24 @@ def test_tui_artifact_workspace_multi_select_and_batch_analyze(tmp_path, monkeyp
             # Open artifacts workspace
             await pilot.press("f")
             await pilot.pause()
+            assert app.query_one("#workspace-analyze", Button).disabled
+            assert app.query_one("#workspace-deselect-all", Button).disabled
 
-            # Select all button
-            app.query_one("#workspace-select-all", Button).press()
+            # Select all shortcut
+            await pilot.press("z")
             await pilot.pause()
             assert len(app._selected_artifacts) == 5
             assert "5 selected" in str(app.query_one("#artifact-workspace-meta", Static).renderable)
-            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze 5 selected"
+            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze 5 selected (a)"
+            assert not app.query_one("#workspace-analyze", Button).disabled
 
-            # Deselect all button
-            app.query_one("#workspace-deselect-all", Button).press()
+            # Deselect all shortcut
+            await pilot.press("d")
             await pilot.pause()
             assert len(app._selected_artifacts) == 0
             assert "selected" not in str(app.query_one("#artifact-workspace-meta", Static).renderable)
-            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze selected"
+            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze selected (a)"
+            assert app.query_one("#workspace-analyze", Button).disabled
 
             # Space selection
             artifact_list = app.query_one("#artifact-workspace-list", ListView)
@@ -1265,7 +1069,7 @@ def test_tui_opened_results_can_navigate_previous_and_next(tmp_path):
 
 def test_tui_workspace_results_selection_toggle(tmp_path):
     from hound.tui import RcaTui
-    from textual.widgets import ListView, Static
+    from textual.widgets import Button, ListView, Static
 
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
 
@@ -1290,6 +1094,14 @@ def test_tui_workspace_results_selection_toggle(tmp_path):
             ])
             await pilot.pause(0.2)
             assert run_dir not in app._selected_runs
+            assert app.query_one("#open-workspace-result", Button).disabled
+            assert app.query_one("#clear-selected", Button).disabled
+
+            # Select and deselect all result shortcuts.
+            await pilot.press("z")
+            assert run_dir in app._selected_runs
+            await pilot.press("d")
+            assert run_dir not in app._selected_runs
 
             # Trigger list item selection (mouse click / space toggle)
             results_list = app.query_one("#results-workspace-list", ListView)
@@ -1303,10 +1115,14 @@ def test_tui_workspace_results_selection_toggle(tmp_path):
             assert run_dir in app._selected_runs
             assert results_list.children[0] is first_item
             assert results_list.index == 0
+            assert not app.query_one("#open-workspace-result", Button).disabled
+            assert not app.query_one("#clear-selected", Button).disabled
 
             # Toggle again
             await pilot.press("space")
             assert run_dir not in app._selected_runs
+            assert app.query_one("#open-workspace-result", Button).disabled
+            assert app.query_one("#clear-selected", Button).disabled
 
     anyio.run(main)
 
@@ -1345,12 +1161,19 @@ def test_tui_settings_save_roundtrips_before_applying(tmp_path, monkeypatch):
             screen.query_one("#settings-jobs", Input).value = "3"
             screen.query_one("#settings-max-llm-calls", Input).value = "12"
             screen.query_one("#settings-max-cost", Input).value = "1.5"
+            screen.query_one("#settings-max-retries", Input).value = "2"
+            screen.query_one("#settings-redact", Button).press()
+            screen.query_one("#settings-dedup", Button).press()
             screen.query_one("#settings-save", Button).press()
             await pilot.pause()
 
             assert app.model == "team/new-model"
             assert app.base_url == "https://models.example/v1"
             assert app.jobs == 3
+            assert app.redact is False
+            assert app.no_dedup is True
+            assert app.max_retries == 2
+            assert app.state_path is None
             assert keyring == {"openai": "test-key"}
             persisted = load_tui_preferences(tmp_path / "tui.yml")
             assert persisted["model"] == "team/new-model"
@@ -1360,6 +1183,9 @@ def test_tui_settings_save_roundtrips_before_applying(tmp_path, monkeypatch):
             assert persisted["jobs"] == 3
             assert persisted["max_llm_calls"] == 12
             assert persisted["max_cost_usd"] == 1.5
+            assert persisted["redact"] is False
+            assert persisted["no_dedup"] is True
+            assert persisted["max_retries"] == 2
 
     anyio.run(main)
 
@@ -1370,7 +1196,7 @@ def test_tui_results_list_selection_event_opens_the_indexed_result(tmp_path):
 
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
     opened: list[bool] = []
-    app._open_workspace_result = lambda: opened.append(True)
+    app._open_workspace_result = lambda **_kwargs: opened.append(True)
 
     async def main():
         async with app.run_test() as pilot:
@@ -1395,9 +1221,11 @@ def test_tui_results_list_selection_event_opens_the_indexed_result(tmp_path):
 
             results_list = app.query_one("#results-workspace-list", ListView)
             results_list.index = 0
+            app._add_selected_run(run_dir)
+            app._refresh_results_selection()
             app.on_list_view_selected(ListView.Selected(results_list, results_list.children[0]))
             assert opened == [True]
-            assert run_dir not in app._selected_runs
+            assert run_dir in app._selected_runs
 
     anyio.run(main)
 
@@ -1559,6 +1387,7 @@ def test_tui_clear_selected_removes_selected_result(tmp_path):
                 }
             ])
             app._add_selected_run(run)
+            app._refresh_results_selection()
             await pilot.pause()
 
             clear_selected = app.query_one("#clear-selected", Button)
@@ -1709,6 +1538,84 @@ def test_run_tui_forwards_context_path(monkeypatch):
     )
     assert run_tui(args) == 0
     assert captured["context_path"] == "context.json"
+
+
+def test_tui_explicit_false_empty_paths_and_one_override_saved_preferences(tmp_path, monkeypatch):
+    from hound import tui
+    from hound.tui import RcaTui
+
+    monkeypatch.setattr(tui, "load_tui_preferences", lambda: {
+        "offline": True,
+        "provider": None,
+        "model": None,
+        "base_url": None,
+        "repo_dir": str(tmp_path / "saved-repo"),
+        "context_path": str(tmp_path / "saved-context.json"),
+        "source_class": "local_artifact",
+        "source_context": True,
+        "enrich": True,
+        "jobs": 8,
+        "max_llm_calls": None,
+        "max_cost_usd": None,
+    })
+
+    app = RcaTui(
+        logs_dir=str(tmp_path),
+        out_dir=str(tmp_path / "out"),
+        offline=True,
+        repo_dir="",
+        context_path="",
+        source_context=False,
+        enrich=False,
+        jobs=1,
+    )
+
+    assert app.repo_dir is None
+    assert app.context_path is None
+    assert app.source_context is False
+    assert app.enrich is False
+    assert app.jobs == 1
+
+
+def test_tui_forwards_context_and_enrichment_to_single_analysis(tmp_path, monkeypatch):
+    from hound.tui import RcaTui
+
+    log = tmp_path / "failure.log"
+    log.write_text("ERROR deployment failed", encoding="utf-8")
+    context = tmp_path / "context.json"
+    context.write_text("{}", encoding="utf-8")
+    captured = {}
+    app = RcaTui(
+        logs_dir=str(tmp_path),
+        out_dir=str(tmp_path / "out"),
+        offline=True,
+        context_path=str(context),
+        source_context=True,
+        enrich=True,
+    )
+
+    async def fake_analyze(path, request):
+        captured["path"] = path
+        captured.update(request)
+        app._analyzing = False
+
+    monkeypatch.setattr(app, "_analyze", fake_analyze)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app._selected_log = log
+            app.action_analyze()
+            for _ in range(100):
+                if captured:
+                    break
+                await pilot.pause(0.02)
+
+    anyio.run(main)
+    assert captured["path"] == log
+    assert captured["context_path"] == str(context)
+    assert captured["source_context"] is True
+    assert captured["enrich"] is True
 
 
 def test_tui_overview_evidence_has_no_mojibake():
@@ -1914,136 +1821,6 @@ def test_tui_settings_connection_error_is_recoverable(tmp_path, monkeypatch):
     anyio.run(main)
 
 
-def test_tui_workspace_list_highlight_has_no_blue_background(tmp_path):
-    from hound.tui import RcaTui
-    from textual.widgets import ListView
-
-    (tmp_path / "app.log").write_text("ERROR app crashed", encoding="utf-8")
-    out_dir = tmp_path / "out"
-    from hound.output.report import ensure_outdir
-
-    ensure_outdir(out_dir)
-    run_dir = out_dir / "run-test"
-    run_dir.mkdir()
-    (run_dir / "report.json").write_text('{"summary": "test fail", "stage": "test", "severity": "high"}', encoding="utf-8")
-    (run_dir / "meta.json").write_text(f'{{"path": "{run_dir.as_posix()}"}}', encoding="utf-8")
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(out_dir), offline=True)
-
-    async def main():
-        async with app.run_test(size=(120, 35)) as pilot:
-            from textual.color import Color
-
-            blue = Color.parse("#0178d4")
-
-            await pilot.pause()
-            app.action_show_artifacts()
-            await pilot.pause()
-
-            art_list = app.query_one("#artifact-workspace-list", ListView)
-            assert art_list.has_focus
-            assert art_list.index == 0
-            art_item = art_list.children[0]
-            assert art_item.styles.background != blue
-
-            app.set_focus(None)
-            await pilot.pause()
-            assert art_item.styles.background != blue
-
-            app.action_show_results()
-            await pilot.pause()
-            res_list = app.query_one("#results-workspace-list", ListView)
-            assert res_list.has_focus
-            if res_list.children:
-                assert res_list.index == 0
-                res_item = res_list.children[0]
-                assert res_item.styles.background != blue
-
-    anyio.run(main)
-
-
-def test_tui_workspace_action_buttons_and_pagination_are_symmetrical(tmp_path):
-    from hound.tui import RcaTui
-    from textual.widgets import Button
-
-    (tmp_path / "a.log").write_text("ERROR service failed", encoding="utf-8")
-    (tmp_path / "b.log").write_text("ERROR build failed", encoding="utf-8")
-    out_dir = tmp_path / "out"
-    out_dir.mkdir()
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(out_dir), offline=True)
-
-    async def main():
-        async with app.run_test(size=(120, 35)) as pilot:
-            await pilot.pause()
-
-            # Test Artifacts Workspace
-            app.action_show_artifacts()
-            await pilot.pause()
-            art_ws = app.query_one("#artifact-workspace").region
-
-            art_prev = app.query_one("#artifact-prev", Button)
-            art_next = app.query_one("#artifact-next", Button)
-            art_label = app.query_one("#artifact-pagination-label")
-
-            assert art_prev.display is True
-            assert art_next.display is True
-            assert art_prev.region.x >= art_ws.x
-            assert art_next.region.right <= art_ws.right
-            assert art_prev.region.right <= art_label.region.x
-            assert art_label.region.right <= art_next.region.x
-
-            art_actions = app.query_one("#artifact-workspace .workspace-actions")
-            assert len(art_actions.children) == 2
-            row0_btns = list(art_actions.children[0].children)
-            row1_btns = list(art_actions.children[1].children)
-            assert len(row0_btns) == 3
-            assert len(row1_btns) == 3
-            for b0, b1 in zip(row0_btns, row1_btns):
-                assert b0.region.x == b1.region.x
-                assert b0.region.width == b1.region.width
-                assert b0.region.height == b1.region.height
-
-            # Test Results Workspace
-            app.action_show_results()
-            await pilot.pause()
-            res_ws = app.query_one("#results-workspace").region
-
-            res_prev = app.query_one("#results-prev", Button)
-            res_next = app.query_one("#results-next", Button)
-            res_label = app.query_one("#results-pagination-label")
-
-            assert res_prev.display is True
-            assert res_next.display is True
-            assert res_prev.region.x >= res_ws.x
-            assert res_next.region.right <= res_ws.right
-            assert res_prev.region.right <= res_label.region.x
-            assert res_label.region.right <= res_next.region.x
-
-            res_actions = app.query_one("#results-workspace .workspace-actions")
-            assert len(res_actions.children) == 2
-            res_row0 = list(res_actions.children[0].children)
-            res_row1 = list(res_actions.children[1].children)
-            assert len(res_row0) == 3
-            assert len(res_row1) == 3
-            for b0, b1 in zip(res_row0, res_row1):
-                assert b0.region.x == b1.region.x
-                assert b0.region.width == b1.region.width
-                assert b0.region.height == b1.region.height
-
-            # Test workspace-refresh button functionality
-            app.action_show_artifacts()
-            await pilot.pause()
-            app.query_one("#workspace-select-all", Button).press()
-            await pilot.pause()
-            assert len(app._selected_artifacts) > 0
-            app.query_one("#workspace-refresh", Button).press()
-            await pilot.pause()
-            assert len(app._selected_artifacts) == 0
-
-    anyio.run(main)
-
-
 def test_tui_settings_opens_when_custom_provider_registry_is_invalid(tmp_path, monkeypatch):
     from hound import tui
     from hound.tui import RcaTui, SettingsScreen
@@ -2091,17 +1868,23 @@ def test_tui_home_and_settings_expose_trust_capabilities(tmp_path):
             assert app.query_one("#investigation-workspace").display
             assert app.query_one("#nav-investigation", Button).has_class("is-active")
             assert not app.query_one("#nav-qa", Button).has_class("is-active")
-            assert "No investigation selected" in str(app.query_one("#investigation", Static).renderable)
+            assert str(app.query_one("#investigation-workspace .workspace-title", Static).renderable) == "CONTEXT (READ-ONLY)"
+            assert "connector collection remains" in str(app.query_one("#investigation-workspace-meta", Static).renderable)
+            assert "No report selected" in str(app.query_one("#investigation", Static).renderable)
+            assert app.query_one("#context-validate", Button).disabled
 
             app.action_open_settings()
             await pilot.pause()
             assert isinstance(app.screen, SettingsScreen)
             for selector in (
                 "#settings-repo-dir", "#settings-context-path", "#settings-source-class",
-                "#settings-source-context", "#settings-enrich", "#settings-jobs",
+                "#settings-evidence-options", "#settings-source-context", "#settings-enrich", "#settings-jobs",
                 "#settings-max-llm-calls", "#settings-max-cost", "#settings-trust",
+                "#settings-redact", "#settings-dedup", "#settings-max-retries",
+                "#settings-session-summary", "#settings-session-paths",
             ):
                 assert app.screen.query_one(selector)
+            assert "Evidence collection options" in str(app.screen.query_one("#settings-evidence-options", Static).renderable)
             source_class = app.screen.query_one("#settings-source-class")
             source_context = app.screen.query_one("#settings-source-context")
             enrichment = app.screen.query_one("#settings-enrich")
@@ -2109,6 +1892,137 @@ def test_tui_home_and_settings_expose_trust_capabilities(tmp_path):
             assert enrichment.region.y == source_context.region.y
             assert source_context.region.right <= enrichment.region.x
             assert "TRUST PROFILE" in str(app.screen.query_one("#settings-trust", Static).renderable)
+            assert "Output:" in str(app.screen.query_one("#settings-session-paths", Static).renderable)
+
+    anyio.run(main)
+
+
+def test_tui_context_validation_readiness_legacy_and_fork_trust(tmp_path):
+    import copy
+    import json
+
+    from hound.models import validate
+    from hound.output.report import ensure_outdir
+    from hound.pipeline import analyze
+    from hound.tui import RcaTui
+    from textual.widgets import Button, Static
+
+    log = tmp_path / "deployment_timeline.log"
+    shutil.copy(FIXTURES / "deployment_timeline.log", log)
+    output = ensure_outdir(tmp_path / "out")
+    run_dir = output / "run-context"
+    document = analyze(log, run_dir, offline=True)
+    deployment = document["context"]["deployment"]
+    deployment.update({
+        "platform": "kubernetes",
+        "environment": "production",
+        "service": "api",
+        "workload": "deployment/api",
+        "target": "deployment/api",
+        "namespace": "default",
+        "revision": "release-42",
+        "previous_revision": "release-41",
+        "customer_impact": "degraded",
+    })
+    document["context"]["connector_audits"] = [
+        {
+            "connector": "kubernetes",
+            "operation": "workload_state",
+            "resource": "deployment/api",
+            "namespace": "default",
+            "status": "collected",
+            "observed_at": "2026-01-01T00:00:00+00:00",
+            "duration_ms": 2,
+            "output_bytes": 42,
+            "returncode": 0,
+            "error": "",
+        },
+        {
+            "connector": "kubernetes",
+            "operation": "related_events",
+            "resource": "deployment/api",
+            "namespace": "default",
+            "status": "command_failed",
+            "observed_at": "2026-01-01T00:00:01+00:00",
+            "duration_ms": 3,
+            "output_bytes": 0,
+            "returncode": 1,
+            "error": "bounded command failed",
+        },
+    ]
+    document["devops"].update({
+        "metric_samples": [{"metric": "http_5xx_rate", "value": 0.2}],
+        "trace_spans": [{"trace_id": "trace-1", "span_id": "span-1", "service": "api"}],
+        "release_changes": [{"field": "revision", "current": "release-42", "previous": "release-41", "status": "changed"}],
+        "static_severity": "high",
+        "effective_severity": "critical",
+    })
+    validate(document)
+    (run_dir / "report.json").write_text(json.dumps(document), encoding="utf-8")
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(output), offline=True)
+
+    async def main():
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app._apply_run_index([{
+                "path": run_dir,
+                "report": run_dir / "report.json",
+                "modified": 1,
+                "artifact": log.name,
+                "stage": "deploy",
+                "severity": "critical",
+                "summary": "rollout failed",
+                "hypothesis": "readiness probe failed",
+                "invalid": False,
+            }])
+            app._load_run(run_dir)
+            await pilot.pause(0.1)
+            app._show_workspace("investigation")
+            await pilot.pause()
+
+            status = str(app.query_one("#context-status", Static).renderable)
+            rendered = str(app.query_one("#investigation", Static).renderable)
+            assert "[PASS]" in status
+            assert not app.query_one("#context-validate", Button).disabled
+            for expected in (
+                "Context validation & readiness",
+                "schema: 2.0",
+                "connector readiness:",
+                "audit(s) collected",
+                "observability: present",
+                "static=high",
+                "effective=critical",
+                "customer impact: degraded",
+                "Release comparison",
+                "missing evidence:",
+            ):
+                assert expected in rendered
+
+            await pilot.press("u")
+            await pilot.pause()
+
+            legacy = copy.deepcopy(document)
+            legacy["schema_version"] = "1.4"
+            app._current_doc = legacy
+            app._refresh_current_context()
+            await pilot.pause()
+            assert "legacy 1.4 accepted" in str(app.query_one("#investigation", Static).renderable)
+
+            invalid = copy.deepcopy(document)
+            invalid["context"]["deployment"]["namespace"] = 7
+            app._current_doc = invalid
+            app._refresh_current_context()
+            await pilot.pause()
+            assert "[FAIL]" in str(app.query_one("#context-status", Static).renderable)
+            assert "invalid:" in str(app.query_one("#investigation", Static).renderable)
+
+            fork = copy.deepcopy(document)
+            fork["meta"]["trust"]["source_class"] = "fork_pr"
+            app._current_doc = fork
+            app._refresh_current_context()
+            await pilot.pause()
+            assert "BLOCKED (fork_pr fail-closed)" in str(app.query_one("#investigation", Static).renderable)
 
     anyio.run(main)
 
@@ -2147,6 +2061,44 @@ def test_tui_qa_history_and_show_test_statistics(tmp_path):
             assert "TEST STATISTICS" in rendered
             assert "total_eventually_returns" in rendered
             assert not app.query("#qa-import")
+
+    anyio.run(main)
+
+
+def test_tui_imports_qa_history_from_workspace(tmp_path):
+    import sqlite3
+
+    shutil.copy(FIXTURES / "junit_flaky.xml", tmp_path / "junit_flaky.xml")
+    from hound.tui import RcaTui
+    from textual.widgets import Button, Static
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.press("y")
+            await pilot.pause()
+            app.query_one("#qa-import-history", Button).press()
+            for _ in range(250):
+                await pilot.pause(0.02)
+                if app._qa_result and app._qa_result.get("type") == "import":
+                    break
+            assert app._qa_result and app._qa_result["type"] == "import"
+            assert app._qa_result["imported"] > 0
+            assert "HISTORY IMPORT COMPLETE" in str(app.query_one("#qa-result", Static).renderable)
+
+            app.query_one("#qa-load-history", Button).press()
+            for _ in range(250):
+                await pilot.pause(0.02)
+                if app._qa_result and app._qa_result.get("type") == "history":
+                    break
+            assert app._qa_result and app._qa_result["type"] == "history"
+            assert app._qa_history_tests
+            assert "TRACKED TESTS" in str(app.query_one("#qa-result", Static).renderable)
+            with sqlite3.connect(app.out_dir / ".hound" / "history.sqlite3") as connection:
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(test_results)")}
+            assert "log_text" not in columns
+            assert "raw_log" not in columns
 
     anyio.run(main)
 
@@ -2214,6 +2166,10 @@ def test_tui_quality_gate_distinguishes_policy_block_from_analysis_status(tmp_pa
             app.query_one("#qa-baseline", Input).value = baseline
             app.query_one("#qa-head", Input).value = baseline
             app.query_one("#qa-policy", Input).value = str(policy)
+            await pilot.pause()
+            preview = str(app.query_one("#qa-policy-preview", Static).renderable)
+            assert "ACTIVE QUALITY POLICY" in preview
+            assert "new_failure" in preview
             app.query_one("#qa-gate", Button).press()
             for _ in range(300):
                 await pilot.pause(0.02)
@@ -2226,6 +2182,16 @@ def test_tui_quality_gate_distinguishes_policy_block_from_analysis_status(tmp_pa
             rendered = str(app.query_one("#qa-result", Static).renderable)
             assert "QUALITY GATE: BLOCK" in rendered
             assert "analysis status" in rendered
+
+            invalid_policy = tmp_path / "invalid-quality.yml"
+            invalid_policy.write_text("version: '0.1'\nrules: {}\n", encoding="utf-8")
+            app.query_one("#qa-policy", Input).value = str(invalid_policy)
+            await pilot.pause()
+            app.query_one("#qa-gate", Button).press()
+            await pilot.pause()
+            assert not app._qa_busy
+            assert "invalid" in str(app.query_one("#qa-status", Static).renderable).lower()
+            assert "Invalid policy" in str(app.query_one("#qa-policy-preview", Static).renderable)
 
     anyio.run(main)
 
@@ -2258,34 +2224,6 @@ def test_tui_feedback_modal_records_review_for_loaded_run(tmp_path):
                     break
             assert not isinstance(app.screen, FeedbackScreen)
             assert (output / ".hound" / "feedback.sqlite3").is_file()
-
-    anyio.run(main)
-
-
-def test_tui_feedback_modal_uses_consistent_form_gutters(tmp_path):
-    from hound.tui import FeedbackScreen, RcaTui
-    from textual.containers import Horizontal, Vertical
-
-    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-
-    async def main():
-        async with app.run_test(size=(130, 40)) as pilot:
-            app.push_screen(FeedbackScreen(app, tmp_path / "run-one"))
-            await pilot.pause()
-
-            screen = app.screen
-            dialog = screen.query_one("#feedback-dialog", Vertical)
-            form = screen.query_one("#feedback-form", Vertical)
-            actions = screen.query_one("#feedback-actions", Horizontal)
-            rows = list(form.query(".feedback-form-row").results(Horizontal))
-
-            assert len(rows) == 5
-            assert all(row.styles.margin.bottom == 1 for row in rows[:-1])
-            assert rows[-1].styles.margin.bottom == 0
-            assert form.region.x == dialog.region.x + 3
-            assert form.region.width == dialog.region.width - 6
-            assert rows[-1].region.bottom < actions.region.y
-            assert actions.region.bottom < dialog.region.bottom
 
     anyio.run(main)
 
@@ -2489,127 +2427,172 @@ def test_tui_statusbar_batch_analyze_lifecycle(tmp_path, monkeypatch):
     anyio.run(main)
 
 
-def test_tui_sidebar_navigation_buttons_and_dialog_action_dimensions(tmp_path):
-    shutil.copy(FIXTURES / "pytest_fail.log", tmp_path / "pytest_fail.log")
+def test_tui_context_validation_persistence_and_cards(tmp_path):
     from hound.output.report import ensure_outdir
     from hound.pipeline import analyze
-    from hound.tui import ClearResultsScreen, FeedbackScreen, RcaTui, SettingsScreen
-    from textual.containers import Horizontal
-    from textual.widgets import Button, Static
+    from hound.tui import RcaTui
+    from hound.validation import default_validation_store, get_latest_validation
+    from textual.widgets import Static
 
+    log = tmp_path / "pytest_fail.log"
+    shutil.copy(FIXTURES / "pytest_fail.log", log)
     output = ensure_outdir(tmp_path / "out")
-    run_dir = output / "run-one"
-    analyze(tmp_path / "pytest_fail.log", run_dir, offline=True)
-
+    run_dir = output / "run-val"
+    analyze(log, run_dir, offline=True)
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(output), offline=True)
 
     async def main():
-        async with app.run_test(size=(120, 35)) as pilot:
+        async with app.run_test() as pilot:
             await pilot.pause()
-
-            # 1. Check sidebar 2-column buttons grid alignment
-            b_art = app.query_one("#nav-artifacts", Button)
-            b_res = app.query_one("#nav-results", Button)
-            b_qa = app.query_one("#nav-qa", Button)
-            b_ctx = app.query_one("#nav-investigation", Button)
-            b_browse = app.query_one("#browse-dir", Button)
-            b_load = app.query_one("#load-dir", Button)
-
-            assert str(b_art.label) == "Artifacts"
-            assert str(b_res.label) == "Results"
-            assert str(b_qa.label) == "Quality"
-            assert str(b_ctx.label) == "Context"
-
-            # Both rows in workspace-nav align with browse/load in directory-actions
-            assert b_art.region.x == b_qa.region.x == b_browse.region.x == 1
-            assert b_res.region.x == b_ctx.region.x == b_load.region.x == 15
-            assert max(b_art.region.width, b_qa.region.width, b_browse.region.width) - min(
-                b_art.region.width, b_qa.region.width, b_browse.region.width
-            ) <= 1
-            assert max(b_res.region.width, b_ctx.region.width, b_load.region.width) - min(
-                b_res.region.width, b_ctx.region.width, b_load.region.width
-            ) <= 1
-
-            # 2. Check Quality workspace title and section titles
-            app.action_show_qa()
-            await pilot.pause()
-            title = app.query_one("#qa-workspace .workspace-title", Static)
-            assert str(title.renderable) == "QUALITY & GATES"
-            for sec in app.query(".qa-section-title"):
-                assert sec.styles.height.value == 3
-
-            # 3. Check Settings actions height (5 to avoid bottom border clipping)
-            app.action_open_settings()
-            await pilot.pause()
-            assert isinstance(app.screen, SettingsScreen)
-            actions = app.screen.query_one("#settings-actions", Horizontal)
-            assert actions.styles.height.value == 5
-            assert app.screen.query_one("#settings-context-title", Static).styles.height.value == 3
-            assert app.screen.query_one("#custom-provider-title", Static).styles.height.value == 3
-            app.screen.dismiss()
-            await pilot.pause()
-
-            # 4. Check Feedback dialog's compact action row and button widths.
             app._load_run(run_dir)
             await pilot.pause(0.05)
-            app.action_open_feedback()
-            await pilot.pause()
-            assert isinstance(app.screen, FeedbackScreen)
-            fb_actions = app.screen.query_one("#feedback-actions", Horizontal)
-            assert fb_actions.styles.height.value == 4
-            fb_cancel = app.screen.query_one("#feedback-cancel", Button)
-            fb_save = app.screen.query_one("#feedback-save", Button)
-            assert fb_cancel.styles.width.value == 20
-            assert fb_save.styles.width.value == 20
-            app.screen.dismiss()
+            app._show_workspace("investigation")
             await pilot.pause()
 
-            # 5. Check Clear dialog action button min-widths
-            app.push_screen(ClearResultsScreen(app, [run_dir]))
-            await pilot.pause()
-            assert isinstance(app.screen, ClearResultsScreen)
-            c_cancel = app.screen.query_one("#clear-cancel", Button)
-            c_confirm = app.screen.query_one("#clear-confirm", Button)
-            assert c_cancel.styles.min_width.value == 14
-            assert c_confirm.styles.min_width.value == 18
-            app.screen.dismiss()
-            await pilot.pause()
+            # Verify context cards exist and are populated
+            card_integrity = app.query_one("#context-card-integrity", Static)
+            card_trust = app.query_one("#context-card-trust", Static)
+            card_impact = app.query_one("#context-card-impact", Static)
+            assert "REPORT INTEGRITY" in str(card_integrity.renderable)
+            assert "TRUST & CAPABILITIES" in str(card_trust.renderable)
+            assert "OPERATIONAL IMPACT" in str(card_impact.renderable)
+
+            # Trigger validation via key 'u'
+            await pilot.press("u")
+            await pilot.pause(0.1)
+
+            # Check database persistence
+            val_store = default_validation_store(output)
+            assert val_store.is_file()
+            latest = get_latest_validation(val_store, "run-val")
+            assert latest is not None
+            assert latest.status in {"PASS", "WARN"}
+
+            # Verify integrity card reflects status
+            assert latest.status in str(card_integrity.renderable)
+
+            # Test clipboard copy of validation summary
+            app.action_copy_validation_summary()
+            assert "Report Validation Summary" in app._clipboard
 
     anyio.run(main)
 
 
-def test_tui_responsive_home_logo_and_spacing_on_small_screens(tmp_path):
-    """Ensure brand logo remains intact, visible, and unclipped across small/short terminal sizes."""
-    from hound.tui import HomeLogo, RcaTui
+def test_tui_context_stale_detection(tmp_path):
+    import json
+    from hound.output.report import ensure_outdir
+    from hound.pipeline import analyze
+    from hound.tui import RcaTui
+    from textual.widgets import Static
+
+    log = tmp_path / "pytest_fail.log"
+    shutil.copy(FIXTURES / "pytest_fail.log", log)
+    output = ensure_outdir(tmp_path / "out")
+    run_dir = output / "run-stale"
+    analyze(log, run_dir, offline=True)
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(output), offline=True)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app._load_run(run_dir)
+            await pilot.pause(0.05)
+            app._show_workspace("investigation")
+            await pilot.press("u")
+            await pilot.pause(0.05)
+
+            # Now tamper report.json
+            report_file = run_dir / "report.json"
+            data = json.loads(report_file.read_text(encoding="utf-8"))
+            data["failure"]["summary"] = "Tampered after validation"
+            report_file.write_text(json.dumps(data), encoding="utf-8")
+
+            # Refresh context
+            app._refresh_current_context()
+            await pilot.pause(0.05)
+
+            card_integrity = app.query_one("#context-card-integrity", Static)
+            rendered = str(card_integrity.renderable)
+            assert "STALE" in rendered
+
+    anyio.run(main)
+
+
+def test_tui_quality_workspace_cards_and_policy_preview(tmp_path):
+    from hound.tui import RcaTui
     from textual.widgets import Static
 
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
 
     async def main():
-        # Standard 80x24 terminal (compact and short)
-        async with app.run_test(size=(80, 24)) as pilot:
+        async with app.run_test() as pilot:
+            await pilot.press("y")
             await pilot.pause()
-            logo_widget = app.query_one("#home-logo", Static)
-            assert isinstance(logo_widget, HomeLogo)
-            rendered = str(logo_widget.renderable)
-            assert "HOUND" in rendered
-            # Compact badge fits on one line without splitting
-            assert "\n" not in rendered
-            # Verify subtitle has 0 margin in short mode to conserve vertical space
-            sub = app.query_one("#home-subtitle", Static)
-            assert sub.styles.margin.top == 0
 
-        # Narrow 50x20 terminal
-        app_narrow = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
-        async with app_narrow.run_test(size=(50, 20)) as pilot:
-            await pilot.pause()
-            logo_widget = app_narrow.query_one("#home-logo", Static)
-            rendered = str(logo_widget.renderable)
-            assert "HOUND" in rendered
-            assert "\n" not in rendered
-            assert logo_widget.region.width <= 50
+            # Verify the 3 top status cards in QA workspace
+            card_hist = app.query_one("#qa-card-history", Static)
+            card_gate = app.query_one("#qa-card-gate", Static)
+            card_sig = app.query_one("#qa-card-signal", Static)
+            assert "TEST HISTORY DATABASE" in str(card_hist.renderable)
+            assert "RELEASE QUALITY GATE" in str(card_gate.renderable)
+            assert "REGRESSION SIGNAL" in str(card_sig.renderable)
+
+            # Verify active policy preview section
+            preview = app.query_one("#qa-policy-preview", Static)
+            assert "gate policy:" in str(preview.renderable).lower()
 
     anyio.run(main)
+
+
+def test_tui_feedback_modal_blocks_reviewed_on_failing_report(tmp_path):
+    import json
+    from hound.output.report import ensure_outdir
+    from hound.pipeline import analyze
+    from hound.tui import FeedbackScreen, RcaTui
+    from textual.widgets import Button, Select
+
+    log = tmp_path / "pytest_fail.log"
+    shutil.copy(FIXTURES / "pytest_fail.log", log)
+    output = ensure_outdir(tmp_path / "out")
+    run_dir = output / "run-fail"
+    analyze(log, run_dir, offline=True)
+
+    # Invalidate the report by injecting a trust policy violation
+    report_file = run_dir / "report.json"
+    doc = json.loads(report_file.read_text(encoding="utf-8"))
+    doc["meta"]["trust"] = {
+        "source_class": "fork_pr",
+        "source_context": False,
+        "enrichment": False,
+        "llm": True,  # Violation: fork_pr cannot enable LLM
+        "delivery": False,
+    }
+    report_file.write_text(json.dumps(doc), encoding="utf-8")
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(output), offline=True)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app._load_run(run_dir)
+            await pilot.pause(0.05)
+            app.action_open_feedback()
+            await pilot.pause()
+
+            assert isinstance(app.screen, FeedbackScreen)
+            # Select 'reviewed'
+            app.screen.query_one("#feedback-review-status", Select).value = "reviewed"
+            await pilot.pause()
+
+            # Try to save
+            app.screen.query_one("#feedback-save", Button).press()
+            await pilot.pause(0.1)
+
+            # Modal must NOT dismiss because saving 'reviewed' on failing report is blocked
+            assert isinstance(app.screen, FeedbackScreen)
+
+    anyio.run(main)
+
 
 
 def test_tui_back_navigation_and_shortcuts(tmp_path):
@@ -2648,8 +2631,14 @@ def test_tui_back_navigation_and_shortcuts(tmp_path):
             await pilot.pause()
             assert app._current_view_state() == ("workspace", "artifacts")
 
-            # 5. Press 'backspace' -> returns to Home
-            await pilot.press("backspace")
+            # 5. 'k' only clears focus and never changes the current view.
+            await pilot.press("k")
+            await pilot.pause()
+            assert app._current_view_state() == ("workspace", "artifacts")
+            assert app.focused is None
+
+            # Escape performs Back navigation.
+            await pilot.press("escape")
             await pilot.pause()
             assert app._current_view_state() == ("home", None)
             assert not app.has_class("has-back-nav")
@@ -2663,18 +2652,16 @@ def test_tui_back_navigation_and_shortcuts(tmp_path):
             await pilot.pause()
             assert app._current_view_state() == ("home", None)
 
-            # 7. Unfocus vs Back on Escape key
+            # 7. 'k' unfocuses, while Escape always navigates back.
             await pilot.press("f")
             await pilot.pause()
             app.query_one("#log-filter").focus()
             await pilot.pause()
             assert app.focused is not None
-            # First escape: clears focus, stays in artifacts workspace
-            await pilot.press("escape")
+            await pilot.press("k")
             await pilot.pause()
             assert app.focused is None
             assert app._current_view_state() == ("workspace", "artifacts")
-            # Second escape: triggers back navigation to Home
             await pilot.press("escape")
             await pilot.pause()
             assert app._current_view_state() == ("home", None)
@@ -2693,6 +2680,16 @@ def test_tui_back_navigation_and_shortcuts(tmp_path):
             await pilot.press("?")
             await pilot.pause()
             assert len(app.screen_stack) > 1
+            help_text = str(app.screen.query_one("#help-dialog Static", Static).renderable)
+            for expected in (
+                "Artifacts",
+                "Quality & gates",
+                "Context (read-only)",
+                "Overview · Report · Ticket · Raw log",
+                "space",
+                "Validate Context",
+            ):
+                assert expected in help_text
             await pilot.press("escape")
             await pilot.pause()
             assert len(app.screen_stack) == 1

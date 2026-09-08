@@ -17,12 +17,29 @@ def test_tui_preferences_roundtrip_without_secrets(tmp_path):
         False, "9router", "auto", path,
         base_url="http://127.0.0.1:20128/v1", repo_dir="repo", context_path="context.json",
         source_class="local_artifact", source_context=True, enrich=True, jobs=3,
-        max_llm_calls=20, max_cost_usd=1.25,
+        max_llm_calls=20, max_cost_usd=1.25, redact=False, no_dedup=True, max_retries=2,
     )
     assert load_tui_preferences(path) == {
         "offline": False, "provider": "9router", "model": "auto",
         "base_url": "http://127.0.0.1:20128/v1", "repo_dir": "repo", "context_path": "context.json",
         "source_class": "local_artifact", "source_context": True, "enrich": True, "jobs": 3,
         "max_llm_calls": 20, "max_cost_usd": 1.25,
+        "redact": False, "no_dedup": True, "max_retries": 2,
     }
     assert "api" not in path.read_text(encoding="utf-8").lower()
+
+
+def test_tui_preferences_ignore_symlinked_file(tmp_path):
+    import pytest
+
+    from hound.preferences import load_tui_preferences
+
+    target = tmp_path / "outside.yml"
+    target.write_text("offline: false\nprovider: leaked\n", encoding="utf-8")
+    path = tmp_path / "tui.yml"
+    try:
+        path.symlink_to(target)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    assert load_tui_preferences(path)["offline"] is True
+    assert load_tui_preferences(path)["provider"] is None

@@ -1,0 +1,7 @@
+Failure:
+DescendantsTrackerWithAutoloadingTest#test_descendants_with_garbage_collected_classes [/home/travis/build/rails/rails/activesupport/test/descendants_tracker_test_cases.rb:36]:
+--- expected
++++ actual
+@@ -1 +1 @@
+-#<Set: {DescendantsTrackerTestCases::Child1, DescendantsTrackerTestCases::Grandchild1, DescendantsTrackerTestCases::Grandchild2, DescendantsTrackerTestCases::Child2}>
++#<Set: {DescendantsTrackerTestCases::Child1, DescendantsTrackerTestCases::Grandchild1, DescendantsTrackerTestCases::Grandchild2, DescendantsTrackerTestCases::Child2, #<Class:0xXXXXXX>}>

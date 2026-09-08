@@ -1,0 +1,16 @@
+Running ‘test-all.R’ [10s/15s]
+ ERROR
+Running the tests in ‘tests/test-all.R’ failed.
+Last 13 lines of output:
+  > test_check("shiny")
+  ── 1. Failure: All man pages have an entry in staticdocs/index.r (@test-staticdo
+  length(unknown) not equal to 0.
+  1/1 mismatches
+  [1] 2 - 0 == 2
+  Unrecognized functions in index.r:
+    addResourcePath
+    removeResourcePath
+  
+  ══ testthat results  ═══════════════════════════════════════════════════════════
+  [ OK: 796 | SKIPPED: 0 | WARNINGS: 0 | FAILED: 1 ]
+  1. Failure: All man pages have an entry in staticdocs/index.r (@test-staticdocs.R#47)

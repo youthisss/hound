@@ -1,0 +1,8 @@
+1) test implements (almost) all functions in Map (KeywordTest)
+     [1m[30mtest/elixir/keyword_test.exs:23[0m
+     [31mAssertion with == failed[0m
+     [36mcode:  [0massert Map.__info__(:functions) -- Keyword.__info__(:functions) == [from_struct: 1]
+     [36mleft:  [0m[[31mfilter: 2[0m, from_struct: 1]
+     [36mright: [0m[from_struct: 1]
+     [36mstacktrace:[0m
+       test/elixir/keyword_test.exs:24: (test)

@@ -1,0 +1,4 @@
++ ERROR! openface/celeb-classifier.nn4.small2.v1.pkl md5sum did not match.
+  + Expected: 199a2c0d32fd0f22f14ad2d248280475
+  + Actual: 390264772e075a0aa5c907e4ed0c2561
+  + Please manually delete this file and try re-running this script.

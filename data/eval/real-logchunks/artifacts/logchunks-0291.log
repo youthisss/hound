@@ -1,0 +1,111 @@
+In file included from vis-lua.h:14:0,
+                 from main.c:15:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-core.h:7,
+                 from sam.c:27:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-core.h:7,
+                 from ui-terminal.c:18:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-lua.c:24:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-core.h:7,
+                 from vis-modes.c:3:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-core.h:7,
+                 from vis-motions.c:4:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-core.h:7,
+                 from vis-operators.c:3:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-core.h:7,
+                 from vis-registers.c:4:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-core.h:7,
+                 from vis-marks.c:1:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-core.h:7,
+                 from vis-prompt.c:2:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-core.h:7,
+                 from vis-text-objects.c:1:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+In file included from vis-lua.h:14:0,
+                 from vis-subprocess.c:7:
+vis-subprocess.h:21:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *);
+                             ^
+vis-subprocess.h:22:30: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *, fd_set *);
+                              ^
+vis-subprocess.c:97:29: error: unknown type name ‘fd_set’
+ int vis_process_before_tick(fd_set *readfds) {
+                             ^
+vis-subprocess.c:128:33: error: unknown type name ‘fd_set’
+ void vis_process_tick(Vis *vis, fd_set *readfds) {
+                                 ^

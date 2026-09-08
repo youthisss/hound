@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+import math
+import re
 
 from hound.pathutil import path_matches
+from hound.safety import validate_recommendation, validate_recommendations
 
 SCHEMA_VERSION = "2.0"
 LEGACY_SCHEMA_VERSION = "1.4"
@@ -30,7 +33,6 @@ KINDS = {
     "liveness_probe_failed",
     "readiness_probe_failed",
     "scheduling_failed",
-    "permission_error",
     "quota_exceeded",
     "network_failure",
     "registry_auth_failure",
@@ -45,6 +47,11 @@ KINDS = {
 CONFIDENCES = {"high", "medium", "low"}
 SEVERITIES = {"critical", "high", "medium", "low"}
 ENGINES = {"llm", "fallback", "merged"}
+_EVIDENCE_ID_RE = re.compile(r"^ev-[0-9]{3,6}$")
+_FACT_ID_RE = re.compile(r"^fact-[0-9]{3,6}$")
+_HYPOTHESIS_ID_RE = re.compile(r"^hyp-[0-9]{3,6}$")
+_MAX_ANALYSIS_LIST_ITEMS = 256
+_MAX_ANALYSIS_STRING_CHARS = 256 * 1024
 
 
 @dataclass
@@ -342,6 +349,21 @@ def build_evidence_items(artifacts: Artifacts, observed_at: str = "") -> list[di
     return items
 
 
+def visible_evidence_items(artifacts: Artifacts, observed_at: str = "") -> list[dict]:
+    """Return evidence explicitly permitted in an LLM request.
+
+    Repository source context remains available to local reports, but each
+    item must opt in before it can cross the provider boundary. This predicate
+    is shared by prompt construction and response validation.
+    """
+    return [
+        item
+        for item in build_evidence_items(artifacts, observed_at)
+        if item.get("kind") != "source_context"
+        or (isinstance(item.get("value"), dict) and item["value"].get("send_to_llm") is True)
+    ]
+
+
 def _observed_facts(artifacts: Artifacts, evidence: list[dict]) -> list[dict]:
     by_kind: dict[str, list[str]] = {}
     for item in evidence:
@@ -372,7 +394,7 @@ def _observed_facts(artifacts: Artifacts, evidence: list[dict]) -> list[dict]:
 def supporting_evidence_ids(artifacts: Artifacts) -> set[str]:
     """Evidence of failure, excluding administrative metadata and change lists."""
     kinds = {"failure_message", "failure_event", "stack_frame", "failed_test",
-             "connector_observation", "metric_sample", "trace_span", "source_context"}
+             "connector_observation", "metric_sample", "trace_span"}
     refs: set[str] = set()
     for item in build_evidence_items(artifacts):
         kind, value = item["kind"], item["value"]
@@ -428,6 +450,12 @@ def _analysis_section(artifacts: Artifacts, root_cause: RootCause, generated_at:
     contradicting = [ref for ref in root_cause.contradicting_evidence_refs if ref in available]
     if artifacts.kind == "unknown" and root_cause.engine == "fallback":
         support_status = "insufficient_evidence"
+    elif contradicting:
+        # A contradiction invalidates a positive support claim. The v2 schema
+        # intentionally keeps the older status vocabulary; ``unsupported``
+        # plus explicit contradicting refs is the backwards-compatible wire
+        # representation of a conflicted hypothesis.
+        support_status = "unsupported"
     elif set(supporting) & supporting_evidence_ids(artifacts):
         support_status = "supported"
     elif artifacts.kind == "unknown" or not evidence:
@@ -543,6 +571,36 @@ def build_doc(
 def _check(value: bool, msg: str) -> None:
     if not value:
         raise ValueError(f"invalid RCA doc: {msg}")
+
+
+def _validate_analysis_value(value: object, location: str, depth: int = 0) -> None:
+    """Reject non-JSON, non-finite, or oversized structured evidence.
+
+    Renderers own terminal-control sanitization. Keeping those bytes valid in
+    the in-memory document preserves the formatter's safe-output contract while
+    JSON serialization still escapes them.
+    """
+    _check(depth <= 12, f"{location} is nested too deeply")
+    if value is None or type(value) is bool or type(value) is int:
+        return
+    if type(value) is float:
+        _check(math.isfinite(value), f"{location} must contain a finite number")
+        return
+    if isinstance(value, str):
+        _check(len(value) <= _MAX_ANALYSIS_STRING_CHARS, f"{location} string is too long")
+        return
+    if isinstance(value, list):
+        _check(len(value) <= _MAX_ANALYSIS_LIST_ITEMS, f"{location} contains too many items")
+        for index, child in enumerate(value):
+            _validate_analysis_value(child, f"{location}[{index}]", depth + 1)
+        return
+    if isinstance(value, dict):
+        _check(len(value) <= _MAX_ANALYSIS_LIST_ITEMS, f"{location} contains too many fields")
+        for key, child in value.items():
+            _check(isinstance(key, str) and bool(key), f"{location} contains an invalid field name")
+            _validate_analysis_value(child, f"{location}.{key}", depth + 1)
+        return
+    _check(False, f"{location} contains an unsupported value")
 
 
 def validate(doc: dict) -> None:
@@ -666,13 +724,27 @@ def validate(doc: dict) -> None:
             "context contains unsupported fields",
         )
     _check(isinstance(context.get("owners"), list) and all(isinstance(owner, str) for owner in context["owners"]), "context.owners must be list[str]")
-    for section, fields in {
+    context_fields = {
         "run": {"provider", "run_id", "run_url", "job_id", "job_name", "workflow", "branch", "commit_sha", "step_name", "attempt", "conclusion", "duration_ms", "pr_number", "base_sha", "head_sha"},
         "deployment": {"platform", "environment", "cluster", "target", "namespace", "release", "revision", "previous_revision", "artifact", "strategy", "started_at", "migration_version", "outcome", "recovery"},
         "request": {"request_id", "trace_id", "session_id", "user_id", "users", "method", "path"},
-    }.items():
+    }
+    deployment_fields = context_fields["deployment"] | {
+        "service", "workload", "commit", "image_digest", "finished_at",
+        "previous_commit", "previous_image_digest", "customer_impact",
+        "manifest_digest", "previous_manifest_digest", "resource_fingerprint",
+        "previous_resource_fingerprint", "previous_migration_version",
+        "runtime_version", "previous_runtime_version", "dependency_fingerprint",
+        "previous_dependency_fingerprint", "feature_flag_version",
+        "previous_feature_flag_version", "slo_target", "error_budget_remaining",
+        "runbook_url",
+    }
+    for section, fields in context_fields.items():
         value = context.get(section)
         _check(isinstance(value, dict), f"context.{section} must be an object")
+        if current_schema:
+            allowed_fields = deployment_fields if section == "deployment" else fields
+            _check(set(value) <= allowed_fields, f"context.{section} contains unsupported fields")
         _check(fields.issubset(value), f"context.{section} missing fields")
         for key, item in value.items():
             if key in {"attempt", "duration_ms"}:
@@ -688,18 +760,17 @@ def validate(doc: dict) -> None:
     # M7 additive deployment fields (optional; legacy v2.0 sidecars omit them).
     deployment = context.get("deployment")
     assert isinstance(deployment, dict)
-    for key in (
-        "service", "workload", "commit", "image_digest", "finished_at",
-        "previous_commit", "previous_image_digest", "customer_impact",
-        "manifest_digest", "previous_manifest_digest", "resource_fingerprint",
-        "previous_resource_fingerprint", "previous_migration_version",
-        "runtime_version", "previous_runtime_version", "dependency_fingerprint",
-        "previous_dependency_fingerprint", "feature_flag_version",
-        "previous_feature_flag_version", "slo_target", "error_budget_remaining",
-        "runbook_url",
-    ):
+    if current_schema:
+        _check(set(deployment) <= deployment_fields, "context.deployment contains unsupported fields")
+    for key in deployment_fields:
         if key in deployment:
-            _check(isinstance(deployment[key], str), f"context.deployment.{key} must be str")
+            if key == "customer_impact" and current_schema:
+                _check(
+                    deployment[key] in {"", "unknown", "none", "degraded", "outage"},
+                    "context.deployment.customer_impact invalid",
+                )
+            else:
+                _check(isinstance(deployment[key], str), f"context.deployment.{key} must be str")
 
     if "connector_audits" in context:
         connector_audits = context["connector_audits"]
@@ -744,6 +815,10 @@ def validate(doc: dict) -> None:
         _check(isinstance(rc.get(key), str), f"root_cause.{key} must be str")
     _check(isinstance(rc.get("evidence"), list), "evidence must be list")
     _check(all(isinstance(item, str) for item in rc["evidence"]), "evidence entries must be str")
+    try:
+        validate_recommendation(rc["fix_suggestion"], field="root_cause.fix_suggestion")
+    except ValueError as exc:
+        raise ValueError(f"invalid RCA doc: {exc}") from exc
 
     triage = doc["triage"]
     for key in ("severity", "priority", "dedup_key", "component", "is_duplicate_of", "flaky_suspect", "recurring_incident", "occurrence_count"):
@@ -773,36 +848,74 @@ def _validate_analysis(doc: dict) -> None:
     analysis = doc.get("analysis")
     _check(isinstance(analysis, dict), "analysis must be an object")
     assert isinstance(analysis, dict)
-    for key in ("observed_facts", "evidence", "hypotheses", "missing_information", "recommended_checks"):
+    analysis_fields = {"observed_facts", "evidence", "hypotheses", "missing_information", "recommended_checks"}
+    _check(set(analysis) == analysis_fields, "analysis contains unsupported fields")
+    for key in analysis_fields:
         _check(key in analysis, f"analysis.{key} missing")
-    for key in ("observed_facts", "evidence", "hypotheses", "missing_information", "recommended_checks"):
+    for key in analysis_fields:
         _check(isinstance(analysis[key], list), f"analysis.{key} must be a list")
+        _check(len(analysis[key]) <= _MAX_ANALYSIS_LIST_ITEMS, f"analysis.{key} contains too many items")
     _check(all(isinstance(value, str) for value in analysis["missing_information"]),
            "analysis.missing_information must be list[str]")
     _check(all(isinstance(value, str) for value in analysis["recommended_checks"]),
            "analysis.recommended_checks must be list[str]")
+    for index, value in enumerate(analysis["missing_information"]):
+        _validate_analysis_value(value, f"analysis.missing_information[{index}]")
+    try:
+        validate_recommendations(analysis["recommended_checks"], field="analysis.recommended_checks")
+    except ValueError as exc:
+        raise ValueError(f"invalid RCA doc: {exc}") from exc
+    for index, value in enumerate(analysis["recommended_checks"]):
+        _validate_analysis_value(value, f"analysis.recommended_checks[{index}]")
 
     evidence_ids: set[str] = set()
     for item in analysis["evidence"]:
         _check(isinstance(item, dict), "analysis.evidence entries must be objects")
         assert isinstance(item, dict)
+        _check(set(item) == {"id", "kind", "value", "provenance"}, "analysis.evidence fields invalid")
         evidence_id = item.get("id")
-        _check(isinstance(evidence_id, str) and evidence_id.startswith("ev-"), "analysis.evidence.id invalid")
+        _check(
+            isinstance(evidence_id, str)
+            and len(evidence_id) <= 64
+            and _EVIDENCE_ID_RE.fullmatch(evidence_id) is not None,
+            "analysis.evidence.id invalid",
+        )
         assert isinstance(evidence_id, str)
         _check(evidence_id not in evidence_ids, "analysis.evidence IDs must be unique")
         evidence_ids.add(evidence_id)
         _check(isinstance(item.get("kind"), str) and bool(item["kind"]), "analysis.evidence.kind invalid")
         _check("value" in item, "analysis.evidence.value missing")
+        _validate_analysis_value(item["value"], f"analysis.evidence.{evidence_id}.value")
         provenance = item.get("provenance")
         _check(isinstance(provenance, dict), "analysis.evidence.provenance must be an object")
         assert isinstance(provenance, dict)
+        _check(
+            set(provenance) == {"source_type", "artifact", "locator", "collector", "observed_at"},
+            "analysis.evidence.provenance fields invalid",
+        )
+        _check(
+            isinstance(provenance["source_type"], str)
+            and provenance["source_type"] in {"artifact", "repository", "connector", "context"},
+            "analysis.evidence.provenance.source_type invalid",
+        )
         for key in ("source_type", "artifact", "locator", "collector", "observed_at"):
-            _check(key in provenance, f"analysis.evidence.provenance.{key} missing")
-        for key in ("source_type", "artifact", "locator", "collector"):
-            _check(isinstance(provenance[key], str), f"analysis.evidence.provenance.{key} must be str")
+            if key == "observed_at":
+                continue
+            _check(
+                isinstance(provenance[key], str)
+                and (key == "artifact" or bool(provenance[key].strip())),
+                f"analysis.evidence.provenance.{key} must be a non-empty str"
+                if key != "artifact"
+                else "analysis.evidence.provenance.artifact must be str",
+            )
+            _validate_analysis_value(provenance[key], f"analysis.evidence.{evidence_id}.provenance.{key}")
         observed_at = provenance["observed_at"]
-        _check(observed_at is None or isinstance(observed_at, str), "analysis.evidence.provenance.observed_at must be str or null")
+        _check(
+            observed_at is None or (isinstance(observed_at, str) and bool(observed_at.strip())),
+            "analysis.evidence.provenance.observed_at must be a non-empty str or null",
+        )
         if isinstance(observed_at, str):
+            _validate_analysis_value(observed_at, f"analysis.evidence.{evidence_id}.provenance.observed_at")
             try:
                 datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
             except ValueError as exc:
@@ -812,52 +925,138 @@ def _validate_analysis(doc: dict) -> None:
     for fact in analysis["observed_facts"]:
         _check(isinstance(fact, dict), "analysis.observed_facts entries must be objects")
         assert isinstance(fact, dict)
+        _check(set(fact) == {"id", "kind", "value", "evidence_refs"}, "analysis.observed_facts fields invalid")
         fact_id = fact.get("id")
-        _check(isinstance(fact_id, str) and fact_id.startswith("fact-"), "analysis.observed_facts.id invalid")
+        _check(
+            isinstance(fact_id, str)
+            and len(fact_id) <= 64
+            and _FACT_ID_RE.fullmatch(fact_id) is not None,
+            "analysis.observed_facts.id invalid",
+        )
         assert isinstance(fact_id, str)
         _check(fact_id not in fact_ids, "analysis.observed_facts IDs must be unique")
         fact_ids.add(fact_id)
-        _check(isinstance(fact.get("kind"), str) and "value" in fact, "analysis.observed_facts fields invalid")
+        _check(isinstance(fact.get("kind"), str) and bool(fact["kind"]), "analysis.observed_facts fields invalid")
+        _validate_analysis_value(fact["value"], f"analysis.observed_facts.{fact_id}.value")
         refs = fact.get("evidence_refs")
-        _check(isinstance(refs, list) and all(ref in evidence_ids for ref in refs),
+        _check(
+            isinstance(refs, list)
+            and len(refs) <= _MAX_ANALYSIS_LIST_ITEMS
+            and all(isinstance(ref, str) for ref in refs),
+            "analysis.observed_facts evidence_refs must be a list of strings",
+        )
+        assert isinstance(refs, list)
+        _check(all(ref in evidence_ids for ref in refs),
                "analysis.observed_facts contains an unresolved evidence reference")
+        _check(len(refs) == len(set(refs)),
+               "analysis.observed_facts contains duplicate evidence references")
 
     _check(bool(analysis["hypotheses"]), "analysis.hypotheses cannot be empty")
     hypothesis_ids: set[str] = set()
     for hypothesis in analysis["hypotheses"]:
         _check(isinstance(hypothesis, dict), "analysis.hypotheses entries must be objects")
         assert isinstance(hypothesis, dict)
+        _check(
+            set(hypothesis) == {
+                "id", "statement", "source", "support_status", "supporting_evidence_refs",
+                "contradicting_evidence_refs", "confidence", "missing_information", "recommended_checks",
+            },
+            "analysis.hypotheses fields invalid",
+        )
         hypothesis_id = hypothesis.get("id")
-        _check(isinstance(hypothesis_id, str) and hypothesis_id.startswith("hyp-"), "analysis.hypotheses.id invalid")
+        _check(
+            isinstance(hypothesis_id, str)
+            and len(hypothesis_id) <= 64
+            and _HYPOTHESIS_ID_RE.fullmatch(hypothesis_id) is not None,
+            "analysis.hypotheses.id invalid",
+        )
         assert isinstance(hypothesis_id, str)
         _check(hypothesis_id not in hypothesis_ids, "analysis.hypothesis IDs must be unique")
         hypothesis_ids.add(hypothesis_id)
-        _check(isinstance(hypothesis.get("statement"), str) and bool(hypothesis["statement"]),
+        _check(isinstance(hypothesis.get("statement"), str) and bool(hypothesis["statement"].strip()),
                "analysis.hypotheses.statement invalid")
+        _validate_analysis_value(hypothesis["statement"], f"analysis.hypotheses.{hypothesis_id}.statement")
         _check(hypothesis.get("source") in {"deterministic", "llm"}, "analysis.hypotheses.source invalid")
         status = hypothesis.get("support_status")
         _check(status in {"supported", "unsupported", "insufficient_evidence"},
                "analysis.hypotheses.support_status invalid")
         supporting = hypothesis.get("supporting_evidence_refs")
         contradicting = hypothesis.get("contradicting_evidence_refs")
-        _check(isinstance(supporting, list) and all(ref in evidence_ids for ref in supporting),
+        _check(
+            isinstance(supporting, list)
+            and len(supporting) <= _MAX_ANALYSIS_LIST_ITEMS
+            and all(isinstance(ref, str) for ref in supporting),
+            "analysis.hypotheses supporting_evidence_refs must be a list of strings",
+        )
+        assert isinstance(supporting, list)
+        _check(all(ref in evidence_ids for ref in supporting),
                "analysis.hypotheses contains an unresolved supporting evidence reference")
-        _check(isinstance(contradicting, list) and all(ref in evidence_ids for ref in contradicting),
+        _check(len(supporting) == len(set(supporting)),
+               "analysis.hypotheses contains duplicate supporting evidence references")
+        _check(
+            isinstance(contradicting, list)
+            and len(contradicting) <= _MAX_ANALYSIS_LIST_ITEMS
+            and all(isinstance(ref, str) for ref in contradicting),
+            "analysis.hypotheses contradicting_evidence_refs must be a list of strings",
+        )
+        assert isinstance(contradicting, list)
+        _check(all(ref in evidence_ids for ref in contradicting),
                "analysis.hypotheses contains an unresolved contradicting evidence reference")
+        _check(len(contradicting) == len(set(contradicting)),
+               "analysis.hypotheses contains duplicate contradicting evidence references")
+        _check(not set(supporting) & set(contradicting),
+               "analysis.hypotheses cannot support and contradict the same evidence")
         _check(status != "supported" or bool(supporting), "supported hypothesis must reference evidence")
+        _check(status != "supported" or not contradicting, "supported hypothesis cannot contradict evidence")
         confidence = hypothesis.get("confidence")
         _check(isinstance(confidence, dict), "analysis.hypotheses.confidence must be an object")
         assert isinstance(confidence, dict)
+        _check(set(confidence) == {"band", "score", "reasons"}, "analysis.hypotheses.confidence fields invalid")
         _check(confidence.get("band") in CONFIDENCES, "analysis.hypotheses.confidence.band invalid")
         score = confidence.get("score")
-        _check(type(score) is float and 0.0 <= score <= 1.0, "analysis.hypotheses.confidence.score invalid")
-        _check(isinstance(confidence.get("reasons"), list)
-               and all(isinstance(reason, str) for reason in confidence["reasons"]),
-               "analysis.hypotheses.confidence.reasons must be list[str]")
+        _check(
+            (type(score) is int or type(score) is float)
+            and math.isfinite(float(score))
+            and 0.0 <= float(score) <= 1.0,
+            "analysis.hypotheses.confidence.score invalid",
+        )
+        reasons = confidence.get("reasons")
+        _check(
+            isinstance(reasons, list)
+            and len(reasons) <= _MAX_ANALYSIS_LIST_ITEMS
+            and all(isinstance(reason, str) and bool(reason.strip()) for reason in reasons),
+            "analysis.hypotheses.confidence.reasons must be a list of non-empty strings",
+        )
+        assert isinstance(reasons, list)
+        for index, reason in enumerate(reasons):
+            _validate_analysis_value(reason, f"analysis.hypotheses.{hypothesis_id}.confidence.reasons[{index}]")
         for key in ("missing_information", "recommended_checks"):
-            _check(isinstance(hypothesis.get(key), list)
-                   and all(isinstance(value, str) for value in hypothesis[key]),
-                   f"analysis.hypotheses.{key} must be list[str]")
+            values = hypothesis.get(key)
+            _check(
+                isinstance(values, list)
+                and len(values) <= _MAX_ANALYSIS_LIST_ITEMS
+                and all(isinstance(value, str) for value in values),
+                f"analysis.hypotheses.{key} must be list[str]",
+            )
+            assert isinstance(values, list)
+            for index, value in enumerate(values):
+                _validate_analysis_value(value, f"analysis.hypotheses.{hypothesis_id}.{key}[{index}]")
+        try:
+            validate_recommendations(hypothesis["recommended_checks"], field="analysis.hypotheses.recommended_checks")
+        except ValueError as exc:
+            raise ValueError(f"invalid RCA doc: {exc}") from exc
+
+    primary = analysis["hypotheses"][0]
+    _check(primary["statement"] == doc["root_cause"]["hypothesis"],
+           "analysis primary hypothesis must match root_cause.hypothesis")
+    _check(primary["confidence"]["band"] == doc["root_cause"]["confidence"],
+           "analysis primary confidence must match root_cause.confidence")
+    _check(primary["source"] == ("llm" if doc["meta"]["engine"] in {"llm", "merged"} else "deterministic"),
+           "analysis primary source must match meta.engine")
+    _check(primary["missing_information"] == analysis["missing_information"],
+           "analysis primary missing_information must match analysis summary")
+    _check(primary["recommended_checks"] == analysis["recommended_checks"],
+           "analysis primary recommended_checks must match analysis summary")
 
 
 def _validate_timeline(timeline: object) -> None:

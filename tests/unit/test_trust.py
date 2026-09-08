@@ -43,6 +43,38 @@ def test_github_fork_is_detected_from_event(tmp_path):
     assert source == "fork_pr"
 
 
+def test_detected_github_fork_cannot_be_blessed_by_explicit_profile(tmp_path):
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({
+        "pull_request": {
+            "head": {"repo": {"full_name": "contributor/fork"}},
+            "base": {"repo": {"full_name": "owner/repository"}},
+        }
+    }), encoding="utf-8")
+
+    assert resolve_source_class(
+        explicit="trusted_branch",
+        configured="trusted_branch",
+        environment={
+            "GITHUB_EVENT_NAME": "pull_request",
+            "GITHUB_EVENT_PATH": str(event),
+        },
+    ) == "fork_pr"
+
+
+def test_malformed_pull_request_event_cannot_be_blessed_by_explicit_profile(tmp_path):
+    event = tmp_path / "event.json"
+    event.write_text("{}", encoding="utf-8")
+
+    assert resolve_source_class(
+        explicit="trusted_branch",
+        environment={
+            "GITHUB_EVENT_NAME": "pull_request_target",
+            "GITHUB_EVENT_PATH": str(event),
+        },
+    ) == "fork_pr"
+
+
 def test_canonical_source_class_env_precedes_legacy_alias(capsys):
     assert resolve_source_class(environment={"HOUND_SOURCE_CLASS": "fork_pr", "TH_SOURCE_CLASS": "local_artifact"}) == "fork_pr"
     assert resolve_source_class(environment={"TH_SOURCE_CLASS": "local_artifact"}) == "local_artifact"

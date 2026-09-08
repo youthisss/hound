@@ -1,0 +1,9 @@
+error[0m] [0m[0m/home/travis/build/akka/akka/akka-cluster-sharding/src/main/scala/akka/cluster/sharding/protobuf/ClusterShardingMessageSerializer.scala:369:9: value addFailed is not a member of akka.cluster.sharding.protobuf.msg.ClusterShardingMessages.ShardRegionStats.Builder[0m
+[0m[[0m[31merror[0m] [0m[0m      b.addFailed(sid).build()[0m
+[0m[[0m[31merror[0m] [0m[0m        ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/travis/build/akka/akka/akka-cluster-sharding/src/main/scala/akka/cluster/sharding/protobuf/ClusterShardingMessageSerializer.scala:381:38: value getFailedList is not a member of akka.cluster.sharding.protobuf.msg.ClusterShardingMessages.ShardRegionStats[0m
+[0m[[0m[31merror[0m] [0m[0m    val failed: Set[String] = parsed.getFailedList.asScala.toSet[0m
+[0m[[0m[31merror[0m] [0m[0m                                     ^[0m
+[0m[[0m[31merror[0m] [0m[0mtwo errors found[0m
+[0m[[0m[31merror[0m] [0m[0m(akka-cluster-sharding / Compile / [31mcompileIncremental[0m) Compilation failed[0m
+[0m[[0m[31merror[0m] [0m[0mTotal time: 304 s, completed Jul 29, 2019 8:32:10 AM[0m

@@ -93,6 +93,12 @@ def test_log_analyze_uses_shared_service(tmp_path, monkeypatch, capsys):
     )
     document["failure"].update(stage="test", kind="test_failure")
     document["root_cause"].update(hypothesis="failure", confidence="high", fix_suggestion="fix it")
+    document["analysis"]["hypotheses"][0].update(
+        statement="failure",
+        confidence={"band": "high", "score": 0.9, "reasons": ["fixture evidence"]},
+        recommended_checks=["fix it"],
+    )
+    document["analysis"]["recommended_checks"] = ["fix it"]
     document["triage"]["severity"] = "high"
 
     def fake_analyze(log_path, output_dir, **kwargs):

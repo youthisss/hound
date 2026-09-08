@@ -1,0 +1,16 @@
+{
+  "eval_case_version": "1.0",
+  "id": "held-out-ci-failure-variant",
+  "artifact": "ci-failure-variant.log",
+  "expected": {
+    "stage": "ci",
+    "kind": "ci_failure",
+    "primary_event": {"stage": "ci", "kind": "ci_failure"},
+    "failed_tests": [],
+    "stack_frames": [],
+    "severity_range": ["high"],
+    "duplicate_group": null,
+    "redactions": [],
+    "is_failure": true
+  }
+}

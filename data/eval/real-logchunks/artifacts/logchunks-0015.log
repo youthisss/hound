@@ -1,0 +1,85 @@
+003+ 
+
+004+ Warning: socket_bind(): unable to bind address [98]: Address already in use in /home/travis/build/php/php-src/ext/sockets/tests/socket_recvmsg.php on line 8
+
+005+ err
+
+003- bool(true)
+
+004- creating receive socket
+
+005- resource(%d) of type (Socket)
+
+006- bool(true)
+
+007- int(14)
+
+008- Array
+
+009- (
+
+010-     [name] => Array
+
+011-         (
+
+012-             [family] => %d
+
+013-             [addr] => [REDACTED:ipv6_address]
+
+014-             [port] => 7001
+
+015-             [flowinfo] => 0
+
+016-             [scope_id] => 0
+
+017-         )
+
+018- 
+
+019-     [control] => Array
+
+020-         (
+
+021-             [0] => Array
+
+022-                 (
+
+023-                     [level] => %d
+
+024-                     [type] => %d
+
+025-                     [data] => Array
+
+026-                         (
+
+027-                             [addr] => [REDACTED:ipv6_address]
+
+028-                             [ifindex] => %d
+
+029-                         )
+
+030- 
+
+031-                 )
+
+032- 
+
+033-         )
+
+034- 
+
+035-     [iov] => Array
+
+036-         (
+
+037-             [0] => testing packet
+
+038-         )
+
+039- 
+
+040-     [flags] => 0
+
+041- )
+========DONE========
+FAIL recvmsg(): basic test [ext/sockets/tests/socket_recvmsg.phpt]

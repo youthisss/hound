@@ -1,0 +1,2 @@
+standard: Use JavaScript Standard Style (https://github.com/feross/standard) 
+  /home/travis/build/jlord/git-it-electron/menus/darwin-menu.js:2:31: Missing space before function parentheses.

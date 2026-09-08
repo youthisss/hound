@@ -1,0 +1,16 @@
+Running ‘test-all.R’ [9s/15s]
+ ERROR
+Running the tests in ‘tests/test-all.R’ failed.
+Last 13 lines of output:
+  Component "C": Component "D": Modes: character, list
+  Component "C": Component "D": Lengths: 1, 2
+  Component "C": Component "D": names for current but not for target
+  Component "C": Component "D": target is character, current is list
+  Component "C": Component "G": Modes: character, list
+  Component "C": Component "G": Lengths: 1, 2
+  Component "C": Component "G": names for current but not for target
+  Component "C": Component "G": target is character, current is list
+  
+  ══ testthat results  ═══════════════════════════════════════════════════════════
+  [ OK: 797 | SKIPPED: 0 | WARNINGS: 0 | FAILED: 1 ]
+  1. Failure: Choices are correctly assigned names (@test-bootstrap.r#138)

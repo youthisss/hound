@@ -20,11 +20,16 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
+from hound.fsio import atomic_write, read_bounded_text
 from hound.qa.model import INSUFFICIENT_HISTORY, NormalizedTestResult
+from hound.pathutil import path_has_symlink
 from hound.state_recovery import preserve_corrupt_sqlite
 
 HISTORY_SCHEMA_VERSION = 1
 DEFAULT_RETENTION_DAYS = 90
+MAX_HISTORY_EXPORT_ROWS = 100_000
+MAX_HISTORY_EXPORT_BYTES = 64 * 1024 * 1024
+MAX_HISTORY_IMPORT_BYTES = 64 * 1024 * 1024
 _LOCK_RETRIES = 10
 _LOCK_RETRY_DELAY = 0.05
 
@@ -95,7 +100,7 @@ def connect(
     read_only: bool = False,
 ) -> Iterator[sqlite3.Connection]:
     store = Path(store_path)
-    if store.is_symlink() or store.parent.is_symlink():
+    if path_has_symlink(store) or store.is_symlink():
         raise ValueError("history store must not use symlinks")
     timeout = _remaining_timeout(deadline)
     if read_only:
@@ -104,6 +109,8 @@ def connect(
         connection = sqlite3.connect(f"file:{store.resolve().as_posix()}?mode=ro", uri=True, timeout=timeout)
     else:
         store.parent.mkdir(parents=True, exist_ok=True)
+        if path_has_symlink(store) or store.is_symlink():
+            raise ValueError("history store must not use symlinks")
         connection = sqlite3.connect(store, timeout=timeout)
     connection.row_factory = sqlite3.Row
     connection.execute(f"PRAGMA busy_timeout={int(timeout * 1000)}")
@@ -357,8 +364,11 @@ def export_history(store_path: str | Path, output_path: str | Path) -> dict:
         rows = connection.execute(
             "SELECT suite, test, status, attempt, duration_ms, runner, commit_sha, branch, "
             "environment, failure_signature, run_id, evidence_id, recorded_at "
-            "FROM test_results ORDER BY recorded_at, suite, test"
+            "FROM test_results ORDER BY recorded_at, suite, test LIMIT ?"
+            , (MAX_HISTORY_EXPORT_ROWS + 1,)
         ).fetchall()
+    if len(rows) > MAX_HISTORY_EXPORT_ROWS:
+        raise ValueError(f"history export exceeds {MAX_HISTORY_EXPORT_ROWS} rows")
     records = [{key: row[key] for key in row.keys()} for row in rows]
     manifest = {
         "export_version": "1.0",
@@ -366,24 +376,31 @@ def export_history(store_path: str | Path, output_path: str | Path) -> dict:
         "count": len(records),
         "records": records,
     }
+    serialized = json.dumps(manifest, indent=2, sort_keys=True)
+    if len(serialized.encode("utf-8")) > MAX_HISTORY_EXPORT_BYTES:
+        raise ValueError(f"history export exceeds {MAX_HISTORY_EXPORT_BYTES} bytes")
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+    atomic_write(target, serialized)
     return manifest
 
 
 def import_history(store_path: str | Path, input_path: str | Path) -> int:
     """Upsert records from an exported manifest; returns the number imported."""
     source = Path(input_path)
-    if source.is_symlink() or source.stat().st_size > 64 * 1024 * 1024:
+    if source.is_symlink():
         raise ValueError("history import must not use symlinks and must be bounded")
     try:
-        manifest = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        manifest = json.loads(read_bounded_text(source, MAX_HISTORY_IMPORT_BYTES, encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError(f"could not read history import: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError("history import root must be an object")
     records = manifest.get("records")
     if not isinstance(records, list):
         raise ValueError("history import must contain a 'records' list")
+    if len(records) > MAX_HISTORY_EXPORT_ROWS:
+        raise ValueError(f"history import exceeds {MAX_HISTORY_EXPORT_ROWS} records")
     results: list[NormalizedTestResult] = []
     for index, record in enumerate(records):
         if not isinstance(record, dict):

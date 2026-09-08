@@ -86,3 +86,45 @@ def test_delivery_ledger_preserves_corrupt_database(tmp_path):
         DeliveryLedger(path)
     recovery = next(tmp_path.glob("deliveries.sqlite3.corrupt-*"))
     assert (recovery / "deliveries.sqlite3").read_bytes() == b"not a sqlite database"
+
+
+def test_delivery_admin_listing_and_explicit_retry(tmp_path):
+    ledger = DeliveryLedger(tmp_path / "deliveries.sqlite3")
+    assert ledger.reserve("incident", "jira") is True
+    ledger.fail("incident", "jira", "rejected before creation")
+    rows = ledger.list_records(state="failed", incident_key="incident")
+    assert len(rows) == 1
+    assert rows[0].destination == "jira"
+    assert ledger.retry_failed("incident", "jira") is True
+    assert ledger.get("incident", "jira").state == "pending"
+    assert ledger.retry_failed("incident", "jira") is False
+
+
+def test_reconcile_rejects_known_failed_outcome(tmp_path):
+    ledger = DeliveryLedger(tmp_path / "deliveries.sqlite3")
+    assert ledger.reserve("incident", "github") is True
+    ledger.fail("incident", "github", "not created")
+    with pytest.raises(ValueError, match="only unknown"):
+        ledger.reconcile("incident", "github", "issue-1")
+
+
+def test_external_id_is_redacted_before_persistence(tmp_path):
+    ledger = DeliveryLedger(tmp_path / "deliveries.sqlite3")
+    assert ledger.reserve("incident", "slack") is True
+    ledger.confirm("incident", "slack", "https://example.test/hook?token=ghp_abcdefghijklmnopqrstuvwxyz123456")
+    record = ledger.get("incident", "slack")
+    assert record is not None
+    assert "ghp_abcdefghijklmnopqrstuvwxyz123456" not in record.external_id
+
+
+def test_operator_mark_failed_requires_verified_absence_and_redacts_reason(tmp_path):
+    ledger = DeliveryLedger(tmp_path / "deliveries.sqlite3")
+    assert ledger.reserve("incident", "github") is True
+    ledger.mark_unknown("incident", "github", "request failed token=ghp_abcdefghijklmnopqrstuvwxyz123456")
+
+    # The low-level transition is intentionally not a confirmation prompt. The
+    # CLI owns that human acknowledgement; this call verifies safe persistence.
+    ledger.mark_failed("incident", "github", "verified absent token=ghp_abcdefghijklmnopqrstuvwxyz123456")
+    record = ledger.get("incident", "github")
+    assert record is not None and record.state == "failed"
+    assert "ghp_abcdefghijklmnopqrstuvwxyz123456" not in record.error

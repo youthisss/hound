@@ -1,0 +1,8 @@
+In file included from ../../text.c:28:0:
+../../util.h:28:14: error: static declaration of ‘memrchr’ follows non-static declaration
+ static void *memrchr(const void *m, int c, size_t n)
+              ^
+In file included from ../../text.c:7:0:
+/usr/include/string.h:121:14: note: previous declaration of ‘memrchr’ was here
+ extern void *memrchr (const void *__s, int __c, size_t __n)
+              ^

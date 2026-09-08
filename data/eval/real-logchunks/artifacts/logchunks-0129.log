@@ -1,0 +1,1 @@
+System process <0.0.0> terminated: {{badmatch,{error,{bad_lib,"Function not found prim_file:read_handle_info_nif/1"}}},[{prim_file,on_load,0,[]},{erl_init,start,2,[]}]}

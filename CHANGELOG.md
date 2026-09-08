@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Explicit delivery, incident, and authenticated server-client administration
+  commands, including reconciliation, verified-absence failure marking, retry of
+  known failures, job polling, and cancellation.
+- A runtime/support matrix and bounded-operation limits documenting tested
+  platform boundaries, local Docker limitations, and external release gates.
+- Persistence hardening for symlinked/corrupt feedback and history stores, plus
+  idempotent QA-history imports and URL-boundary regression coverage.
 - Diagnostic regression quality gates for PR CI, including healthy-log false-positive
   rate, failure detection recall, and explicit sample-support thresholds.
 - Synthetic adversarial corpus cases and IPv6 redaction coverage.
@@ -18,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Clarified the advisory scope of root-cause hypotheses, pattern-based privacy
   limits, and the distinction between synthetic regression metrics and pilot evidence.
+- Corrected TUI surface documentation and acceptance status: QA history import is
+  a bounded local write, active gate rules are previewed before execution, and
+  Context validates stored report readiness as a read-only surface rather than
+  acting as an interactive connector workflow.
 - Reorganized the package into `src/hound`, grouped tests by runtime boundary,
   and grouped documentation under purpose-specific directories.
 - Refreshed README navigation and added a documentation hub plus a runnable demo

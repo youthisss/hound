@@ -1,0 +1,15 @@
+Alamofire_iOS_Tests.TLSEvaluationExpiredLeafCertificateTestCase
+
+  testThatExpiredCertificateRequestSucceedsWhenPinningIntermediateCACertificateWithoutCertificateChainOrHostValidation, [31mAsynchronous wait failed: Exceeded timeout of 5 seconds, with unfulfilled expectations: "https://expired.badssl.com/".[0m
+
+  [36m/Users/travis/build/Alamofire/Alamofire/Tests/TLSEvaluationTests.swift:384[0m
+
+  ```
+
+[38;5;230m
+
+[38;5;230m        [39m[38;5;153mwaitForExpectations[39m[38;5;87m([39m[38;5;153;01mtimeout[39;00m[38;5;87m:[39m[38;5;230m [39m[38;5;230mtimeout[39m[38;5;87m,[39m[38;5;230m [39m[38;5;153;01mhandler[39;00m[38;5;87m:[39m[38;5;230m [39m[38;5;212;01mnil[39;00m[38;5;87m)[39m[38;5;230m
+
+[38;5;230m
+
+[38;5;230m[39m  ```

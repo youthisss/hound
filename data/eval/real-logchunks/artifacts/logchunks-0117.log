@@ -1,0 +1,8 @@
+** (RuntimeError) Line does not match format: '[runhyve](https://runhyve.app) - The Virtual Machines Manager for Bhyve on FreeBSD' Is there a dot at the end?
+    check.exs:32: Awesome.parse_line/1
+    check.exs:224: Awesome.validate_list_item/1
+    check.exs:213: anonymous fn/2 in Awesome.check_list/1
+    (elixir) lib/enum.ex:1755: Enum."-reduce/3-lists^foldl/2-0-"/3
+    check.exs:213: Awesome.check_list/1
+    check.exs:192: Awesome.iterate_content/1
+    check.exs:117: Awesome.test_file/1

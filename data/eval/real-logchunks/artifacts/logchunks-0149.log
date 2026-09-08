@@ -1,0 +1,87 @@
+FAIL: TestAlpha/Meetups (0.00s)
+        repo_test.go:131: expected 'golang auckland, nz' but actual is 'golang baltimore, md'
+        repo_test.go:131: expected 'golang baltimore, md' but actual is 'golang bangalore'
+        repo_test.go:131: expected 'golang bangalore' but actual is 'golang belo horizonte - brazil'
+        repo_test.go:131: expected 'golang belo horizonte - brazil' but actual is 'golang boston'
+        repo_test.go:131: expected 'golang boston' but actual is 'golang bulgaria'
+        repo_test.go:131: expected 'golang bulgaria' but actual is 'golang cardiff, uk'
+        repo_test.go:131: expected 'golang cardiff, uk' but actual is 'golang copenhagen'
+        repo_test.go:131: expected 'golang copenhagen' but actual is 'golang dc, arlington, va'
+        repo_test.go:131: expected 'golang dc, arlington, va' but actual is 'golang dorset, uk'
+        repo_test.go:131: expected 'golang dorset, uk' but actual is 'golang hamburg - germany'
+        repo_test.go:131: expected 'golang hamburg - germany' but actual is 'golang israel'
+        repo_test.go:131: expected 'golang israel' but actual is 'golang joinville - brazil'
+        repo_test.go:131: expected 'golang joinville - brazil' but actual is 'golang korea'
+        repo_test.go:131: expected 'golang korea' but actual is 'golang lima - peru'
+        repo_test.go:131: expected 'golang lima - peru' but actual is 'golang lyon'
+        repo_test.go:131: expected 'golang lyon' but actual is 'golang marseille'
+        repo_test.go:131: expected 'golang marseille' but actual is 'golang melbourne'
+        repo_test.go:131: expected 'golang melbourne' but actual is 'golang mountain view'
+        repo_test.go:131: expected 'golang mountain view' but actual is 'golang new york'
+        repo_test.go:131: expected 'golang new york' but actual is 'golang paris'
+        repo_test.go:131: expected 'golang paris' but actual is 'golang pune'
+        repo_test.go:131: expected 'golang pune' but actual is 'golang singapore'
+        repo_test.go:131: expected 'golang singapore' but actual is 'golang stockholm'
+        repo_test.go:131: expected 'golang stockholm' but actual is 'golang sydney, au'
+        repo_test.go:131: expected 'golang sydney, au' but actual is 'golang são paulo - brazil'
+        repo_test.go:131: expected 'golang são paulo - brazil' but actual is 'golang taipei'
+        repo_test.go:131: expected 'golang taipei' but actual is 'golang vancouver, bc'
+        repo_test.go:131: expected 'golang vancouver, bc' but actual is 'golang казань'
+        repo_test.go:131: expected 'golang казань' but actual is 'golang москва'
+        repo_test.go:131: expected 'golang москва' but actual is 'golang питер'
+        repo_test.go:131: expected 'golang питер' but actual is 'gosf - san francisco, ca'
+        repo_test.go:131: expected 'gosf - san francisco, ca' but actual is 'istanbul golang'
+        repo_test.go:131: expected 'istanbul golang' but actual is 'seattle go programmers'
+        repo_test.go:131: expected 'seattle go programmers' but actual is 'ukrainian golang user groups'
+        repo_test.go:131: expected 'ukrainian golang user groups' but actual is 'utah go user group'
+        repo_test.go:131: expected 'utah go user group' but actual is 'women who go - san francisco, ca'
+        repo_test.go:131: expected 'women who go - san francisco, ca' but actual is 'golang auckland, nz'
+        repo_test.go:135: expected order is:
+            basel go meetup
+            brisbane gophers
+            canberra gophers
+            go language nyc
+            go london user group
+            go toronto
+            go user group atlanta
+            gobridge, san francisco, ca
+            gojakarta
+            golang amsterdam
+            golang argentina
+            golang auckland, nz
+            golang baltimore, md
+            golang bangalore
+            golang belo horizonte - brazil
+            golang boston
+            golang bulgaria
+            golang cardiff, uk
+            golang copenhagen
+            golang dc, arlington, va
+            golang dorset, uk
+            golang hamburg - germany
+            golang israel
+            golang joinville - brazil
+            golang korea
+            golang lima - peru
+            golang lyon
+            golang marseille
+            golang melbourne
+            golang mountain view
+            golang new york
+            golang paris
+            golang pune
+            golang singapore
+            golang stockholm
+            golang sydney, au
+            golang são paulo - brazil
+            golang taipei
+            golang vancouver, bc
+            golang казань
+            golang москва
+            golang питер
+            gosf - san francisco, ca
+            istanbul golang
+            seattle go programmers
+            ukrainian golang user groups
+            utah go user group
+            women who go - san francisco, ca
