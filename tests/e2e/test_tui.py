@@ -280,11 +280,12 @@ def test_tui_parallel_analyze_all_respects_llm_call_cap(tmp_path, monkeypatch):
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     monkeypatch.setattr("hound.analyze.llm._make_client", lambda _config: client)
-    monkeypatch.setenv("TH_API_KEY", "test-key")
+    monkeypatch.setenv("HOUND_API_KEY", "test-key")
     app = RcaTui(
         logs_dir=str(tmp_path),
         out_dir=str(tmp_path / "out"),
         offline=False,
+        model="test-model",
         jobs=6,
         max_llm_calls=1,
         no_dedup=True,
