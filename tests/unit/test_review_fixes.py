@@ -676,6 +676,15 @@ def test_docker_default_workdir_is_writable_by_runtime_user():
     assert 'image: "Dockerfile.action"' in action
 
 
+def test_repository_security_scan_fails_on_high_severity_findings():
+    root = __import__("pathlib").Path(__file__).resolve().parents[2]
+    workflow = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    scan = workflow.split("- name: Scan repository and generated artifacts", 1)[1].split("\n  extended:", 1)[0]
+    assert 'scanners: vuln,secret' in scan
+    assert 'severity: HIGH,CRITICAL' in scan
+    assert 'exit-code: "1"' in scan
+
+
 def test_atomic_report_write_ignores_predictable_temp_path(tmp_path):
     from hound.output.report import _atomic_write
 

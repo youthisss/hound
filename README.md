@@ -170,8 +170,18 @@ hound console --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
 | `A` | **Analyze All** | Sequentially or in parallel analyze all visible logs |
 | `b` | **Browse Folder** | Open interactive filesystem directory picker |
 | `r` | **Refresh** | Reload log listing and recent analysis runs |
+| `h` | **Home** | Return to the default Home view |
+| `f` / `l` | **Artifacts / Results** | Open the artifact or stored-results workspace |
+| `y` / `i` | **Quality / Context** | Open QA workflows or read-only report context |
+| `m` | **Sidebar** | Focus the navigation sidebar |
 | `s` | **Settings** | Configure LLM providers, models, API keys, base URLs, and offline mode |
+| `v` | **Feedback** | Review the currently opened stored run |
 | `o` | **Toggle Offline** | Switch between local deterministic rules and online model analysis |
+| `space` | **Toggle Selection** | Select or deselect the focused artifact or stored run |
+| `z` / `d` | **Select / Deselect All** | Change selection for the active workspace |
+| `p` / `n` | **Previous / Next** | Change page or move between opened results, depending on context |
+| `x` / `X` | **Clear** | Clear one stored run or all selected runs with confirmation |
+| `g` | **Focus Filter** | Focus the filter for the active list workspace |
 | `c` | **Copy Report** | Copy generated Markdown report to clipboard |
 | `e` | **Copy Ticket** | Copy formatted ticket draft to clipboard |
 | `?` | **Help** | Display keyboard shortcut reference |
@@ -234,8 +244,10 @@ The tested platform/runtime boundaries are maintained in
 | Log capture | Yes | No | No | No |
 | Server lifecycle | Yes | No | N/A | No |
 
-The console workspaces are Home, Artifacts, Results, Quality, Context, Settings,
-and Feedback. It can inspect delivery history and connector audits, but never
+The console opens on Home and provides four navigation workspaces: Artifacts,
+Results, Quality, and Context. Settings is an overlay, Feedback is a modal, and
+the Overview, Report, Ticket, and Raw log tabs appear only after a run is
+opened. The console can inspect delivery history and connector audits, but never
 sends external delivery or constructs an infrastructure mutation command. QA
 history export, feedback export, delivery reconciliation, and incident
 invalidation are CLI-only administrative operations.
