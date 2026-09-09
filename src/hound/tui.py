@@ -182,9 +182,7 @@ Screen { background: #000000; color: #ffffff; }
     height: 3;
     padding: 0;
     margin: 0;
-    background: #000000;
     border: tall #ffffff;
-    color: #ffffff;
 }
 #nav-artifacts, #nav-qa { margin-right: 1; }
 #nav-results, #nav-investigation { margin-right: 0; }
@@ -210,15 +208,9 @@ Screen { background: #000000; color: #ffffff; }
     min-width: 14;
     height: 3;
     margin: 0 1 0 0;
-    background: #000000;
-    color: #ffffff;
     border: tall #ffffff;
     content-align: center middle;
     text-align: center;
-}
-#back-button:hover {
-    background: #000000;
-    color: #ffffff;
 }
 #back-button:focus {
     border: tall #ffffff;
@@ -251,14 +243,21 @@ Select:focus > SelectCurrent, SelectCurrent:focus { border: tall #ffffff; }
 Select:focus > SelectCurrent Static#label, SelectCurrent:focus Static#label { color: #ffffff; text-style: bold; }
 Select:focus > SelectCurrent .arrow, SelectCurrent:focus .arrow { color: #ffffff; }
 Button { background: #000000; color: #ffffff; border: tall #ffffff; padding: 0 1; }
-Button:hover { background: #000000; color: #ffffff; }
-Button:focus { border: tall #ffffff; text-style: bold; }
-Button:disabled { background: #000000; border: tall #ffffff; color: #ffffff; }
-Button.-primary { background: #ffffff; border: tall #ffffff; color: #000000; text-style: bold; }
-Button.-primary:hover { background: #ffffff; }
-Button.-warning { background: #000000; border: tall #ffffff; color: #ffffff; }
-#open-settings { background: #000000; color: #ffffff; margin: 1 0 0 0; }
-#browse-dir { background: #000000; color: #ffffff; margin-right: 1; }
+Button:hover, Button:focus, Button.-active, Button.is-active {
+    background: #ffffff;
+    color: #000000;
+    border: tall #ffffff;
+}
+Button:focus { text-style: bold; }
+Button:disabled {
+    background: #2b2b2b;
+    border: tall #ffffff;
+    color: #b8b8b8;
+}
+Button.-primary, Button.-warning { background: #000000; border: tall #ffffff; color: #ffffff; }
+Button.-primary { text-style: bold; }
+#open-settings { margin: 1 0 0 0; }
+#browse-dir { margin-right: 1; }
 #load-dir { margin-right: 0; }
 .sidebar-button { width: 100%; height: 3; margin: 1 0 0 0; }
 #directory-actions { width: 100%; height: 3; margin-top: 1; }
@@ -433,7 +432,7 @@ MarkdownFence { background: #000000; color: #ffffff; }
     height: 3;
     margin: 0 1;
 }
-#clear-selected, #clear-all { background: #000000; border: tall #ffffff; color: #ffffff; }
+#clear-selected, #clear-all { border: tall #ffffff; }
 #qa-scroll, #investigation-scroll { height: 1fr; margin-top: 1; }
 .workspace-summary {
     height: auto;
@@ -491,14 +490,20 @@ MarkdownFence { background: #000000; color: #ffffff; }
 }
 #qa-result { height: auto; padding: 1 0; color: #ffffff; background: #000000; border: none; margin-bottom: 1; }
 #qa-history-list { height: 10; min-height: 4; border: solid #ffffff; background: #000000; margin: 0 0 1 0; }
-#qa-advanced { height: auto; margin-bottom: 1; border: tall #ffffff; background: #000000; }
-#qa-advanced > CollapsibleTitle {
+Collapsible {
+    height: auto;
+    border: tall #ffffff;
+    background: #000000;
+}
+Collapsible.-collapsed { padding: 0; }
+Collapsible > CollapsibleTitle {
     width: 100%;
     color: #ffffff;
     text-style: bold;
     content-align: center middle;
     text-align: center;
 }
+#qa-advanced { margin-bottom: 1; }
 #context-actions { height: 3; min-height: 3; margin: 1 0 0 0; }
 #context-status { height: auto; width: 100%; color: #ffffff; padding: 0; background: #000000; margin-top: 1; }
 #investigation { height: auto; color: #ffffff; padding: 0; background: #000000; border: none; }
@@ -511,17 +516,22 @@ ClearResultsScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
 #clear-cancel { min-width: 14; margin-right: 1; }
 #clear-confirm { min-width: 18; }
 FeedbackScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
-#feedback-dialog { width: 96; max-width: 100%; height: auto; max-height: 100%; border: solid #ffffff; background: #000000; padding: 1 2; overflow-y: auto; scrollbar-size-vertical: 0; }
+#feedback-dialog { width: 110; max-width: 100%; height: auto; max-height: 100%; border: solid #ffffff; background: #000000; padding: 1 2; overflow-y: auto; scrollbar-size-vertical: 0; }
 #feedback-title { height: auto; color: #ffffff; text-style: bold; }
 #feedback-validation-banner { width: 100%; height: auto; padding: 0; background: #000000; border: none; margin-bottom: 1; }
 #feedback-description { height: auto; color: #ffffff; margin: 0 0 1 0; }
 #feedback-form { width: 100%; height: auto; }
 .feedback-form-row { width: 100%; height: auto; margin-bottom: 1; }
 .feedback-form-row.feedback-last-row { margin-bottom: 0; }
-.feedback-field { width: 1fr; height: auto; margin: 0 1 1 0; }
-.feedback-form-row .feedback-field { margin-bottom: 0; }
+.feedback-field { width: 1fr; height: auto; margin: 0 2 0 0; }
+.feedback-field.feedback-field-wide { width: 2fr; }
+.feedback-field.feedback-field-compact { width: 1fr; }
 .feedback-field:last-of-type { margin-right: 0; }
-.feedback-field .field-label { height: 1; margin: 0; }
+.feedback-field .field-label {
+    height: 1;
+    margin: 0 0 1 0;
+    content-align: left top;
+}
 .feedback-field Input { width: 100%; height: 3; }
 .feedback-field Select { width: 100%; height: 3; }
 #feedback-actions { width: 100%; height: 4; margin-top: 1; padding: 0; border-top: solid #ffffff; }
@@ -603,7 +613,7 @@ SettingsScreen { background: #000000; }
     background: #000000;
     border: none;
 }
-#settings-offline { width: 100%; margin: 0 0 1 0; background: #000000; border: tall #ffffff; color: #ffffff; }
+#settings-offline { width: 100%; margin: 0 0 1 0; border: tall #ffffff; }
 #settings-offline.is-llm { background: #ffffff; border: tall #ffffff; color: #000000; text-style: bold; }
 #settings-page Input { width: 100%; height: 3; }
 #settings-page Select { width: 100%; height: 3; }
@@ -625,14 +635,7 @@ SettingsScreen { background: #000000; }
 #connection-actions Button { width: 1fr; margin-right: 1; }
 #connection-actions Button:last-of-type { margin-right: 0; }
 #custom-provider-title { color: #ffffff; text-style: bold; }
-#settings-custom-provider { height: auto; margin: 0 0 1 0; background: #000000; border: tall #ffffff; }
-#settings-custom-provider > CollapsibleTitle {
-    width: 100%;
-    color: #ffffff;
-    text-style: bold;
-    content-align: center middle;
-    text-align: center;
-}
+#settings-custom-provider { margin: 0 0 1 0; }
 #settings-actions { width: 100%; height: 5; align-horizontal: right; margin-top: 1; padding-top: 1; border-top: solid #ffffff; }
 #settings-add-provider { width: 100%; margin: 0 0 1 0; }
 .custom-field { margin: 0 0 1 0; }
@@ -690,6 +693,7 @@ SettingsScreen { background: #000000; }
 .short #workspace-nav { height: 7; margin-top: 0; }
 .short .workspace-nav-row, .short #workspace-nav Button { height: 3; }
 .short .field-label { height: 1; margin: 0; padding-top: 0; }
+.short .feedback-field .field-label { height: 1; margin-bottom: 1; }
 .short #workflow-status { height: 1; }
 .short .sidebar-button { margin-top: 0; }
 .short .sidebar-input { margin: 0; }
@@ -714,12 +718,11 @@ Screen, SettingsScreen, ClearResultsScreen, FeedbackScreen, HelpScreen {
     background: #000000;
     color: #ffffff;
 }
-#app-title, #sidebar, #workflow-status, Input, SelectCurrent, Button, Button:disabled,
+#app-title, #sidebar, #workflow-status, Input, SelectCurrent,
 #home-next, .home-card, #home-guides .home-guide, #home-formats, Tabs,
 .result-scroll, Markdown, MarkdownBlockQuote, MarkdownFence, #qa-status, #qa-result,
 #investigation, #clear-dialog, #feedback-dialog, #help-dialog, #settings-panel,
-#settings-trust, #shortcutbar, #statusbar, #back-button, #open-settings,
-#browse-dir, #clear-selected, #clear-all, #settings-offline {
+#settings-trust, #shortcutbar, #statusbar {
     background: #000000;
     color: #ffffff;
 }
@@ -735,18 +738,25 @@ Screen, SettingsScreen, ClearResultsScreen, FeedbackScreen, HelpScreen {
 }
 #app-title { border-bottom: tall #ffffff; }
 #sidebar { border-right: solid #ffffff; }
-#workspace-nav Button { background: #000000; color: #ffffff; border: tall #ffffff; }
+#workspace-nav Button { border: tall #ffffff; }
 #workspace-nav Button, #back-button, Input, SelectCurrent, Button,
 #settings-offline, #clear-selected, #clear-all { border: tall #ffffff; }
 Input, SelectCurrent { background: #000000; }
 Input:focus, Select:focus > SelectCurrent, SelectCurrent:focus { border: tall #ffffff; color: #ffffff; }
-Button:hover, Button.-warning, #workspace-nav Button.is-active { background: #ffffff; color: #000000; }
-Button.-primary, #settings-offline.is-llm { background: #ffffff; border: tall #ffffff; color: #000000; }
-Button:disabled, Button.-primary:disabled, Button.-warning:disabled,
-#workspace-nav Button:disabled {
-    background: #111111;
+Button, Button.-primary, Button.-warning { background: #000000; color: #ffffff; }
+Button:hover, Button:focus, Button.-active, Button.is-active,
+#workspace-nav Button:hover, #workspace-nav Button:focus,
+#workspace-nav Button.is-active, #settings-offline.is-llm {
+    background: #ffffff;
+    color: #000000;
     border: tall #ffffff;
-    color: #8f8f8f;
+}
+Button:disabled, Button.-primary:disabled, Button.-warning:disabled,
+#workspace-nav Button:disabled, Button.is-active:disabled,
+#settings-offline.is-llm:disabled {
+    background: #2b2b2b;
+    border: tall #ffffff;
+    color: #b8b8b8;
     opacity: 1;
     text-opacity: 1;
     text-style: none;
@@ -768,17 +778,16 @@ ListItem.-highlight, #artifact-workspace-list > ListItem.-highlight,
 }
 Underline > .underline--bar { color: #ffffff; background: #ffffff; }
 #back-button, #show-sidebar {
-    background: #000000;
     border: tall #ffffff;
-    color: #ffffff;
     text-style: bold;
 }
-#back-button:hover, #show-sidebar:hover { background: #ffffff; color: #000000; }
+#back-button:hover, #back-button:focus,
+#show-sidebar:hover, #show-sidebar:focus { background: #ffffff; color: #000000; }
 #back-button:disabled, #clear-selected:disabled, #clear-all:disabled,
 #settings-offline:disabled {
-    background: #111111;
+    background: #2b2b2b;
     border: tall #ffffff;
-    color: #8f8f8f;
+    color: #b8b8b8;
     text-style: none;
 }
 ClearResultsScreen, FeedbackScreen, HelpScreen { background: rgba(0, 0, 0, 0.92); }
@@ -1791,10 +1800,20 @@ class SettingsScreen(ModalScreen[None]):
                 else "Read-only enrichment: BLOCKED" if not policy.allow_enrichment
                 else "Read-only enrichment: OFF"
             )
+            source_button.set_class(
+                self._source_context and policy.allow_source_context,
+                "is-active",
+            )
+            enrich_button.set_class(
+                self._enrich and policy.allow_enrichment,
+                "is-active",
+            )
             self._redact = True if self._source_class == "fork_pr" else self._redact
             redact_button.disabled = self._source_class == "fork_pr"
             redact_button.label = self._redaction_label()
             dedup_button.label = self._dedup_label()
+            redact_button.set_class(self._redact, "is-active")
+            dedup_button.set_class(not self._no_dedup, "is-active")
             self._refresh_session_summary()
             self.query_one("#settings-trust", Static).update(
                 _trust_profile_text(
@@ -2103,23 +2122,22 @@ class FeedbackScreen(ModalScreen[None]):
                             )
                 with Horizontal(classes="qa-form-row feedback-form-row"):
                     with Vertical(classes="feedback-field"):
-                        yield Static("Actual kind (optional)", classes="field-label")
+                        yield Static("Actual kind", classes="field-label")
                         yield Select(self._options(sorted(KINDS), blank="Use prediction"), value="", id="feedback-actual-kind")
                     with Vertical(classes="feedback-field"):
-                        yield Static("Actual severity (optional)", classes="field-label")
+                        yield Static("Actual severity", classes="field-label")
                         yield Select(self._options(sorted(SEVERITIES), blank="Use prediction"), value="", id="feedback-actual-severity")
                     with Vertical(classes="feedback-field"):
                         yield Static("Actual owner", classes="field-label")
                         yield Input(placeholder="team or owner", id="feedback-actual-owner")
-                with Horizontal(classes="qa-form-row feedback-form-row"):
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Root cause correction (optional)", classes="field-label")
-                        yield Input(placeholder="corrected root cause or explanation", id="feedback-root-cause-correction")
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Review notes (optional)", classes="field-label")
-                        yield Input(placeholder="audit notes for future QA correlation", id="feedback-notes")
                 with Horizontal(classes="qa-form-row feedback-form-row feedback-last-row"):
-                    with Vertical(classes="feedback-field"):
+                    with Vertical(classes="feedback-field feedback-field-wide"):
+                        yield Static("Root cause correction", classes="field-label")
+                        yield Input(placeholder="corrected root cause or explanation", id="feedback-root-cause-correction")
+                    with Vertical(classes="feedback-field feedback-field-wide"):
+                        yield Static("Review notes", classes="field-label")
+                        yield Input(placeholder="audit notes for future QA correlation", id="feedback-notes")
+                    with Vertical(classes="feedback-field feedback-field-compact"):
                         yield Static("Reviewer", classes="field-label")
                         yield Input(placeholder="reviewer identifier", id="feedback-reviewer")
             with Horizontal(id="feedback-actions"):

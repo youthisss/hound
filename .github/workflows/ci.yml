@@ -104,7 +104,7 @@ jobs:
           severity: HIGH,CRITICAL
           skip-dirs: tests,examples,dist,.venv
           ignore-unfixed: true
-          exit-code: "0"
+          exit-code: "1"
 
   extended:
     if: github.event_name != 'pull_request'

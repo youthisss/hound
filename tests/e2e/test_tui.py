@@ -730,7 +730,7 @@ def test_tui_artifact_workspace_multi_select_and_batch_analyze(tmp_path, monkeyp
             await pilot.pause()
             assert len(app._selected_artifacts) == 5
             assert "5 selected" in str(app.query_one("#artifact-workspace-meta", Static).renderable)
-            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze 5 selected (a)"
+            assert str(app.query_one("#workspace-analyze", Button).label) == "Analyze 5 selected"
             assert not app.query_one("#workspace-analyze", Button).disabled
 
             # Deselect all shortcut
