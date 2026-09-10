@@ -86,3 +86,11 @@ def test_tui_lists_structured_artifacts_alongside_logs(tmp_path):
             assert "TEST" in str(items.children[0].query_one(Static).renderable)
 
     anyio.run(main)
+
+
+def test_tui_artifact_refresh_ignores_unmounted_workspace(tmp_path):
+    from hound.tui import RcaTui
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+
+    app._refresh_artifact_selection()

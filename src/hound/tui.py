@@ -19,6 +19,7 @@ import yaml
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ItemGrid, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from rich.markup import escape as rich_escape
 from rich.text import Text
 from textual.screen import ModalScreen
@@ -3646,10 +3647,11 @@ class RcaTui(App):
 
     def _refresh_artifact_selection(self, changed: list[Path] | None = None) -> None:
         """Update selection in place so ListView retains focus and scrolling."""
-        meta = self.query("#artifact-workspace-meta").first(Static)
-        button = self.query("#workspace-analyze").first(Button)
-        list_view = self.query("#artifact-workspace-list").first(ListView)
-        if meta is None or button is None or list_view is None:
+        try:
+            meta = self.query("#artifact-workspace-meta").first(Static)
+            button = self.query("#workspace-analyze").first(Button)
+            list_view = self.query("#artifact-workspace-list").first(ListView)
+        except NoMatches:
             # Classification workers can finish after the workspace was
             # unmounted. The sidebar state remains useful; there is no mounted
             # artifact view to refresh in that lifecycle window.
