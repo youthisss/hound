@@ -713,3 +713,40 @@ def set_model_config(value: str, config_path: str | Path = DEFAULT_CONFIG_PATH) 
         raise ValueError("config path must not contain symlinked path components")
     atomic_write(path, yaml.safe_dump(data, sort_keys=False))
     return path
+
+
+def set_llm_config_value(key: str, value: str, config_path: str | Path = DEFAULT_CONFIG_PATH) -> Path:
+    """Persist one explicit non-secret LLM setting."""
+    if key == "model":
+        value = value.strip()
+        if not value:
+            raise ValueError("model must not be empty")
+    elif key == "provider":
+        value = _pick_provider(value)
+    else:
+        raise ValueError(f"unsupported LLM setting: {key}")
+
+    path = Path(config_path).expanduser()
+    if path_has_symlink(path) or path.is_symlink():
+        raise ValueError("config path must not contain symlinked path components")
+    data: dict = {}
+    if path.exists():
+        if path.stat().st_size > MAX_CONFIG_BYTES:
+            raise ValueError("config exceeds the 2 MiB limit")
+        parsed = yaml.safe_load(read_bounded_text(path, MAX_CONFIG_BYTES, encoding="utf-8"))
+        if parsed is not None and not isinstance(parsed, dict):
+            raise ValueError(f"config root must be a mapping: {path}")
+        data = parsed or {}
+    llm = data.get("llm")
+    if llm is not None and not isinstance(llm, dict):
+        raise ValueError(f"config llm section must be a mapping: {path}")
+    llm = dict(llm or {})
+    llm[key] = value
+    if key == "provider":
+        llm["model"] = "auto"
+    data["llm"] = llm
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path_has_symlink(path.parent) or path.is_symlink():
+        raise ValueError("config path must not contain symlinked path components")
+    atomic_write(path, yaml.safe_dump(data, sort_keys=False))
+    return path

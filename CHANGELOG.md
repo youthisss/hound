@@ -38,6 +38,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   container/action identity, and public URLs to Hound. This is a breaking rename;
   legacy Python imports and distribution names are not provided.
 
+## [0.4.1] - 2026-09-11
+
+### Added
+- **Configuration Flexibility**: Enhanced `hound config set` to configure both `provider` and `model` explicitly (`set_llm_config_value`).
+- **Interactive TUI Enhancements**:
+  - Live progress animation and responsive workflow status in the sidebar.
+  - Left/right arrow navigation to cycle through results workspace tabs.
+  - Symmetrical spacing and layout alignment for context and connector summaries.
+  - Dedicated stop-analysis keybinding (`x` / `ctrl+x`) and dynamic shortcut bar indication.
+  - Direct artifact analysis from focused item via `Enter` key.
+  - Dedicated Back button (`<--`) behavior and modal screen dismissal with `Escape`.
+
+### Changed
+- Clarified CLI `analyze` and `batch` help strings for supported artifact files and recursive directory scanning.
+- Streamlined QA and Results workspace filters and test history list display.
+
 ## [0.4.0] - 2026-08-07
 
 ### Added

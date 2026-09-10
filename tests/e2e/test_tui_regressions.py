@@ -58,7 +58,7 @@ def test_tui_analyze_all_empty_selection_is_noop(tmp_path):
             await pilot.pause()
             assert not app._analyzing
             assert "No visible logs" in str(app.query_one("#workflow-status", Static).renderable)
-            assert app.query_one("#analyze-all", Button).disabled
+            assert app.query_one("#workspace-analyze-all", Button).disabled
 
     anyio.run(main)
 
