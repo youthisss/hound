@@ -72,8 +72,6 @@ exclude = [
     "/dist",
     "/.vscode",
     "/demo-output",
-    "/examples/demo/**/work",
-    "/examples/demo/**/output",
     "/hound-output",
     "/portfolio-capture-output",
     "/portfolio-redaction-output",

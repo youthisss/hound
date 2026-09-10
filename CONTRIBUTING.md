@@ -33,7 +33,7 @@ Please be respectful, constructive, and collaborative in all communications and 
 
 Tests are classified by their dominant boundary. `unit` tests are fast and
 in-process, `integration` tests exercise filesystems, SQLite, HTTP, Git, or
-component boundaries, and `e2e` tests execute complete CLI, TUI, demo, or Action
+component boundaries, and `e2e` tests execute complete CLI, TUI, evaluator, or Action
 workflows. `slow` may overlap another class; `network` is reserved for real
 external services, not localhost servers.
 
