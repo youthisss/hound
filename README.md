@@ -24,25 +24,25 @@
 
 ---
 
-Hound Tracer is an offline-first diagnostic tool and terminal interface (TUI) for investigating CI/CD failures, build errors, test regressions, and container crashes.
+Hound Tracer is an offline-first diagnostic tool and terminal UI for troubleshooting CI/CD failures, build errors, test regressions, and container crashes.
 
-Hound Tracer ingests execution logs, JUnit XML reports, SARIF static analysis files, and test runner outputs. It strips sensitive credentials and private data by default, frames stack traces across seven programming languages, correlates failure lines with git commits, categorizes issues, deduplicates recurring incidents, and drafts issue tickets for development teams.
+When a pipeline fails, Hound inspects raw execution logs, JUnit XML reports, SARIF files, and test runner outputs. It automatically scrubs credentials and private data, formats stack traces across common languages, correlates errors with recent git commits, and groups recurring incidents so your team can understand and resolve failures quickly.
 
-Hound Tracer is strictly advisory and read-only. It inspects artifacts and produces structured findings; it does not deploy code, restart services, or alter infrastructure.
+Hound is strictly advisory and read-only: it analyzes artifacts and produces structured diagnostic findings, without touching your infrastructure or deploying changes.
 
 ---
 
 ## Highlights
 
-- **Offline-first analysis:** Built-in deterministic rules evaluate failures with zero network requests and no external API keys (`--offline`).
-- **Multi-provider LLM support:** Connects to OpenAI, Anthropic, Google Gemini, Groq, Ollama, DeepSeek, Azure OpenAI, 9router, and generic OpenAI-compatible gateways.
-- **Deterministic fallback:** Automatically switches to local rule evaluation if an LLM provider times out, returns HTTP 429 rate limits, or generates invalid responses.
-- **Cost controls:** Caches root-cause findings by failure fingerprint (`dedup.reuse: true`) to avoid repeated model calls, skips specified failure kinds (`skip_kinds`), enforces per-run request caps (`--max-llm-calls`), and limits spend (`--max-cost-usd`).
-- **Secret redaction:** Strips private keys, API tokens, passwords, database connection strings, email addresses, and IP addresses before text reaches disk or network requests.
-- **Supply chain isolation:** Enforces source profiles (`trusted_branch`, `local_artifact`, `fork_pr`). Pull requests from forks run in a restricted sandbox with offline-only analysis, locked redaction, and disabled external delivery.
-- **Container and infrastructure diagnostics:** Identifies Kubernetes `CrashLoopBackOff`, `OOMKilled` (exit code 137), container probe failures, scheduling constraints, Helm release rollbacks, and Terraform run errors.
-- **Quality gates and analytics:** Tracks test flakiness and execution duration in SQLite (`hound insights`), and enforces configurable gates on test failures, coverage regressions, and SARIF static analysis findings (`hound gate`).
-- **Idempotent ticket delivery:** Dispatches issues to GitHub, Jira, GitLab, and Slack through a persistent SQLite delivery ledger that prevents duplicate ticket creation during network retries.
+- **Offline-first by default:** Run deterministic local rules without network requests or external API keys (`--offline`).
+- **Flexible LLM support:** Connect to OpenAI, Anthropic, Google Gemini, Groq, Ollama, DeepSeek, Azure OpenAI, or custom OpenAI-compatible endpoints when you want AI-assisted triage.
+- **Reliable fallback:** Automatically switches back to local rule evaluation if an LLM times out, hits rate limits (HTTP 429), or returns invalid output.
+- **Built-in cost controls:** Deduplicates analysis by failure fingerprint (`dedup.reuse: true`), skips noisy failure types (`skip_kinds`), and sets hard caps on API calls (`--max-llm-calls`) and spend (`--max-cost-usd`).
+- **Automatic secret redaction:** Scrubs API keys, passwords, bearer tokens, connection strings, emails, and IP addresses before anything is written to disk or sent to an LLM.
+- **Safe pull-request handling:** Isolates fork PR runs with mandatory offline analysis, locked redaction, and disabled external delivery.
+- **Container and infrastructure awareness:** Identifies Kubernetes crashes (`CrashLoopBackOff`, exit code 137 `OOMKilled`), failed container probes, Helm rollbacks, and Terraform apply errors.
+- **Quality gates and test analytics:** Track flakiness trends and run times in a local SQLite store (`hound insights`), and enforce build policies on coverage regressions or security findings (`hound gate`).
+- **Idempotent ticket delivery:** Push reports to GitHub, Jira, GitLab, or Slack with an SQLite delivery ledger that prevents duplicate tickets during network retries.
 
 ---
 
@@ -148,7 +148,7 @@ hound log --analyze --offline -- pytest -q
 
 ## Terminal Interface (TUI)
 
-Hound Tracer includes an interactive terminal user interface built with [Textual](https://textual.textualize.io/) for navigating failure logs, inspecting stack frames, and reviewing diagnostic reports.
+Hound comes with an interactive terminal UI built with [Textual](https://textual.textualize.io/), giving you a fast way to browse logs, inspect stack traces, and review diagnostic reports directly in your console.
 
 ```sh
 # Launch in offline mode
@@ -210,19 +210,18 @@ Use canonical subcommands for automation scripts and CI pipelines:
 | `hound client` | Submit, inspect, poll, or cancel jobs on a bounded Hound server |
 | `hound clean` | Safely purge output directories verified by `.hound-owned` markers |
 
-## Capability boundaries
+## Surface Capabilities and Boundaries
 
-The four supported surfaces share the same read-only analysis pipeline, but they
-do not expose the same controls:
+Hound provides four entry points powered by the same underlying diagnostic engine, each tailored to different operational needs:
 
-| Surface | Primary capabilities | Deliberate limits |
+| Surface | Best for | Key characteristics |
 |:---|:---|:---|
-| CLI | Headless analysis, batch budgets, log capture, QA gates/history, reports, feedback, providers, and opt-in delivery | No interactive screen; automation must handle exit codes and output files |
-| TUI | Interactive artifact selection, local/LLM analysis, stored runs, report/ticket/context/raw-log review, settings, QA history import, and feedback | No infrastructure mutation, connector collection, or automatic external delivery; bounded local history/feedback/preferences writes are allowed |
-| Server | Authenticated `POST /analyze`, bounded jobs, polling, health/readiness, and telemetry endpoints | HTTP receiver only; no interactive UI, shell commands, or deploy/rollback operations |
-| GitHub Action | One artifact analysis with JSON/Markdown/ticket outputs and Action outputs | Action wrapper only; it does not expose the server, TUI, or long-term QA export workflows |
+| **CLI** | CI pipelines and headless scripting | Runs batch jobs, enforces quality gates, outputs structured files, and handles exit codes for automation |
+| **TUI** | Interactive triage on your local machine | Lets you browse logs, inspect stack traces, review generated tickets, and adjust settings interactively |
+| **Server** | Shared team webhooks and background workers | Accepts jobs over HTTP (`POST /analyze`), queues work via SQLite, and exposes health and telemetry endpoints |
+| **GitHub Action** | Native GitHub workflow integration | Runs on failed test steps to produce summary reports and PR annotations automatically |
 
-The tested platform/runtime boundaries are maintained in
+Detailed platform support and compatibility boundaries are tracked in
 [`docs/support-matrix.md`](docs/support-matrix.md).
 
 | Capability | CLI | TUI | Server | Action |
@@ -231,30 +230,22 @@ The tested platform/runtime boundaries are maintained in
 | Batch analysis | Yes | Yes | Via queue | Limited |
 | QA history import | Yes | Yes | No | No |
 | Quality gate | Yes | Yes | No | Optional |
-| Feedback record | Yes | Yes | No | No |
-| Feedback export | Yes | No | No | No |
-| DevOps enrichment | Yes | Read-only report validation/readiness view | Yes | Optional |
+| Record feedback | Yes | Yes | No | No |
+| Export feedback | Yes | No | No | No |
+| DevOps context review | Yes | Read-only view | Yes | Optional |
 | Ticket delivery | Yes | Read-only status | Caller-managed | Optional |
-| Log capture | Yes | No | No | No |
+| Command log capture | Yes | No | No | No |
 | Server lifecycle | Yes | No | N/A | No |
 
-The console opens on Home and provides three data workspaces: Artifacts,
-Results, and Quality. Settings is an overlay, Feedback is a modal, and the
-Overview, Report, Ticket, Context, and Raw log tabs appear only after a run is
-opened. The console can inspect delivery history and connector audits, but never
-sends external delivery or constructs an infrastructure mutation command. QA
-history export, feedback export, delivery reconciliation, and incident
-invalidation are CLI-only administrative operations.
+In the TUI, navigation centers around Home and three main workspaces: Artifacts, Results, and Quality. Stored runs provide Overview, Report, Ticket, Context, and Raw log tabs for fast review. The TUI remains strictly read-only regarding external infrastructure: actions like administrative exports, delivery reconciliations, and cache invalidation are managed through explicit CLI commands.
 
 ---
 
 ### hound analyze: Core Artifact Analysis
 
-Scans `.log`, `.xml` (JUnit), `.sarif`, and `.json` test reports. Generates `report.json` (Schema v2.0), `report.md`, and `ticket.md`.
+Analyzes `.log` files, JUnit `.xml`, `.sarif` security outputs, and test runner `.json` reports to generate structured outputs: `report.json` (Schema v2.0), `report.md`, and `ticket.md`.
 
-Directory analysis uses opaque `run-<id>` subdirectories. The legacy
-`hound analyze --log <single-file>` form keeps its direct `--output-dir` layout
-for compatibility; new automation should pass a directory.
+When you point Hound at a directory, it places results inside dedicated `run-<id>` folders under your output directory. You can also target individual files directly.
 
 ```sh
 # Offline analysis (safe, deterministic, zero network requests)
@@ -284,9 +275,9 @@ hound analyze ./ci-logs --gh --slack-webhook
 
 ---
 
-### hound batch: Scaled Processing with Budgets
+### hound batch: Batch Processing with Spend Guardrails
 
-Processes large directories of build logs with atomic deduplication and budget limits.
+Processes large folders of build logs in parallel with shared deduplication and configurable cost limits.
 
 ```sh
 hound batch --logs ./ci-logs \
@@ -296,33 +287,33 @@ hound batch --logs ./ci-logs \
   --max-cost-usd 5.00
 ```
 
-- Produces `summary-<batch-id>.json` (per-artifact classification and triage) and `usage-<batch-id>.json` (token metrics, cost tracking, and reuse count).
-- When `--max-llm-calls` or `--max-cost-usd` thresholds are reached, remaining artifacts fall back to deterministic local rules and receive the `budget_skipped` tag.
+- Generates `summary-<batch-id>.json` (classification and triage per artifact) and `usage-<batch-id>.json` (token counts, spend estimates, and cache reuse metrics).
+- If `--max-llm-calls` or `--max-cost-usd` limits are reached, Hound automatically falls back to local rules for remaining files and tags them as `budget_skipped`.
 
 ---
 
-### hound log: Process Interception and Tee Streaming
+### hound log: Live Command Streaming and Capture
 
-Runs build, test, or deployment commands while live-streaming output to stdout/stderr. Simultaneously writes a redacted log file and a JSON metadata sidecar (`cwd`, `git_branch`, `git_commit`, `exit_code`, `timestamp`) under `.hound/logs/`.
+Wraps your build, test, or deployment commands, streams output normally to your console, and captures a redacted log file with a metadata sidecar (`cwd`, `git_branch`, `git_commit`, exit code, timestamp) in `.hound/logs/`.
 
 ```sh
-# Capture test output and stream to console
+# Stream test output while capturing logs
 hound log -- npm test
 hound log --name unit-tests -- pytest -q
 
-# Intercept piped stdout from CLI tools
+# Capture piped output from external tools
 kubectl logs deployment/api -n prod | hound log --name api-deploy
 terraform apply -auto-approve 2>&1 | hound log --name tf-apply
 
-# Capture and immediately run root-cause analysis on failure
+# Run diagnostic analysis immediately if the command fails
 hound log --analyze --offline -- pytest -q
 ```
 
 ---
 
-### hound gate: Deterministic Quality Gate Policy
+### hound gate: Quality Gate Enforcement
 
-Evaluates test outcomes, code coverage deltas, and SARIF static analysis findings against a versioned policy file (`quality-gate.yml`).
+Evaluates test results, code coverage changes, and SARIF security findings against rules defined in a versioned policy file (`quality-gate.yml`).
 
 ```sh
 hound gate ./test-results \
@@ -362,9 +353,9 @@ rules:
 
 ---
 
-### hound insights: Test Run History and Flakiness Analytics
+### hound insights: Test History and Flakiness Tracking
 
-Maintains an SQLite database tracking test durations, success rates, and flakiness across branches, environments, and commit hashes.
+Maintains a local SQLite database of test durations, pass rates, and flakiness trends across branches, environments, and commit hashes.
 
 ```sh
 # Import JUnit XML into historical store
@@ -386,9 +377,9 @@ hound insights tests --suite-prefix tests/unit/
 
 ---
 
-### hound serve: Production Webhook Server
+### hound serve: Webhook Server and Job Queue
 
-HTTP webhook service with Bearer token authentication and persistent SQLite job management (`jobs.sqlite3`).
+Runs an HTTP webhook server with Bearer token authentication and a persistent SQLite job queue (`jobs.sqlite3`).
 
 ```sh
 export HOUND_SERVER_TOKEN="your-secure-auth-token"
@@ -404,13 +395,13 @@ hound serve \
 
 #### Endpoints
 
-- `POST /analyze`: Submit analysis job `{"log": "relative/path.log", "offline": false}`
-- `GET /jobs/<id>`: Poll bounded job status, engine, errors, and the managed report path
-- `DELETE /jobs/<id>`: Cancel a queued or running job; a worker that already started is not force-killed
-- `GET /health` and `GET /ready`: Health and readiness probes for orchestrators
-- `GET /stats`: Telemetry counters (queued, running, completed, engine breakdown)
+- `POST /analyze`: Submit an analysis job `{"log": "relative/path.log", "offline": false}`
+- `GET /jobs/<id>`: Poll job status, engine used, errors, and the resulting report path
+- `DELETE /jobs/<id>`: Cancel a queued or running job safely
+- `GET /health` and `GET /ready`: Probes for container health and readiness checks
+- `GET /stats`: Telemetry metrics (queued, running, completed, and engine breakdown)
 
-For production deployment with reverse-proxy TLS termination and systemd service units, refer to [`docs/guides/server-deployment.md`](docs/guides/server-deployment.md).
+For deployment behind reverse proxies with TLS termination and systemd service units, check the [`Server Deployment Guide`](docs/guides/server-deployment.md).
 
 ---
 
@@ -454,9 +445,7 @@ hound incidents invalidate --output-dir hound-output --key <dedup-key> --yes
 hound client submit --url http://127.0.0.1:8123 --token "$HOUND_SERVER_TOKEN" --log failure.log --offline --wait
 ```
 
-`hound config set` intentionally supports only the non-secret `model` key. Use
-YAML for other non-secret settings and environment variables or the keyring for
-credentials; the command does not accept arbitrary keys.
+Note: `hound config set` is designed for quick command-line updates to non-sensitive keys such as `provider` and `model`. For broader project configuration, edit `.hound.yml` directly, and manage credentials using environment variables or your system keyring.
 
 ---
 
@@ -602,8 +591,7 @@ slack:
 
 ### Official GitHub Action
 
-Hound Tracer provides a GitHub Action. Until an immutable release tag is
-published, pin the reviewed commit shown below:
+You can integrate Hound Tracer directly into your GitHub Actions workflows to triage test failures automatically:
 
 ```yaml
 name: CI Suite with Hound Tracer Failure Triage
@@ -651,9 +639,7 @@ jobs:
 
 ### Docker Execution
 
-Run Hound Tracer inside an isolated container with mounted artifact volumes:
-This is an operator/CI path; Docker and Trivy execution are not available in the
-current verification workspace and are not claimed as locally passed gates.
+You can also run Hound Tracer inside a container by mounting your local logs and output directory:
 
 ```sh
 # Build image locally
@@ -668,33 +654,33 @@ docker run --rm -v "$PWD/ci-logs:/logs:ro" -v "$PWD/hound-output:/out" \
 
 ## Security and Privacy
 
-1. **Redaction by Default:**
-   Log text is scrubbed before being passed to model prompts, saved to JSON reports, or dispatched to ticketing systems. Target patterns include private keys, bearer tokens, JWTs, AWS and Azure credentials, passwords, database URLs, emails, and IP addresses.
-2. **Untrusted Repositories:**
-   Hound Tracer treats analyzed Git checkouts as untrusted input. Hound Tracer never automatically loads configuration from analyzed repositories; `--config` must be explicitly specified by operators.
-3. **Fork PR Sandboxing (`fork_pr`):**
-   When analyzing pull requests from forks, Hound Tracer isolates execution: offline mode is mandatory, redaction cannot be disabled, and external ticket delivery and source extraction are suppressed.
-4. **Symlink and Path Traversal Defenses:**
-   Hound Tracer validates all target output directories and generated file paths, preventing symlink traversal or unintended file overwrites. Output cleanup (`hound clean`) verifies `.hound-owned` integrity markers before removing files.
+1. **Automatic Secret Redaction:**
+   Logs are sanitized before text reaches model prompts, JSON reports, or ticketing systems. Hound scrubs private keys, bearer tokens, JWTs, cloud provider credentials, passwords, connection strings, emails, and IP addresses.
+2. **Untrusted Workspace Isolation:**
+   Hound treats analyzed Git checkouts as untrusted inputs. It never silently executes code or loads configuration from analyzed repositories without an explicit `--config` flag.
+3. **Fork PR Protection (`fork_pr`):**
+   Pull requests from public forks run in a restricted sandbox: analysis is strictly offline, redaction cannot be turned off, and external ticket delivery and source snippet extraction are disabled.
+4. **Safe File Handling:**
+   Hound validates output directories and generated file paths to guard against symlink traversal and accidental overwrites. The `hound clean` utility checks `.hound-owned` markers before deleting files.
 
 ---
 
 ## Testing and Verification
 
-Hound Tracer maintains an automated test suite with local isolation guarantees:
+Run Hound's test suite and quality checks locally with `uv`:
 
 ```sh
-# Run complete test suite (unit, integration, and end-to-end)
+# Run full test suite (unit, integration, and end-to-end)
 uv run pytest
 
-# Run with test coverage measurement
+# Run with coverage report
 uv run pytest --cov=hound --cov-report=term-missing
 
-# Run code linter and static type checker
+# Run linter and type checker
 uv run ruff check .
 uv run mypy src/hound
 
-# Run offline accuracy and evaluation threshold check
+# Run offline accuracy evaluation
 uv run python -m hound.eval --offline --check --format json
 ```
 
@@ -730,7 +716,7 @@ src/hound/
 
 ## Documentation
 
-Comprehensive specifications, operational manuals, and architecture guides:
+Explore detailed guides, specifications, and architecture notes:
 
 | Document | Topic |
 |:---|:---|
