@@ -12,6 +12,7 @@
 <h3>Offline-First Diagnostic Agent for CI/CD, Build, Test, and Deployment Failures</h3>
 
 <p align="center">
+  <a href="https://pypi.org/project/hound-tracer/"><img src="https://img.shields.io/pypi/v/hound-tracer.svg" alt="PyPI Version"></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta%20v0.4.0-yellow.svg" alt="Status"></a>
   <a href="#testing-and-verification"><img src="https://img.shields.io/badge/Tests-Targeted%20gates-success.svg" alt="Tests"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%20to%203.12-blue.svg" alt="Python Version"></a>
@@ -97,11 +98,9 @@ Hound Tracer is strictly advisory and read-only. It inspects artifacts and produ
 
 ### Using uv (Recommended)
 
-Until the first verified PyPI publication, install the reviewed Git commit:
-
 ```sh
 # Install globally
-uv tool install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
+uv tool install hound-tracer
 
 # Verify installation
 hound --version
@@ -112,14 +111,11 @@ hound doctor
 
 ```sh
 # Install with pipx (isolated application environment)
-pipx install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
+pipx install hound-tracer
 
 # Or install in a standard Python environment (Python >= 3.10, < 3.13)
-pip install "hound-tracer @ git+https://github.com/youthisss/hound-tracer.git@e0a640effda889427598b0cdb5bdd41d9749045c"
+pip install hound-tracer
 ```
-
-Replace the Git source with `hound-tracer` only after the release checklist
-confirms the package is publicly available.
 
 ### From Source
 
@@ -193,26 +189,26 @@ hound console --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
 
 Use canonical subcommands for automation scripts and CI pipelines:
 
-| Canonical Command | Compatibility Alias | Description |
-|:---|:---|:---|
-| `hound analyze` | *(default)* | Analyze single files or directories of artifacts |
-| `hound batch` | None | High-throughput batch processing with spend guardrails |
-| `hound console` | None | Launch interactive Textual terminal UI |
-| `hound log` | None | Intercept, tee-stream, and optionally analyze command execution |
-| `hound gate` | `hound qa gate` | Evaluate test results, coverage deltas, and SARIF against a policy |
-| `hound insights` | `hound qa` | Long-term test history, flakiness, and runtime analytics |
-| `hound serve` | `hound server` | HTTP webhook server with persistent SQLite job queue |
-| `hound doctor` | None | Validate environment, storage, and dependency health |
-| `hound config` | None | Inspect, set, or strictly validate configuration (`.hound.yml`) |
-| `hound providers` | `hound list-providers` | List available LLM provider presets |
-| `hound models` | None | Query or refresh provider model discovery catalog |
-| `hound runs` | `hound list-runs` | List historical analysis runs stored on disk |
-| `hound report` | None | Re-render a stored run report in text, JSON, or Markdown |
-| `hound feedback` | None | Record engineer ratings and export regression test candidates |
-| `hound delivery` | None | Inspect and explicitly recover persisted external-delivery outcomes |
-| `hound incidents` | None | Inspect recurrence and invalidate cached RCA snapshots without deleting history |
-| `hound client` | None | Submit, inspect, poll, or cancel jobs on a bounded Hound server |
-| `hound clean` | None | Safely purge output directories verified by `.hound-owned` markers |
+| Canonical Command | Description |
+|:---|:---|
+| `hound analyze` | Analyze single files or directories of artifacts |
+| `hound batch` | High-throughput batch processing with spend guardrails |
+| `hound console` | Launch interactive Textual terminal UI |
+| `hound log` | Intercept, tee-stream, and optionally analyze command execution |
+| `hound gate` | Evaluate test results, coverage deltas, and SARIF against a policy |
+| `hound insights` | Long-term test history, flakiness, and runtime analytics |
+| `hound serve` | HTTP webhook server with persistent SQLite job queue |
+| `hound doctor` | Validate environment, storage, and dependency health |
+| `hound config` | Inspect, set, or strictly validate configuration (`.hound.yml`) |
+| `hound providers` | List available LLM provider presets |
+| `hound models` | Query or refresh provider model discovery catalog |
+| `hound runs` | List historical analysis runs stored on disk |
+| `hound report` | Re-render a stored run report in text, JSON, or Markdown |
+| `hound feedback` | Record engineer ratings and export regression test candidates |
+| `hound delivery` | Inspect and explicitly recover persisted external-delivery outcomes |
+| `hound incidents` | Inspect recurrence and invalidate cached RCA snapshots without deleting history |
+| `hound client` | Submit, inspect, poll, or cancel jobs on a bounded Hound server |
+| `hound clean` | Safely purge output directories verified by `.hound-owned` markers |
 
 ## Capability boundaries
 
@@ -638,7 +634,7 @@ jobs:
 
       - name: Investigate Failures with Hound Tracer
         if: steps.test_run.outcome == 'failure'
-        uses: youthisss/hound-tracer@e0a640effda889427598b0cdb5bdd41d9749045c
+        uses: youthisss/hound-tracer@v0.4.0
         with:
           log: "artifacts/pytest.log"
           repo: "${{ github.workspace }}"
