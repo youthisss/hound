@@ -22,18 +22,15 @@ hound/
 │       ├── connectors/       # bounded read-only deployment/observability adapters
 │       ├── source/            # source context and test impact analysis
 │       └── output/            # reports, tickets, Slack, and delivery ledger
-├── examples/
-│   └── demo/                 # deterministic smoke and scale harness
 ├── docs/
 │   ├── guides/               # usage, GitHub Action, server, and connectors
 │   ├── reference/            # log, source, impact, timeline, and migration contracts
 │   ├── operations/           # recovery, security, release, and pilot operations
-│   ├── schema/               # normative RCA JSON schema
-│   └── plans/                # project plans and mutation records
+│   └── schema/               # normative RCA JSON schema
 ├── tests/
 │   ├── unit/                 # fast in-process behavior
 │   ├── integration/          # stores, connectors, source, and DevOps boundaries
-│   ├── e2e/                  # CLI, TUI, action, evaluator, and demo workflows
+│   ├── e2e/                  # CLI, TUI, Action, and evaluator workflows
 │   ├── fixtures/             # reusable local logs and artifacts
 │   ├── eval/                 # versioned evaluation corpus and baselines
 │   └── golden/               # versioned RCA output fixtures

@@ -1,19 +1,16 @@
 # Hound Documentation
 
-This directory contains the product contract, operator guidance, and the
-evidence records used to evolve Hound without hiding release assumptions
-in the root README.
+This directory contains operator guides, architecture notes, and reference
+contracts that are too detailed for the root README.
 
 ## Start Here
 
-- [Product requirements](prd.md) - scope, behavior, and release constraints.
+- [Root README](../README.md) - installation, commands, and primary usage.
 - [Architecture](architecture.md) - pipeline stages, module boundaries, and data flow.
-- [Contribution workflow](workflow.md) - development and verification gates.
-- [Usage guide](guides/usage.md) - CLI, TUI, server, QA history, and integrations.
+- [Contributing](../CONTRIBUTING.md) - development setup and verification gates.
 
 ## Guides
 
-- [Usage](guides/usage.md)
 - [GitHub Action](guides/github-action.md)
 - [Server deployment](guides/server-deployment.md)
 - [Deployment connectors](guides/deployment-connectors.md)
@@ -39,9 +36,7 @@ in the root README.
 - [Release checklist](operations/release-checklist.md)
 - [Pilot evidence template](operations/pilot-evidence-template.md)
 
-## Project Records
+## Additional Material
 
-- [Milestone audits](audits/milestone-audits.md)
-- [Implementation and product plans](plans/)
 - [Nginx example](examples/nginx-hound.conf)
-- [Scale benchmark](benchmarks/benchmark-2026-08-31.md)
+- [Bounded operation limits](benchmarks/limits.md)

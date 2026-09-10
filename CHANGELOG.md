@@ -31,8 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   acting as an interactive connector workflow.
 - Reorganized the package into `src/hound`, grouped tests by runtime boundary,
   and grouped documentation under purpose-specific directories.
-- Refreshed README navigation and added a documentation hub plus a runnable demo
-  under `examples/demo`.
+- Refreshed README navigation and added a documentation hub.
 - Made canonical CLI command and option spellings primary while retaining legacy
   spellings as compatibility aliases.
 - Renamed the distribution, import package, persisted paths, generated filenames,

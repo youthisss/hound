@@ -226,8 +226,6 @@ do not expose the same controls:
 | Server | Authenticated `POST /analyze`, bounded jobs, polling, health/readiness, and telemetry endpoints | HTTP receiver only; no interactive UI, shell commands, or deploy/rollback operations |
 | GitHub Action | One artifact analysis with JSON/Markdown/ticket outputs and Action outputs | Action wrapper only; it does not expose the server, TUI, or long-term QA export workflows |
 
-The requirement-to-code-to-test evidence is maintained in
-[`docs/requirements-matrix.md`](docs/requirements-matrix.md).
 The tested platform/runtime boundaries are maintained in
 [`docs/support-matrix.md`](docs/support-matrix.md).
 
@@ -700,12 +698,6 @@ uv run pytest --cov=hound --cov-report=term-missing
 uv run ruff check .
 uv run mypy src/hound
 
-# Run synthetic smoke test gate
-uv run python examples/demo/run_demo.py --profile smoke
-
-# Run high-throughput scale benchmark (5,000 synthetic logs, 8 workers)
-uv run python examples/demo/run_demo.py --profile scale --count 5000 --jobs 8
-
 # Run offline accuracy and evaluation threshold check
 uv run python -m hound.eval --offline --check --format json
 ```
@@ -746,15 +738,13 @@ Comprehensive specifications, operational manuals, and architecture guides:
 
 | Document | Topic |
 |:---|:---|
-| [**PRD & Functional Requirements**](docs/prd.md) | Complete product requirements, schemas, and functional scope |
 | [**Architecture Deep Dive**](docs/architecture.md) | Pipeline mechanics, data contracts, and module boundaries |
-| [**User & Operations Manual**](docs/guides/usage.md) | CLI, TUI, server, and integration instructions |
 | [**Security & Threat Model**](docs/operations/threat-model.md) | Redaction mechanics, untrusted inputs, and supply chain isolation |
 | [**Server Deployment Guide**](docs/guides/server-deployment.md) | Reverse-proxy setup, rate limiting, and systemd units |
+| [**GitHub Action Guide**](docs/guides/github-action.md) | Action inputs, outputs, trust profiles, and upgrade guidance |
 | [**Reference Contracts**](docs/reference/log-format.md) | Log formats, timeline schemas, and test impact contracts |
-| [**Contribution Workflow**](docs/workflow.md) | Development standards, coding conventions, and verification gates |
-| [**Master implementation roadmap**](docs/plans/hound-master-implementation-roadmap.md) | P0-P12 status, evidence, blockers, and release closure |
-| [**Requirements matrix**](docs/requirements-matrix.md) | Requirement-to-code/test/evidence crosswalk |
+| [**Support Matrix**](docs/support-matrix.md) | Tested runtimes, operating systems, and external boundaries |
+| [**Release Checklist**](docs/operations/release-checklist.md) | Maintainer release, publication, and recovery gates |
 | [**Changelog**](CHANGELOG.md) | Release history, migration notes, and version changes |
 
 ---

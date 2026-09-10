@@ -1,4 +1,4 @@
-# Hound operational metrics (M12)
+# Hound operational metrics
 
 The process-local bounded telemetry registry records numeric operational data
 only. It never stores logs, prompts, source snippets, credentials, request bodies,
@@ -14,11 +14,5 @@ Observations are bounded to the latest 10,000 values per metric. Metrics reset o
 process restart; durable incident, job, history, feedback, and delivery state stay
 in their SQLite stores.
 
-The existing demo harness remains the permanent smoke/scale entry point:
-
-```powershell
-uv run python examples/demo/run_demo.py --profile smoke
-uv run python examples/demo/run_demo.py --profile scale --count 5000 --jobs 8
-```
-
-Benchmark output is runner-dependent evidence, not a hard performance promise.
+Metric behavior is covered by the automated test suite. Runtime values remain
+environment-specific observations, not performance guarantees.
