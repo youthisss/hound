@@ -148,7 +148,7 @@ jobs:
           grep -q '^severity<<TRACEHOUND_' action-smoke/github-output
           grep -q '"kind": "test_failure"' action-smoke/out/report.json
       - name: Scan runtime image
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: hound:release
           scanners: vuln,secret
@@ -156,7 +156,7 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
       - name: Scan Action image
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: hound-action:release
           scanners: vuln,secret
@@ -202,7 +202,7 @@ jobs:
           name: distributions
           path: dist
       - name: Publish candidate to TestPyPI
-        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/
@@ -267,7 +267,7 @@ jobs:
           name: distributions
           path: dist
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/
           skip-existing: true
