@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/hound-tracer/"><img src="https://img.shields.io/pypi/v/hound-tracer.svg" alt="PyPI Version"></a>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta%20v0.4.0-yellow.svg" alt="Status"></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta%20v0.4.1-yellow.svg" alt="Status"></a>
   <a href="#testing-and-verification"><img src="https://img.shields.io/badge/Tests-Targeted%20gates-success.svg" alt="Tests"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%20to%203.12-blue.svg" alt="Python Version"></a>
   <a href="#security-and-privacy"><img src="https://img.shields.io/badge/Security-Redaction%20Default-orange.svg" alt="Security"></a>
@@ -168,7 +168,7 @@ hound console --logs ./ci-logs --online --jobs 4 --max-llm-calls 20
 | `r` | **Refresh** | Reload log listing and recent analysis runs |
 | `h` | **Home** | Return to the default Home view |
 | `f` / `l` | **Artifacts / Results** | Open the artifact or stored-results workspace |
-| `y` / `i` | **Quality / Context** | Open QA workflows or read-only report context |
+| `y` / `i` | **Quality / Overview** | Open QA workflows or the current run overview |
 | `m` | **Sidebar** | Focus the navigation sidebar |
 | `s` | **Settings** | Configure LLM providers, models, API keys, base URLs, and offline mode |
 | `v` | **Feedback** | Review the currently opened stored run |
@@ -218,7 +218,7 @@ do not expose the same controls:
 | Surface | Primary capabilities | Deliberate limits |
 |:---|:---|:---|
 | CLI | Headless analysis, batch budgets, log capture, QA gates/history, reports, feedback, providers, and opt-in delivery | No interactive screen; automation must handle exit codes and output files |
-| TUI | Interactive artifact selection, local/LLM analysis, stored runs, report/ticket/raw-log review, settings, QA history import, feedback, and Context | No infrastructure mutation, connector collection, or automatic external delivery; bounded local history/feedback/preferences writes are allowed |
+| TUI | Interactive artifact selection, local/LLM analysis, stored runs, report/ticket/context/raw-log review, settings, QA history import, and feedback | No infrastructure mutation, connector collection, or automatic external delivery; bounded local history/feedback/preferences writes are allowed |
 | Server | Authenticated `POST /analyze`, bounded jobs, polling, health/readiness, and telemetry endpoints | HTTP receiver only; no interactive UI, shell commands, or deploy/rollback operations |
 | GitHub Action | One artifact analysis with JSON/Markdown/ticket outputs and Action outputs | Action wrapper only; it does not expose the server, TUI, or long-term QA export workflows |
 
@@ -238,9 +238,9 @@ The tested platform/runtime boundaries are maintained in
 | Log capture | Yes | No | No | No |
 | Server lifecycle | Yes | No | N/A | No |
 
-The console opens on Home and provides four navigation workspaces: Artifacts,
-Results, Quality, and Context. Settings is an overlay, Feedback is a modal, and
-the Overview, Report, Ticket, and Raw log tabs appear only after a run is
+The console opens on Home and provides three data workspaces: Artifacts,
+Results, and Quality. Settings is an overlay, Feedback is a modal, and the
+Overview, Report, Ticket, Context, and Raw log tabs appear only after a run is
 opened. The console can inspect delivery history and connector audits, but never
 sends external delivery or constructs an infrastructure mutation command. QA
 history export, feedback export, delivery reconciliation, and incident
@@ -634,7 +634,7 @@ jobs:
 
       - name: Investigate Failures with Hound Tracer
         if: steps.test_run.outcome == 'failure'
-        uses: youthisss/hound-tracer@v0.4.0
+        uses: youthisss/hound-tracer@v0.4.1
         with:
           log: "artifacts/pytest.log"
           repo: "${{ github.workspace }}"

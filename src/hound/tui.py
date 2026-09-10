@@ -19,7 +19,6 @@ import yaml
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ItemGrid, Vertical, VerticalScroll
-from textual.css.query import NoMatches
 from rich.markup import escape as rich_escape
 from rich.text import Text
 from textual.screen import ModalScreen
@@ -118,6 +117,8 @@ MAX_REPORT_BYTES = 16 * 1024 * 1024
 STRUCTURED_PREVIEW_BYTES = 512 * 1024
 LOG_CLASSIFICATION_BYTES = 16 * 1024
 PROGRESS_UPDATE_SECONDS = 0.25
+STATUS_PROGRESS_WIDTH = 12
+RESULT_TAB_IDS = ("pane-overview", "pane-report", "pane-ticket", "pane-raw", "pane-context")
 
 
 def _read_stored_report(path: Path) -> dict:
@@ -185,8 +186,8 @@ Screen { background: #000000; color: #ffffff; }
     margin: 0;
     border: tall #ffffff;
 }
-#nav-artifacts, #nav-qa { margin-right: 1; }
-#nav-results, #nav-investigation { margin-right: 0; }
+#nav-home, #nav-results { margin-right: 1; }
+#nav-artifacts, #nav-qa { margin-right: 0; }
 #workspace-nav Button.is-active {
     background: #ffffff;
     border: tall #ffffff;
@@ -205,10 +206,11 @@ Screen { background: #000000; color: #ffffff; }
 }
 #back-button {
     display: none;
-    width: 14;
-    min-width: 14;
+    width: 7;
+    min-width: 7;
     height: 3;
-    margin: 0 1 0 0;
+    margin: 0;
+    padding: 0;
     border: tall #ffffff;
     content-align: center middle;
     text-align: center;
@@ -220,7 +222,16 @@ Screen { background: #000000; color: #ffffff; }
 .has-back-nav #back-button {
     display: block;
 }
-#show-sidebar { display: none; width: 18; min-width: 18; height: 3; margin: 0; }
+#show-sidebar {
+    display: none;
+    width: 7;
+    min-width: 7;
+    height: 3;
+    margin: 0 1 0 0;
+    padding: 0;
+    content-align: center middle;
+    text-align: center;
+}
 .sidebar-collapsed #sidebar { display: none; }
 .sidebar-collapsed #show-sidebar { display: block; }
 #workflow-title {
@@ -232,6 +243,12 @@ Screen { background: #000000; color: #ffffff; }
     margin: 1 0 0 0;
 }
 .field-label { height: 2; color: #ffffff; margin: 1 0 0 0; text-style: bold; }
+.sidebar-section-title {
+    height: 2;
+    margin: 1 0 0 0;
+    text-align: center;
+    content-align: center middle;
+}
 Input { border: tall #ffffff; background: #000000; color: #ffffff; padding: 0 1; }
 Input:focus { border: tall #ffffff; color: #ffffff; }
 Input .input--placeholder { color: #a6a6a6; }
@@ -245,6 +262,23 @@ Select:focus > SelectCurrent Static#label, SelectCurrent:focus Static#label { co
 Select:focus > SelectCurrent .arrow, SelectCurrent:focus .arrow { color: #ffffff; }
 Button { background: #000000; color: #ffffff; border: tall #ffffff; padding: 0 1; }
 Button:hover, Button:focus, Button.-active, Button.is-active {
+    background: #ffffff;
+    color: #000000;
+    border: tall #ffffff;
+}
+#settings-page .settings-toggle,
+#settings-page .settings-toggle:hover,
+#settings-page .settings-toggle:focus,
+#settings-page .settings-toggle.-active {
+    background: #000000;
+    color: #ffffff;
+    border: tall #ffffff;
+}
+#settings-page .settings-toggle:focus { text-style: bold; }
+#settings-page .settings-toggle.is-active,
+#settings-page .settings-toggle.is-active:hover,
+#settings-page .settings-toggle.is-active:focus,
+#settings-page .settings-toggle.is-active.-active {
     background: #ffffff;
     color: #000000;
     border: tall #ffffff;
@@ -265,26 +299,16 @@ Button.-primary { text-style: bold; }
 #directory-actions Button { width: 1fr; min-width: 0; height: 3; margin: 0; }
 #directory-actions Button:last-of-type { margin-right: 0; }
 .sidebar-input { margin: 0; }
-#dir-meta {
-    height: auto;
-    min-height: 2;
-    color: #d6d6d6;
-    margin: 1 0 0 0;
-    padding: 0;
-    background: #000000;
-    border: none;
-}
 #log-list { margin: 1 0 0 0; }
-#workflow-status { margin: 1 0 0 0; }
 #analyze:focus, #browse-dir:focus, #load-dir:focus, #retry:focus { border: tall #ffffff; text-style: bold; }
-#stop-analysis { display: none; }
 #workflow-status {
     height: auto;
-    min-height: 2;
+    min-height: 0;
     color: #d6d6d6;
-    padding: 0;
+    margin: 1 0;
+    padding: 0 2;
     background: #000000;
-    border: none;
+    border: tall #ffffff;
 }
 #log-list, #run-list {
     height: 1fr;
@@ -295,9 +319,6 @@ Button.-primary { text-style: bold; }
     overflow-y: auto;
     scrollbar-size-vertical: 0;
 }
-#run-filter { margin: 0; }
-#run-controls { width: 100%; height: 6; margin: 0; }
-#run-controls Select { width: 100%; height: 3; margin: 0; }
 ListView:focus { border: solid #ffffff; }
 ListItem { padding: 0 1; color: #ffffff; border: none; }
 ListItem:disabled { color: #ffffff; }
@@ -380,7 +401,7 @@ MarkdownFence { background: #000000; color: #ffffff; }
 #result-navigation Button:last-of-type { margin-right: 0; }
 #result-position { width: 1fr; height: 3; color: #ffffff; content-align: center middle; }
 #artifact-workspace, #results-workspace { height: 1fr; padding: 1 2; display: none; }
-#qa-workspace, #investigation-workspace { height: 1fr; padding: 1 2; display: none; }
+#qa-workspace { height: 1fr; padding: 1 2; display: none; }
 #qa-workspace {
     overflow-y: auto;
     overflow-x: hidden;
@@ -389,11 +410,16 @@ MarkdownFence { background: #000000; color: #ffffff; }
 .workspace-title { height: auto; color: #ffffff; text-style: bold; padding-bottom: 1; border-bottom: tall #ffffff; }
 .workspace-meta {
     height: auto;
-    min-height: 3;
+    min-height: 1;
     color: #d6d6d6;
     background: #000000;
     border: none;
     padding: 0;
+    margin: 1 0;
+}
+#investigation-workspace-meta {
+    height: auto;
+    min-height: 1;
     margin: 1 0;
 }
 .workspace-filter-bar { width: 100%; height: 3; margin-bottom: 1; }
@@ -435,6 +461,7 @@ MarkdownFence { background: #000000; color: #ffffff; }
 }
 #clear-selected, #clear-all { border: tall #ffffff; }
 #qa-scroll, #investigation-scroll { height: 1fr; margin-top: 1; }
+#qa-scroll { margin-top: 0; }
 .workspace-summary {
     height: auto;
     width: 100%;
@@ -446,7 +473,9 @@ MarkdownFence { background: #000000; color: #ffffff; }
 }
 .metadata-grid {
     width: 100%;
-    height: auto;
+    height: 9;
+    min-height: 9;
+    max-height: 9;
     margin-bottom: 1;
     grid-size: 3 1;
     grid-columns: 1fr 1fr 1fr;
@@ -454,12 +483,14 @@ MarkdownFence { background: #000000; color: #ffffff; }
 }
 .metadata-card {
     width: 100%;
-    height: auto;
-    min-height: 6;
-    padding: 1 2;
+    height: 9;
+    min-height: 9;
+    max-height: 9;
+    padding: 1 1;
     color: #e6e6e6;
     background: #000000;
     border: solid #ffffff;
+    overflow-y: hidden;
 }
 #context-validation-summary {
     width: 100%;
@@ -471,26 +502,112 @@ MarkdownFence { background: #000000; color: #ffffff; }
 }
 .qa-section-title { height: auto; color: #ffffff; text-style: bold; margin: 0 0 1 0; padding: 0 0 1 0; border-bottom: solid #ffffff; }
 .qa-description { height: auto; color: #ffffff; margin-bottom: 1; padding: 0; }
-.qa-policy-preview { height: auto; color: #ffffff; padding: 1 0; background: #000000; border: none; margin-bottom: 1; }
+#engine-summary, #session-summary {
+    height: auto;
+    min-height: 4;
+    color: #d6d6d6;
+    padding: 0 1;
+    margin: 1 0 0 0;
+    background: #000000;
+    border: tall #ffffff;
+}
+#engine-status {
+    height: auto;
+    margin: 1 0 0 0;
+    padding: 0 1;
+    background: #000000;
+    border: tall #ffffff;
+}
+#engine-status #engine-summary {
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+#engine-status #workflow-status {
+    min-height: 0;
+    margin: 1 0 0 0;
+    padding: 0;
+    border: none;
+}
+#log-filters {
+    margin: 1 0 0 0;
+    padding: 0;
+    border: tall #ffffff;
+}
+#log-filters > Contents {
+    width: 100%;
+    height: auto;
+    padding: 1 0 0 0;
+}
+#log-filters > Contents > Input,
+#log-filters > Contents > Select {
+    width: 100%;
+    margin: 0;
+}
+#type-filter { margin-top: 1; }
+#log-list, #run-list {
+    height: auto;
+    min-height: 4;
+    max-height: 12;
+}
+#run-list { margin-top: 0; }
+.qa-policy-preview {
+    height: auto;
+    color: #ffffff;
+    padding: 1;
+    background: #000000;
+    border: tall #ffffff;
+    margin-bottom: 1;
+    content-align: center middle;
+    text-align: center;
+}
 .qa-form-row { width: 100%; height: auto; }
 .qa-field { width: 1fr; height: auto; margin: 0 1 1 0; }
 .qa-field:last-of-type { margin-right: 0; }
 .qa-field .field-label { height: 2; margin: 0; }
 .qa-field Input { width: 100%; height: 3; }
 .qa-field Select { width: 100%; height: 3; }
-#qa-actions { width: 100%; height: 3; margin-top: 1; }
-#qa-actions Button, #context-actions Button { width: 1fr; min-width: 0; height: 3; margin-right: 1; }
-#qa-actions Button:last-of-type, #context-actions Button:last-of-type { margin-right: 0; }
-#qa-status { height: auto; color: #ffffff; padding: 0; background: #000000; margin-top: 1; }
+#qa-actions {
+    width: 100%;
+    height: 3;
+    margin: 0 0 1 0;
+    layout: grid;
+    grid-size: 4 1;
+    grid-columns: 1fr 1fr 1fr 1fr;
+    grid-gutter: 0 1;
+}
+#qa-actions Button { width: 100%; min-width: 0; height: 3; margin: 0; }
+#qa-status {
+    display: none;
+    height: auto;
+    color: #ffffff;
+    padding: 1;
+    background: #000000;
+    border: tall #ffffff;
+    margin: 0 0 1 0;
+    content-align: center middle;
+    text-align: center;
+}
 #qa-scroll {
     height: auto;
-    padding: 1 0 0 0;
+    padding: 0;
     border: none;
     overflow-y: hidden;
     overflow-x: hidden;
 }
-#qa-result { height: auto; padding: 1 0; color: #ffffff; background: #000000; border: none; margin-bottom: 1; }
-#qa-history-list { height: 10; min-height: 4; border: solid #ffffff; background: #000000; margin: 0 0 1 0; }
+#qa-result {
+    height: auto;
+    width: 100%;
+    padding: 1 2;
+    color: #ffffff;
+    background: #000000;
+    border: tall #ffffff;
+    margin-top: 0;
+    margin-bottom: 1;
+    display: none;
+}
+#qa-history-list { height: 10; min-height: 4; border: solid #ffffff; background: #000000; margin: 0 0 1 0; display: none; }
 Collapsible {
     height: auto;
     border: tall #ffffff;
@@ -504,9 +621,24 @@ Collapsible > CollapsibleTitle {
     content-align: center middle;
     text-align: center;
 }
+Collapsible > CollapsibleTitle:focus { background: #ffffff; color: #000000; }
 #qa-advanced { margin-bottom: 1; }
-#context-actions { height: 3; min-height: 3; margin: 1 0 0 0; }
-#context-status { height: auto; width: 100%; color: #ffffff; padding: 0; background: #000000; margin-top: 1; }
+#context-actions {
+    width: 100%;
+    height: 3;
+    min-height: 3;
+    grid-size: 3;
+    grid-columns: 1fr 1fr 1fr;
+    grid-gutter: 0 1;
+    margin: 0 0 1 0;
+}
+#context-actions Button {
+    width: 100%;
+    height: 3;
+    min-width: 0;
+    margin: 0;
+}
+#context-status { height: auto; width: 100%; color: #ffffff; padding: 0; background: #000000; margin-top: 0; margin-bottom: 0; }
 #investigation { height: auto; color: #ffffff; padding: 0; background: #000000; border: none; }
 ClearResultsScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
 #clear-dialog { width: 70; max-width: 100%; height: auto; border: solid #ffffff; background: #000000; padding: 1 2; }
@@ -517,32 +649,81 @@ ClearResultsScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
 #clear-cancel { min-width: 14; margin-right: 1; }
 #clear-confirm { min-width: 18; }
 FeedbackScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
-#feedback-dialog { width: 110; max-width: 100%; height: auto; max-height: 100%; border: solid #ffffff; background: #000000; padding: 1 2; overflow-y: auto; scrollbar-size-vertical: 0; }
-#feedback-title { height: auto; color: #ffffff; text-style: bold; }
-#feedback-validation-banner { width: 100%; height: auto; padding: 0; background: #000000; border: none; margin-bottom: 1; }
-#feedback-description { height: auto; color: #ffffff; margin: 0 0 1 0; }
-#feedback-form { width: 100%; height: auto; }
-.feedback-form-row { width: 100%; height: auto; margin-bottom: 1; }
-.feedback-form-row.feedback-last-row { margin-bottom: 0; }
-.feedback-field { width: 1fr; height: auto; margin: 0 2 0 0; }
-.feedback-field.feedback-field-wide { width: 2fr; }
-.feedback-field.feedback-field-compact { width: 1fr; }
-.feedback-field:last-of-type { margin-right: 0; }
-.feedback-field .field-label {
-    height: 1;
-    margin: 0 0 1 0;
-    content-align: left top;
+#feedback-dialog {
+    width: 96;
+    max-width: 100%;
+    height: auto;
+    max-height: 100%;
+    border: solid #ffffff;
+    background: #000000;
+    padding: 1 2 0 2;
+    overflow-y: auto;
+    scrollbar-size-vertical: 0;
 }
-.feedback-field Input { width: 100%; height: 3; }
-.feedback-field Select { width: 100%; height: 3; }
-#feedback-actions { width: 100%; height: 4; margin-top: 1; padding: 0; border-top: solid #ffffff; }
-#feedback-actions Button { width: 1fr; min-width: 0; }
-#feedback-cancel { margin-right: 1; }
+#feedback-title {
+    height: 2;
+    color: #ffffff;
+    text-style: bold;
+    content-align: left middle;
+}
+#feedback-validation-banner {
+    width: 100%;
+    height: auto;
+    padding: 0;
+    background: #000000;
+    border: none;
+    margin-bottom: 1;
+}
+#feedback-description {
+    height: auto;
+    color: #b8b8b8;
+    margin-bottom: 1;
+}
+#feedback-form {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+}
+.feedback-section {
+    width: 100%;
+    height: auto;
+    padding: 1 1 0 1;
+    margin-bottom: 1;
+    background: #000000;
+    border: solid #ffffff;
+}
+.feedback-section-title {
+    height: 1;
+    color: #ffffff;
+    text-style: bold;
+    margin: 0 0 1 0;
+}
+.feedback-section-hint {
+    height: auto;
+    color: #b8b8b8;
+    margin: 0 0 2 0;
+}
+.feedback-pair { width: 100%; height: auto; margin-bottom: 1; }
+.feedback-pair > .feedback-field { width: 1fr; margin-right: 1; }
+.feedback-pair > .feedback-field:last-of-type { margin-right: 0; }
+.feedback-field { height: auto; margin-bottom: 1; }
+.feedback-label { height: 1; margin-bottom: 1; color: #ffffff; text-style: bold; }
+.feedback-field Input, .feedback-field Select { width: 100%; height: 3; }
+#feedback-actions {
+    width: 100%;
+    height: auto;
+    align-horizontal: right;
+    margin: 1 0 0 0;
+    padding: 1 0;
+    border-top: solid #ffffff;
+}
+#feedback-cancel { width: 20; margin-right: 1; }
+#feedback-save { width: 20; }
 #shortcutbar { height: 1; background: #000000; color: #ffffff; padding: 0 1; }
 #statusbar { height: 1; background: #000000; color: #ffffff; padding: 0 1; }
-HelpScreen { align: center middle; background: rgba(0, 0, 0, 0.82); }
-#help-dialog { width: 64; max-width: 100%; height: auto; border: solid #ffffff; background: #000000; padding: 1 2; }
-#help-close { width: 100%; margin: 1 0 0 0; }
+HelpScreen { align: center middle; background: rgba(0, 0, 0, 0.85); }
+#help-dialog { width: 76; max-width: 96%; height: auto; border: solid #ffffff; background: #000000; padding: 1 2; }
+#help-close { width: 100%; margin: 1 0 0 0; height: 3; }
 SettingsScreen { background: #000000; }
 #settings-page {
     width: 100%;
@@ -576,7 +757,7 @@ SettingsScreen { background: #000000; }
 .settings-section {
     width: 100%;
     height: auto;
-    padding: 1;
+    padding: 1 1 0 1;
     margin: 0 0 1 0;
     background: #000000;
     border: solid #ffffff;
@@ -637,8 +818,16 @@ SettingsScreen { background: #000000; }
 #connection-actions Button:last-of-type { margin-right: 0; }
 #custom-provider-title { color: #ffffff; text-style: bold; }
 #settings-custom-provider { margin: 0 0 1 0; }
-#settings-actions { width: 100%; height: 5; align-horizontal: right; margin-top: 1; padding-top: 1; border-top: solid #ffffff; }
-#settings-add-provider { width: 100%; margin: 0 0 1 0; }
+#settings-custom-provider > Contents { padding: 1; }
+#settings-actions {
+    width: 100%;
+    height: auto;
+    align-horizontal: right;
+    margin: 1 0 0 0;
+    padding: 1 0;
+    border-top: solid #ffffff;
+}
+#settings-add-provider { width: 100%; margin: 0; }
 .custom-field { margin: 0 0 1 0; }
 #settings-save { width: 20; }
 #settings-cancel { width: 20; margin-right: 1; }
@@ -666,20 +855,23 @@ SettingsScreen { background: #000000; }
 .compact .pagination-controls Button { width: 100%; min-width: 0; margin: 0 0 1 0; }
 .compact .pagination-label { width: 100%; height: auto; padding: 0; margin: 0 0 1 0; }
 .compact #artifact-workspace, .compact #results-workspace { padding: 1 1; overflow-y: auto; }
-.compact #qa-workspace, .compact #investigation-workspace { padding: 1 1; overflow-y: auto; }
+.compact #qa-workspace { padding: 1 1; overflow-y: auto; }
 .compact .qa-form-row { layout: vertical; }
 .compact .qa-field { width: 100%; margin: 0 0 1 0; }
-.compact #context-actions { height: 3; layout: horizontal; }
-.compact #context-actions Button { width: 1fr; margin: 0 1 0 0; }
-.compact #context-actions Button:last-of-type { margin-right: 0; }
+.compact #context-actions { height: auto; layout: vertical; grid-size: 1; grid-columns: 1fr; }
+.compact #context-actions Button { width: 100%; height: 3; margin: 0 0 1 0; }
 .compact #context-status { width: 100%; height: auto; margin: 0 0 1 0; }
-.compact .feedback-form-row { layout: vertical; margin-bottom: 0; }
+.compact .feedback-section { padding: 1; }
+.compact .feedback-pair { layout: vertical; }
+.compact .feedback-pair > .feedback-field { width: 100%; margin: 0 0 1 0; }
 .compact .feedback-field { width: 100%; margin: 0 0 1 0; }
-.compact .feedback-form-row .feedback-field:last-of-type { margin-bottom: 0; }
 .compact #qa-actions { height: auto; layout: vertical; }
 .compact #qa-actions Button { width: 100%; margin: 0 0 1 0; }
+.compact #qa-result { padding: 1; }
 .compact .home-card { margin-right: 0; }
 .compact #feedback-dialog { padding: 1; }
+.compact #feedback-actions { height: auto; layout: vertical; }
+.compact #feedback-actions Button { width: 100%; margin: 0 0 1 0; }
 .compact #clear-dialog { width: 100%; max-width: 100%; padding: 1; }
 .compact #help-dialog { width: 100%; max-width: 100%; padding: 1; }
 .compact #settings-page { padding: 1 0 0 0; }
@@ -688,20 +880,21 @@ SettingsScreen { background: #000000; }
 .compact .settings-toggle-row Button { width: 100%; margin: 0 0 1 0; }
 .compact #connection-actions { height: auto; layout: vertical; }
 .compact #connection-actions Button { width: 100%; margin: 0 0 1 0; }
-.compact #back-button { width: 14; min-width: 14; margin: 0 1 0 0; }
-.compact #show-sidebar { width: 18; min-width: 18; margin: 0; }
+.compact #back-button { width: 7; min-width: 7; margin: 0; padding: 0; }
+.compact #show-sidebar { width: 7; min-width: 7; margin: 0 1 0 0; padding: 0; }
 .short #workflow-title { height: 2; margin: 0; }
 .short #workspace-nav { height: 7; margin-top: 0; }
 .short .workspace-nav-row, .short #workspace-nav Button { height: 3; }
 .short .field-label { height: 1; margin: 0; padding-top: 0; }
-.short .feedback-field .field-label { height: 1; margin-bottom: 1; }
-.short #workflow-status { height: 1; }
+.short .feedback-label, .short .feedback-field .field-label { height: 1; margin-bottom: 1; }
+.short #engine-status { margin: 0; padding: 0 1; }
+.short #engine-status #workflow-status { min-height: 3; margin: 0; padding: 0; }
 .short .sidebar-button { margin-top: 0; }
 .short .sidebar-input { margin: 0; }
 .short #directory-actions { margin-top: 0; }
-.short #dir-meta { margin-top: 0; }
 .short #log-list, .short #run-list { margin-top: 0; min-height: 4; height: 1fr; }
-.short #run-filter, .short #run-controls { display: none; }
+.short #engine-summary { display: none; }
+.short #log-list, .short #run-list { min-height: 4; height: auto; max-height: 7; }
 .short #open-settings { margin: 0; }
 .short #content-actions { margin-bottom: 0; }
 .short #back-button, .short #show-sidebar { height: 3; margin-top: 0; margin-bottom: 0; }
@@ -723,17 +916,18 @@ Screen, SettingsScreen, ClearResultsScreen, FeedbackScreen, HelpScreen {
 #home-next, .home-card, #home-guides .home-guide, #home-formats, Tabs,
 .result-scroll, Markdown, MarkdownBlockQuote, MarkdownFence, #qa-status, #qa-result,
 #investigation, #clear-dialog, #feedback-dialog, #help-dialog, #settings-panel,
-#settings-trust, #shortcutbar, #statusbar {
+#settings-trust, #engine-summary, #session-summary, #shortcutbar, #statusbar {
     background: #000000;
     color: #ffffff;
 }
 #workflow-title, .field-label, Input .input--placeholder, SelectCurrent .arrow,
-#dir-meta, #home-logo, #home-subtitle, #home-tagline, #home-formats, Tab,
+#home-logo, #home-subtitle, #home-tagline, #home-formats, Tab,
 .result-header, .pane-content, MarkdownH1, MarkdownH2, MarkdownH3,
 .workspace-title, .workspace-meta, .pagination-label, .qa-section-title,
 .qa-description, #clear-title, #clear-description, #feedback-title,
 #feedback-description, #settings-title, #settings-description, #provider-hint,
-#settings-page .settings-label, #settings-context-title, #settings-context-hint,
+#settings-page .settings-label, .feedback-label, .feedback-section-title, .feedback-section-hint,
+#settings-context-title, #settings-context-hint,
 #auth-status, #custom-provider-title {
     color: #ffffff;
 }
@@ -741,7 +935,8 @@ Screen, SettingsScreen, ClearResultsScreen, FeedbackScreen, HelpScreen {
 #sidebar { border-right: solid #ffffff; }
 #workspace-nav Button { border: tall #ffffff; }
 #workspace-nav Button, #back-button, Input, SelectCurrent, Button,
-#settings-offline, #clear-selected, #clear-all { border: tall #ffffff; }
+#settings-offline, #clear-selected, #clear-all,
+.qa-policy-preview, #qa-status, #qa-result { border: tall #ffffff; }
 Input, SelectCurrent { background: #000000; }
 Input:focus, Select:focus > SelectCurrent, SelectCurrent:focus { border: tall #ffffff; color: #ffffff; }
 Button, Button.-primary, Button.-warning { background: #000000; color: #ffffff; }
@@ -763,12 +958,14 @@ Button:disabled, Button.-primary:disabled, Button.-warning:disabled,
     text-style: none;
 }
 #home-next, .home-card, #home-guides .home-guide, #home-formats,
-#clear-dialog, #feedback-dialog, #help-dialog, #settings-panel { border: solid #ffffff; }
+#clear-dialog, #feedback-dialog, #help-dialog, #settings-panel,
+.settings-section, .feedback-section { border: solid #ffffff; }
 #log-list, #run-list, #artifact-workspace-list, #results-workspace-list,
 #qa-history-list {
     background: #000000;
     border: solid #ffffff;
 }
+#log-list, #run-list, #log-list:focus, #run-list:focus { border: tall #ffffff; }
 Tabs, .result-header { border-bottom: solid #ffffff; }
 .workspace-title { border-bottom: tall #ffffff; }
 #feedback-actions, #settings-actions { border-top: solid #ffffff; }
@@ -793,8 +990,8 @@ Underline > .underline--bar { color: #ffffff; background: #ffffff; }
 }
 ClearResultsScreen, FeedbackScreen, HelpScreen { background: rgba(0, 0, 0, 0.92); }
 
-.compact .metadata-grid { layout: vertical; }
-.compact .metadata-card { width: 100%; min-height: 4; margin: 0 0 1 0; padding: 1; }
+.compact .metadata-grid { layout: vertical; height: auto; }
+.compact .metadata-card { width: 100%; height: auto; min-height: 4; margin: 0 0 1 0; padding: 1; }
 .compact .settings-pair { layout: vertical; }
 .compact .settings-pair > .settings-field { width: 100%; margin: 0 0 1 0; }
 """
@@ -918,6 +1115,12 @@ def _overview_text(
     hypothesis = hypotheses[0] if isinstance(hypotheses, list) and hypotheses else None
     severity = str(triage.get("severity", "unknown"))
     confidence = str(root_cause.get("confidence", "unknown"))
+    severity_color = SEV_COLOR.get(severity.lower(), SEMANTIC_WARNING)
+    confidence_color = {
+        "high": SEMANTIC_SUCCESS,
+        "medium": SEMANTIC_WARNING,
+        "low": SEMANTIC_ERROR,
+    }.get(confidence.lower(), "#d8d8d8")
     generated = str(meta.get("generated_at") or "unknown")
     timing = f"{duration:.2f}s" if duration is not None else generated
     artifact_name = Path(str(meta.get("log_file") or "")).name or "unknown"
@@ -925,9 +1128,9 @@ def _overview_text(
     lines = [
         "[bold #8f8f8f]STATUS[/bold #8f8f8f]",
         f"  artifact     [bold #f0f6fc]{escape(artifact_name)}[/bold #f0f6fc]",
-        f"  severity     [bold #f0f6fc]{escape(severity.upper())}[/bold #f0f6fc]  {escape(str(failure.get('kind', '')))}",
+        f"  severity     [bold {severity_color}]{escape(severity.upper())}[/bold {severity_color}]  {escape(str(failure.get('kind', '')))}",
         f"  stage        [bold #f0f6fc]{escape(str(failure.get('stage', 'unknown')).upper())}[/bold #f0f6fc]",
-        f"  confidence   [#d8d8d8]{escape(confidence)}[/#d8d8d8]",
+        f"  confidence   [{confidence_color}]{escape(confidence)}[/{confidence_color}]",
         *(
             [f"  support      [#d8d8d8]{escape(str(hypothesis.get('support_status', 'unknown')))}[/#d8d8d8]"]
             if hypothesis else []
@@ -961,7 +1164,7 @@ def _overview_text(
         lines += ["", "[bold #b8b8b8]Failed tests[/bold #b8b8b8]"]
         lines += [f"  • {escape(_compact(test['name'], 160))}" for test in failure["failed_tests"][:5]]
     if qa_classifications is not None:
-        lines += ["", _qa_classification_text(qa_classifications)]
+        lines += ["", _qa_classification_text(qa_classifications, limit=20)]
     engine = escape(str(meta.get("engine", "rule-based")))
     model = f" / {escape(str(meta['model']))}" if meta.get("model") else ""
     reuse = " / reused stored result" if meta.get("reused") else ""
@@ -1100,8 +1303,13 @@ def _trust_profile_text(
     )
 
 
-def _qa_classification_text(classifications: list[dict], *, title: str = "QA classification") -> str:
-    """Render bounded QA decisions for the Overview and QA workspace."""
+def _qa_classification_text(
+    classifications: list[dict],
+    *,
+    title: str = "QA classification",
+    limit: int | None = None,
+) -> str:
+    """Render QA decisions for the Overview and QA workspace."""
     if not classifications:
         return (
             f"[bold #b8b8b8]{escape(title)}[/bold #b8b8b8]\n"
@@ -1116,7 +1324,8 @@ def _qa_classification_text(classifications: list[dict], *, title: str = "QA cla
         f"[bold #b8b8b8]{escape(title)}[/bold #b8b8b8]",
         f"  {len(classifications)} test(s)  •  {summary}",
     ]
-    for item in classifications[:30]:
+    items = classifications if limit is None else classifications[:limit]
+    for item in items:
         decision = str(item.get("decision") or "unknown")
         color = _outcome_color("block" if decision in {"new_failure", "likely_regression"} else "warn")
         rate = _percent(item.get("historical_failure_rate"))
@@ -1131,8 +1340,8 @@ def _qa_classification_text(classifications: list[dict], *, title: str = "QA cla
         )
         if item.get("reason"):
             lines.append(f"    {escape(_compact(item['reason'], 220))}")
-    if len(classifications) > 30:
-        lines.append(f"  [dim]… {len(classifications) - 30} more classifications[/dim]")
+    if limit is not None and len(classifications) > limit:
+        lines.append(f"  [dim]… {len(classifications) - limit} more classifications[/dim]")
     return "\n".join(lines)
 
 
@@ -1278,7 +1487,7 @@ def _context_status_text(doc: dict | None) -> str:
     """Render the short status line used by the explicit Context validation action."""
     readiness = _context_readiness(doc)
     if doc is None:
-        return "[dim]No report selected. Open a stored run to validate context.[/dim]"
+        return "[dim]No report selected[/dim]"
     if readiness["valid"]:
         return (
             f"[bold {SEMANTIC_SUCCESS}][PASS][/bold {SEMANTIC_SUCCESS}] report valid  •  "
@@ -1298,8 +1507,7 @@ def _investigation_text(
     if not doc:
         return (
             "[bold #f0f6fc]No report selected[/bold #f0f6fc]\n\n"
-            "Open a recent run to inspect its deployment context, timeline, ownership, "
-            "observability, and advisory test impact. This view only renders stored evidence."
+            "[dim]Select a run to inspect deployment and runtime evidence.[/dim]"
         )
 
     context = doc.get("context") if isinstance(doc.get("context"), dict) else {}
@@ -1343,7 +1551,7 @@ def _investigation_text(
     if deployment_values:
         lines.extend(f"  {escape(key.replace('_', ' '))}: {escape(value)}" for key, value in deployment_values)
     else:
-        lines.append("  [dim]No deployment context supplied[/dim]")
+        lines.append("  [dim]None[/dim]")
     if devops:
         lines.append(
             f"  static severity: [{_outcome_color(readiness['static_severity'])}]"
@@ -1377,7 +1585,7 @@ def _investigation_text(
                 f"{escape(change.get('previous') or '(missing)')} → {escape(change.get('current') or '(missing)')}"
             )
     else:
-        lines.append("  [dim]No comparable previous release identity[/dim]")
+        lines.append("  [dim]None[/dim]")
 
     lines += ["", "[bold #b8b8b8]Timeline[/bold #b8b8b8]"]
     if timeline:
@@ -1410,9 +1618,9 @@ def _investigation_text(
                 if entry.get("uncertainty"):
                     lines.append(f"    uncertainty: {escape(entry['uncertainty'])}")
         else:
-            lines.append("  [dim]No timeline events observed[/dim]")
+            lines.append("  [dim]None[/dim]")
     else:
-        lines.append("  [dim]Timeline unavailable in this report version[/dim]")
+        lines.append("  [dim]None[/dim]")
 
     lines += ["", "[bold #b8b8b8]Observability & connector audit[/bold #b8b8b8]"]
     if devops:
@@ -1437,7 +1645,7 @@ def _investigation_text(
                 f"({escape(audit.get('duration_ms', 0))} ms)"
             )
     elif not devops:
-        lines.append("  [dim]No observability or connector evidence collected[/dim]")
+        lines.append("  [dim]None[/dim]")
 
     lines += ["", "[bold #b8b8b8]Source, ownership & test impact[/bold #b8b8b8]"]
     if owners:
@@ -1459,7 +1667,7 @@ def _investigation_text(
             if source.get("uncertainty"):
                 lines.append(f"    uncertainty: {escape(source['uncertainty'])}")
     else:
-        lines.append("  source context: [dim]not collected (opt-in)[/dim]")
+        lines.append("  source context: [dim]none[/dim]")
     if test_impact:
         lines.append(
             f"  test impact: advisory only  •  missing coverage={escape(test_impact.get('missing_coverage', True))}"
@@ -1469,7 +1677,7 @@ def _investigation_text(
                 f"    {escape(recommendation.get('test') or '')}  score={escape(recommendation.get('score', 0))}"
             )
     else:
-        lines.append("  test impact: [dim]no advisory recommendations[/dim]")
+        lines.append("  test impact: [dim]none[/dim]")
 
     if run and any(run.values()):
         lines += ["", "[bold #b8b8b8]CI context[/bold #b8b8b8]"]
@@ -1490,7 +1698,7 @@ def _investigation_text(
             if record.get("error"):
                 lines.append(f"    {escape(record['error'])}")
     else:
-        lines.append("  [dim]No external delivery recorded; use CLI/server to deliver.[/dim]")
+        lines.append("  [dim]No external delivery recorded[/dim]")
     if feedback:
         lines += ["", f"[bold #b8b8b8]Feedback[/bold #b8b8b8]  {len(feedback)} record(s)"]
         latest = feedback[-1]
@@ -1545,6 +1753,19 @@ class ResultsListView(ListView):
         return True
 
 
+class ArtifactListView(ListView):
+    def __init__(self, *children: ListItem, on_item_clicked: Callable[[int], None], **kwargs: object) -> None:
+        super().__init__(*children, **kwargs)
+        self._on_item_clicked = on_item_clicked
+
+    def _on_list_item__child_clicked(self, event: ListItem._ChildClicked) -> None:
+        event.stop()
+        self.focus()
+        self.index = self._nodes.index(event.item)
+        if self.index is not None:
+            self._on_item_clicked(self.index)
+
+
 class HomeLogo(Static):
     """Brand mark widget that preserves clean single-line badge formatting without wrapping."""
 
@@ -1560,29 +1781,38 @@ class HelpScreen(ModalScreen[None]):
     BINDINGS = [Binding("escape", "dismiss", "Close", show=False)]
 
     def compose(self) -> ComposeResult:
+        def col(k: str, d: str, w: int = 22) -> str:
+            return f"[bold #ffffff]{k:<7}[/bold #ffffff] [#d6d6d6]{d:<{w}}[/#d6d6d6]"
+
+        def row(k1: str, d1: str, k2: str = "", d2: str = "") -> str:
+            c1 = col(k1, d1, 23)
+            if k2:
+                return f"  {c1}   {col(k2, d2, 22)}"
+            return f"  {c1}"
+
+        content = "\n".join([
+            "[bold #ffffff]Hound Tracer Keyboard Shortcuts[/bold #ffffff]\n",
+            "[bold #8f8f8f]WORKSPACES & VIEWS[/bold #8f8f8f]",
+            row("h", "Home", "f", "Artifacts"),
+            row("l", "Results", "y", "Quality & gates"),
+            row("i", "Current run overview", "m", "Toggle sidebar"),
+            "  [dim]Tabs: Overview · Report · Ticket · Raw log · Context[/dim]\n",
+            "[bold #8f8f8f]ACTIONS & ANALYSIS[/bold #8f8f8f]",
+            row("a", "Analyze selected", "A", "Analyze all filtered"),
+            row("x", "Stop active analysis", "X", "Clear all results"),
+            row("z / d", "Select / deselect all", "space", "Select / deselect one"),
+            row("enter", "Open selected result", "v", "Record feedback"),
+            row("c", "Copy report (md)", "e", "Copy ticket (md)"),
+            row("r", "Reload / refresh", "k", "Unfocus active field"),
+            "\n[bold #8f8f8f]NAVIGATION & CONTROLS[/bold #8f8f8f]",
+            row("esc", "Back / dismiss", "g", "Focus active list"),
+            row("p / n", "Prev / next page", "b", "Browse folder"),
+            row("o", "Toggle offline", "u", "Validate Context"),
+            row("s", "Settings overlay", "m", "Toggle sidebar"),
+            row("?", "Help reference", "q", "Quit Hound Tracer"),
+        ])
         with Vertical(id="help-dialog"):
-            yield Static(
-                "[bold #f0f6fc]Hound Tracer Keyboard Shortcuts[/bold #f0f6fc]\n\n"
-                "[bold #8f8f8f]WORKSPACES & VIEWS[/bold #8f8f8f]\n"
-                "  [bold #f0f6fc]h[/bold #f0f6fc]      Home                [bold #f0f6fc]f[/bold #f0f6fc]      Artifacts\n"
-                "  [bold #f0f6fc]l[/bold #f0f6fc]      Results             [bold #f0f6fc]y[/bold #f0f6fc]      Quality & gates\n"
-                "  [bold #f0f6fc]i[/bold #f0f6fc]      Context (read-only) [bold #f0f6fc]m[/bold #f0f6fc]      Toggle sidebar\n"
-                "  Result tabs after open: Overview · Report · Ticket · Raw log\n\n"
-                "[bold #8f8f8f]ACTIONS & ANALYSIS[/bold #8f8f8f]\n"
-                "  [bold #f0f6fc]a[/bold #f0f6fc]      Analyze selected   [bold #f0f6fc]A[/bold #f0f6fc]      Analyze all filtered\n"
-                "  [bold #f0f6fc]z / d[/bold #f0f6fc]  Select / deselect all  [bold #f0f6fc]space[/bold #f0f6fc]  Select / deselect one\n"
-                "  [bold #f0f6fc]enter[/bold #f0f6fc]  Open selected result  [bold #f0f6fc]v[/bold #f0f6fc]      Record feedback\n"
-                "  [bold #f0f6fc]x / X[/bold #f0f6fc]  Clear selected / all results (Results; confirmation)\n"
-                "  [bold #f0f6fc]c[/bold #f0f6fc]      Copy report (md)   [bold #f0f6fc]e[/bold #f0f6fc]      Copy ticket (md)\n"
-                "  [bold #f0f6fc]r[/bold #f0f6fc]      Reload / refresh   [bold #f0f6fc]x[/bold #f0f6fc]      Stop analysis elsewhere\n\n"
-                "[bold #8f8f8f]NAVIGATION & CONTROLS[/bold #8f8f8f]\n"
-                 "  [bold #f0f6fc]esc[/bold #f0f6fc]    Back                [bold #f0f6fc]k[/bold #f0f6fc]      Unfocus\n"
-                "  [bold #f0f6fc]p / n[/bold #f0f6fc]  Page or result prev/next\n"
-                "  [bold #f0f6fc]b[/bold #f0f6fc]      Browse folder      [bold #f0f6fc]s[/bold #f0f6fc]      Settings overlay\n"
-                "  [bold #f0f6fc]o[/bold #f0f6fc]      Toggle offline     [bold #f0f6fc]u[/bold #f0f6fc]      Validate Context\n"
-                "  [bold #f0f6fc]g[/bold #f0f6fc]      Focus active list\n"
-                "  [bold #f0f6fc]q[/bold #f0f6fc]      Quit Hound Tracer"
-            )
+            yield Static(content)
             yield Button("Close", id="help-close", variant="primary")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -1786,9 +2016,19 @@ class SettingsScreen(ModalScreen[None]):
             enrich_button = self.query_one("#settings-enrich", Button)
             redact_button = self.query_one("#settings-redact", Button)
             dedup_button = self.query_one("#settings-dedup", Button)
+            provider_select = self.query_one("#settings-provider", Select)
+            model_select = self.query_one("#settings-model", Select)
+            manual_model = self.query_one("#settings-model-manual", Input)
+            base_url = self.query_one("#settings-base-url", Input)
+            api_key = self.query_one("#settings-api-key", Input)
+            connect = self.query_one("#settings-connect", Button)
+            disconnect = self.query_one("#settings-disconnect", Button)
             offline_button.disabled = not policy.allow_llm
             offline_button.label = self._offline_label()
             offline_button.set_class(policy.allow_llm and not self._offline, "is-llm")
+            online_controls_disabled = self._offline or not policy.allow_llm
+            for control in (provider_select, model_select, manual_model, base_url, api_key, connect, disconnect):
+                control.disabled = online_controls_disabled
             source_button.disabled = not policy.allow_source_context
             enrich_button.disabled = not policy.allow_enrichment
             source_button.label = (
@@ -1886,7 +2126,18 @@ class SettingsScreen(ModalScreen[None]):
             except Exception as exc:
                 self._app.notify(f"Could not add provider: {exc}", severity="error")
                 return
-            self._app.notify(f"Provider {provider_id} added; reopen Settings to select it", timeout=4)
+            try:
+                self._providers = {**PROVIDERS, **load_custom_providers()}
+                provider_select = self.query_one("#settings-provider", Select)
+                provider_select.set_options([
+                    (str(definition.get("name") or name), name)
+                    for name, definition in self._providers.items()
+                ])
+                provider_select.value = provider_id
+            except Exception as exc:
+                self._app.notify(f"Provider saved, but the list could not refresh: {exc}", severity="warning")
+                return
+            self._app.notify(f"Provider {provider_id} added and selected", timeout=4)
             return
         if event.button.id == "settings-save" and not getattr(self, "_processing_deferred_save", False):
             # Apply toggle events posted immediately before Save before reading the form state.
@@ -2048,7 +2299,17 @@ class SettingsScreen(ModalScreen[None]):
 class FeedbackScreen(ModalScreen[None]):
     """Record auditable reviewer feedback for one stored analysis run."""
 
-    BINDINGS = [Binding("escape", "dismiss", "Close", show=False)]
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close", show=False),
+        Binding("pageup", "scroll_page_up", "Page Up", show=False),
+        Binding("pagedown", "scroll_page_down", "Page Down", show=False),
+    ]
+
+    def action_scroll_page_up(self) -> None:
+        self.query_one("#feedback-dialog", Vertical).scroll_page_up(animate=False)
+
+    def action_scroll_page_down(self) -> None:
+        self.query_one("#feedback-dialog", Vertical).scroll_page_down(animate=False)
 
     def __init__(self, app: "RcaTui", run_dir: Path) -> None:
         super().__init__()
@@ -2087,60 +2348,91 @@ class FeedbackScreen(ModalScreen[None]):
                 id="feedback-description",
             )
             with Vertical(id="feedback-form"):
-                with Horizontal(classes="qa-form-row feedback-form-row"):
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Usefulness", classes="field-label")
-                        yield Select(
-                            self._options(["useful", "partial", "not_useful", "unknown"]),
-                            value="unknown",
-                            id="feedback-usefulness",
-                        )
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Review status", classes="field-label")
-                        yield Select(self._options(["pending", "reviewed", "rejected"]), value="pending", id="feedback-review-status")
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Actual outcome", classes="field-label")
-                        yield Select(
-                            self._options(
-                                ["root_cause_confirmed", "alternative_cause", "false_positive", "resolved", "unresolved", "unknown"]
-                            ),
-                            value="unknown",
-                            id="feedback-outcome",
-                        )
-                with Horizontal(classes="qa-form-row feedback-form-row"):
-                    for label, widget_id in (
-                        ("Kind correct", "feedback-kind-correct"),
-                        ("Severity correct", "feedback-severity-correct"),
-                        ("Owner correct", "feedback-owner-correct"),
-                        ("Duplicate correct", "feedback-duplicate-correct"),
-                    ):
+                with Vertical(classes="feedback-section"):
+                    yield Static("REVIEW ASSESSMENT & TRIAGE", classes="feedback-section-title")
+                    yield Static(
+                        "Record reviewer disposition, usefulness rating, and triage metadata.",
+                        classes="feedback-section-hint",
+                    )
+                    with Horizontal(classes="feedback-pair"):
                         with Vertical(classes="feedback-field"):
-                            yield Static(label, classes="field-label")
+                            yield Static("Review status", classes="feedback-label")
+                            yield Select(self._options(["pending", "reviewed", "rejected"]), value="pending", id="feedback-review-status")
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Usefulness", classes="feedback-label")
+                            yield Select(
+                                self._options(["useful", "partial", "not_useful", "unknown"]),
+                                value="unknown",
+                                id="feedback-usefulness",
+                            )
+                    with Horizontal(classes="feedback-pair"):
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Actual outcome", classes="feedback-label")
+                            yield Select(
+                                self._options(
+                                    ["root_cause_confirmed", "alternative_cause", "false_positive", "resolved", "unresolved", "unknown"]
+                                ),
+                                value="unknown",
+                                id="feedback-outcome",
+                            )
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Reviewer", classes="feedback-label")
+                            yield Input(placeholder="reviewer identifier", id="feedback-reviewer")
+                    with Vertical(classes="feedback-field"):
+                        yield Static("Review notes", classes="feedback-label")
+                        yield Input(placeholder="audit notes for future QA correlation", id="feedback-notes")
+
+                with Vertical(classes="feedback-section"):
+                    yield Static("PREDICTION ACCURACY & CORRECTIONS", classes="feedback-section-title")
+                    yield Static(
+                        "Validate model predictions and specify corrections for misclassifications.",
+                        classes="feedback-section-hint",
+                    )
+                    with Horizontal(classes="feedback-pair"):
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Kind correct", classes="feedback-label")
                             yield Select(
                                 self._options(["correct", "incorrect", "unknown"]),
                                 value="unknown",
-                                id=widget_id,
+                                id="feedback-kind-correct",
                             )
-                with Horizontal(classes="qa-form-row feedback-form-row"):
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Actual kind", classes="field-label")
-                        yield Select(self._options(sorted(KINDS), blank="Use prediction"), value="", id="feedback-actual-kind")
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Actual severity", classes="field-label")
-                        yield Select(self._options(sorted(SEVERITIES), blank="Use prediction"), value="", id="feedback-actual-severity")
-                    with Vertical(classes="feedback-field"):
-                        yield Static("Actual owner", classes="field-label")
-                        yield Input(placeholder="team or owner", id="feedback-actual-owner")
-                with Horizontal(classes="qa-form-row feedback-form-row feedback-last-row"):
-                    with Vertical(classes="feedback-field feedback-field-wide"):
-                        yield Static("Root cause correction", classes="field-label")
-                        yield Input(placeholder="corrected root cause or explanation", id="feedback-root-cause-correction")
-                    with Vertical(classes="feedback-field feedback-field-wide"):
-                        yield Static("Review notes", classes="field-label")
-                        yield Input(placeholder="audit notes for future QA correlation", id="feedback-notes")
-                    with Vertical(classes="feedback-field feedback-field-compact"):
-                        yield Static("Reviewer", classes="field-label")
-                        yield Input(placeholder="reviewer identifier", id="feedback-reviewer")
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Actual kind", classes="feedback-label")
+                            yield Select(self._options(sorted(KINDS), blank="Use prediction"), value="", id="feedback-actual-kind")
+                    with Horizontal(classes="feedback-pair"):
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Severity correct", classes="feedback-label")
+                            yield Select(
+                                self._options(["correct", "incorrect", "unknown"]),
+                                value="unknown",
+                                id="feedback-severity-correct",
+                            )
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Actual severity", classes="feedback-label")
+                            yield Select(self._options(sorted(SEVERITIES), blank="Use prediction"), value="", id="feedback-actual-severity")
+                    with Horizontal(classes="feedback-pair"):
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Owner correct", classes="feedback-label")
+                            yield Select(
+                                self._options(["correct", "incorrect", "unknown"]),
+                                value="unknown",
+                                id="feedback-owner-correct",
+                            )
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Actual owner", classes="feedback-label")
+                            yield Input(placeholder="team or owner", id="feedback-actual-owner")
+                    with Horizontal(classes="feedback-pair"):
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Duplicate correct", classes="feedback-label")
+                            yield Select(
+                                self._options(["correct", "incorrect", "unknown"]),
+                                value="unknown",
+                                id="feedback-duplicate-correct",
+                            )
+                        with Vertical(classes="feedback-field"):
+                            yield Static("Root cause correction", classes="feedback-label")
+                            yield Input(placeholder="corrected root cause or explanation", id="feedback-root-cause-correction")
+
             with Horizontal(id="feedback-actions"):
                 yield Button("Cancel", id="feedback-cancel")
                 yield Button("Save feedback", id="feedback-save", variant="primary")
@@ -2274,6 +2566,7 @@ class RcaTui(App):
         Binding("a", "analyze", "Analyze", show=False),
         Binding("A", "analyze_all", "Analyze all", show=False),
         Binding("x", "stop_or_clear_selected", "Stop/Clear selected", show=False),
+        Binding("ctrl+x", "stop_analysis", "Stop analysis", show=False),
         Binding("r", "refresh", "Refresh", show=False),
         Binding("o", "toggle_offline", "Toggle Offline", show=False),
         Binding("c", "copy_report", "Copy Report", show=False),
@@ -2285,7 +2578,7 @@ class RcaTui(App):
         Binding("f", "show_artifacts", "Artifacts", show=False),
         Binding("l", "show_results", "Results", show=False),
         Binding("y", "show_qa", "Quality", show=False),
-        Binding("i", "show_investigation", "Investigation", show=False),
+        Binding("i", "show_overview", "Overview", show=False),
         Binding("u", "validate_context", "Validate Context", show=False),
         Binding("v", "open_feedback", "Feedback", show=False),
         Binding("z", "select_all_workspace", "Select all", show=False),
@@ -2304,10 +2597,24 @@ class RcaTui(App):
     ]
 
     async def on_event(self, event: events.Event) -> None:
-        if isinstance(event, events.Key) and not event.is_forwarded and event.key == "k":
-            await self.run_action("unfocus")
-            return
+        if isinstance(event, events.Key) and not event.is_forwarded:
+            if event.key == "k":
+                await self.run_action("unfocus")
+                return
+            if event.key == "ctrl+c" and self._analyzing:
+                self.action_stop_analysis()
+                return
+            editing_input = isinstance(self.focused, Input)
+            if not editing_input and event.key in {"left", "right"} and self._cycle_result_tab(-1 if event.key == "left" else 1):
+                return
         await super().on_event(event)
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if isinstance(self.focused, Input):
+            if action in {"unfocus", "back"}:
+                return True
+            return False
+        return super().check_action(action, parameters)
 
     def __init__(
         self,
@@ -2436,60 +2743,48 @@ class RcaTui(App):
     def compose(self) -> ComposeResult:
         yield Static("Hound Tracer CI/CD Investigator", id="app-title")
         with Horizontal(id="main"):
-            with Vertical(id="sidebar"):
+            with VerticalScroll(id="sidebar"):
                 yield Static("WORKFLOW", id="workflow-title", classes="sidebar-detail")
                 with Vertical(id="workspace-nav"):
                     with Horizontal(classes="workspace-nav-row"):
+                        yield Button("Home", id="nav-home")
                         yield Button("Artifacts", id="nav-artifacts")
-                        yield Button("Results", id="nav-results")
                     with Horizontal(classes="workspace-nav-row"):
+                        yield Button("Results", id="nav-results")
                         yield Button("Quality", id="nav-qa")
-                        yield Button("Context", id="nav-investigation")
-                yield Static("Log directory", classes="field-label sidebar-detail")
+                with Vertical(id="engine-status", classes="sidebar-detail"):
+                    yield Static(id="engine-summary")
+                    yield Static("[bold]STATUS[/bold]\nIdle · Ready to analyze", id="workflow-status")
+                yield Static("DIRECTORY", id="log-directory-title", classes="field-label sidebar-section-title sidebar-detail")
                 yield Input(value=str(self.logs_dir), placeholder="/path/to/ci-cd-logs", id="dir-input", classes="sidebar-input sidebar-detail")
                 with Horizontal(id="directory-actions", classes="sidebar-detail"):
                     yield Button("Browse", id="browse-dir")
                     yield Button("Load", id="load-dir")
-                yield Static(id="dir-meta", classes="sidebar-detail")
-                yield Static("Filter logs (optional)", classes="field-label sidebar-detail")
-                yield Input(placeholder="filename contains…", id="log-filter", classes="sidebar-input sidebar-detail")
-                yield Select(
-                    [("All types", "all"), ("Deploy", "deploy"), ("Build", "build"),
-                     ("Test", "test"), ("CI", "ci"), ("Unknown", "unknown")],
-                    value="all", id="type-filter", classes="sidebar-input sidebar-detail",
-                )
-                yield Select(
-                    [("Newest first", "newest"), ("Oldest first", "oldest"),
-                     ("Type", "type"), ("Name A-Z", "name-asc"), ("Name Z-A", "name-desc")],
-                    value="newest", id="log-sort", classes="sidebar-input sidebar-detail",
-                )
+                yield Static(id="session-summary", classes="sidebar-detail")
+                with Collapsible(title="Filter and sort artifacts", collapsed=True, id="log-filters", classes="sidebar-detail"):
+                    yield Input(placeholder="filename contains…", id="log-filter", classes="sidebar-input")
+                    yield Select(
+                        [("All types", "all"), ("Deploy", "deploy"), ("Build", "build"),
+                         ("Test", "test"), ("CI", "ci"), ("Unknown", "unknown")],
+                        value="all", id="type-filter", classes="sidebar-input",
+                    )
+                    yield Select(
+                        [("Newest first", "newest"), ("Oldest first", "oldest"),
+                         ("Type", "type"), ("Name A-Z", "name-asc"), ("Name Z-A", "name-desc")],
+                        value="newest", id="log-sort", classes="sidebar-input",
+                    )
                 yield ListView(id="log-list", classes="sidebar-detail")
                 yield Button("Analyze selected log", id="analyze", classes="sidebar-button sidebar-detail", variant="primary", disabled=True)
-                yield Button("Analyze all visible", id="analyze-all", classes="sidebar-button sidebar-detail", variant="warning", disabled=True)
-                yield Button("Stop after current", id="stop-analysis", classes="sidebar-button sidebar-detail", variant="warning")
-                yield Static("Select a valid .log file", id="workflow-status", classes="sidebar-detail")
-                yield Static("RECENT RUNS", classes="field-label sidebar-detail")
-                yield Input(placeholder="search artifact or root cause…", id="run-filter", classes="sidebar-input sidebar-detail")
-                with Vertical(id="run-controls", classes="sidebar-detail"):
-                    yield Select(
-                        [("All stages", "all"), ("CI", "ci"), ("Build", "build"),
-                         ("Test", "test"), ("Deploy", "deploy"), ("Unknown", "unknown")],
-                        value="all", id="run-stage", classes="sidebar-input sidebar-detail",
-                    )
-                    yield Select(
-                        [("Newest", "newest"), ("Oldest", "oldest"),
-                         ("Severity", "severity"), ("Artifact A-Z", "artifact")],
-                        value="newest", id="run-sort", classes="sidebar-input sidebar-detail",
-                    )
+                yield Static("RECENT RUNS", id="recent-runs-title", classes="field-label sidebar-section-title sidebar-detail")
                 yield ListView(id="run-list", classes="sidebar-detail")
                 yield Button("Settings", id="open-settings", classes="sidebar-button")
             with Vertical(id="content"):
                 with Horizontal(id="content-actions"):
-                    yield Button("Back", id="back-button")
-                    yield Button("Show sidebar", id="show-sidebar")
+                    yield Button("===", id="show-sidebar")
+                    yield Button("<--", id="back-button")
                 with Vertical(id="home"):
                     yield HomeLogo(HOUND_LOGO, id="home-logo")
-                    yield Static("CI/CD FAILURE INVESTIGATION AGENT", id="home-subtitle")
+                    yield Static("CI/CD FAILURE INVESTIGATION TOOL", id="home-subtitle")
                     yield Static("Inspect logs. Find root causes. Ship fixes faster.", id="home-tagline")
                     with Vertical(id="home-body"):
                         yield Static(id="home-next")
@@ -2519,7 +2814,7 @@ class RcaTui(App):
                              ("Type", "type"), ("Name A-Z", "name-asc"), ("Name Z-A", "name-desc")],
                             value="newest", id="workspace-artifact-sort", classes="workspace-filter-select",
                         )
-                    yield ListView(id="artifact-workspace-list")
+                    yield ArtifactListView(id="artifact-workspace-list", on_item_clicked=self._toggle_workspace_artifact)
                     with Horizontal(classes="pagination-controls"):
                         yield Button("Previous", id="artifact-prev", disabled=True)
                         yield Static("Page 1/1", id="artifact-pagination-label", classes="pagination-label")
@@ -2565,7 +2860,7 @@ class RcaTui(App):
                 with Vertical(id="qa-workspace"):
                     yield Static("QUALITY & GATES", classes="workspace-title")
                     yield Static(
-                        "Evaluate test evidence, import run history, and enforce a release policy.",
+                        f"Test history database & release gate policy  •  {escape(str(self.logs_dir))}",
                         id="qa-workspace-meta",
                         classes="workspace-meta",
                     )
@@ -2573,16 +2868,10 @@ class RcaTui(App):
                         yield Static(id="qa-card-history", classes="metadata-card")
                         yield Static(id="qa-card-gate", classes="metadata-card")
                         yield Static(id="qa-card-signal", classes="metadata-card")
-                    with Horizontal(id="qa-actions", classes="workspace-action-row"):
-                        yield Button("Analyze evidence", id="qa-analyze", variant="primary")
-                        yield Button("Import history", id="qa-import-history")
-                        yield Button("Run gate", id="qa-gate", variant="warning")
-                        yield Button("Load history", id="qa-load-history")
-                    yield Static("Ready. Select an action, then review its result below.", id="qa-status", classes="workspace-status")
                     with ResultScroll(id="qa-scroll", classes="result-scroll workspace-data-panel"):
                         yield Static("EVIDENCE", classes="qa-section-title")
                         yield Static(
-                            "Test reports feed historical analysis. SARIF remains separate gate evidence and can also be opened as an RCA artifact.",
+                            "Test runs, coverage & SARIF gate evidence",
                             classes="qa-description",
                         )
                         with Vertical(classes="qa-field"):
@@ -2602,7 +2891,7 @@ class RcaTui(App):
                             yield Static("Policy file", classes="field-label")
                             yield Input(placeholder="quality.yml or quality.json", id="qa-policy")
                         yield Static(
-                            "No policy loaded. Enter a policy path to preview validated active rules before running the gate.",
+                            "[dim]Gate policy: none loaded[/dim]",
                             id="qa-policy-preview",
                             classes="qa-policy-preview",
                         )
@@ -2647,27 +2936,14 @@ class RcaTui(App):
                             with Vertical(classes="qa-field"):
                                 yield Static("History suite prefix", classes="field-label")
                                 yield Input(placeholder="filter tracked suites", id="qa-suite-prefix")
+                        with Horizontal(id="qa-actions", classes="workspace-action-row"):
+                            yield Button("Build history", id="qa-import-history")
+                            yield Button("Analyze candidate", id="qa-analyze", variant="primary")
+                            yield Button("Evaluate release gate", id="qa-gate", variant="warning", disabled=True)
+                            yield Button("Browse history", id="qa-load-history")
+                        yield Static("", id="qa-status", classes="workspace-status")
                         yield ListView(id="qa-history-list")
                         yield Static("", id="qa-result")
-                with Vertical(id="investigation-workspace"):
-                    yield Static("CONTEXT (READ-ONLY)", classes="workspace-title")
-                    yield Static(
-                        "Review report integrity, trust boundaries, deployment impact, and stored connector evidence. Context is read-only; connector collection remains in the CLI and pipeline.",
-                        id="investigation-workspace-meta",
-                        classes="workspace-meta",
-                    )
-                    with Horizontal(id="context-actions", classes="workspace-action-row"):
-                        yield Button("Validate", id="context-validate", variant="primary", disabled=True)
-                        yield Button("Feedback", id="context-feedback", disabled=True)
-                        yield Button("Copy summary", id="context-copy-summary", disabled=True)
-                    yield Static("No report selected. Open a stored run to validate context.", id="context-status")
-                    with Grid(classes="metadata-grid"):
-                        yield Static(id="context-card-integrity", classes="metadata-card")
-                        yield Static(id="context-card-trust", classes="metadata-card")
-                        yield Static(id="context-card-impact", classes="metadata-card")
-                    with ResultScroll(id="investigation-scroll", classes="result-scroll workspace-data-panel"):
-                        yield Static(id="context-validation-summary")
-                        yield Static(_investigation_text(None), id="investigation")
                 with TabbedContent(initial="pane-overview", id="tabs"):
                     with TabPane("Overview", id="pane-overview"):
                         with Vertical(id="overview-shell"):
@@ -2700,6 +2976,33 @@ class RcaTui(App):
                                 classes="result-header",
                             )
                             yield Static("[dim]Select a log to preview raw output.[/dim]", id="raw", classes="pane-content")
+                    with TabPane("Context", id="pane-context"):
+                        with Vertical(id="context-shell"):
+                            with ResultScroll(id="investigation-scroll", classes="result-scroll"):
+                                yield Static(
+                                    _result_header(
+                                        "Context",
+                                        "Deployment and trust context",
+                                        "Read-only investigation evidence.",
+                                    ),
+                                    classes="result-header",
+                                )
+                                yield Static(
+                                    "Connector collection remains in the CLI and pipeline.",
+                                    id="investigation-workspace-meta",
+                                    classes="workspace-meta",
+                                )
+                                with Grid(classes="metadata-grid"):
+                                    yield Static(id="context-card-integrity", classes="metadata-card")
+                                    yield Static(id="context-card-trust", classes="metadata-card")
+                                    yield Static(id="context-card-impact", classes="metadata-card")
+                                with Grid(id="context-actions", classes="metadata-grid"):
+                                    yield Button("Validate report", id="context-validate", variant="primary", disabled=True)
+                                    yield Button("Record feedback", id="context-feedback", disabled=True)
+                                    yield Button("Copy validation", id="context-copy-summary", disabled=True)
+                                yield Static(_context_status_text(None), id="context-status")
+                                yield Static(id="context-validation-summary")
+                                yield Static(_investigation_text(None), id="investigation")
                 with Horizontal(id="result-navigation"):
                     yield Button("Previous", id="previous-result")
                     yield Static(id="result-position")
@@ -2769,6 +3072,13 @@ class RcaTui(App):
                         sb.update(content)
                 except Exception:
                     pass
+            engine = self.query("#engine-summary").first(Static)
+            if engine is not None:
+                engine_mode = "OFFLINE · local rules" if self.offline else f"ONLINE · {escape(self.provider or 'auto')} / {escape(self.model or 'default')}"
+                engine.update(
+                    "[bold]ENGINE[/bold]\n"
+                    f"{engine_mode} · {escape(self.source_class)}"
+                )
         except Exception:
             pass
 
@@ -2779,7 +3089,7 @@ class RcaTui(App):
                 return ("results_tab", tabs.active)
         except Exception:
             pass
-        for name in ("artifact", "results", "qa", "investigation"):
+        for name in ("artifact", "results", "qa"):
             try:
                 ws = self.query_one(f"#{name}-workspace", Vertical)
                 if ws.display:
@@ -2836,10 +3146,11 @@ class RcaTui(App):
         key = "bold #b8b8b8"
         can_back = self._current_view_state() != ("home", None)
         back_hint = f"[{key}]esc[/{key}] back  " if can_back else ""
+        analyze_hint = f"[{key}]x[/{key}] stop analyze  " if self._analyzing else f"[{key}]a[/{key}] analyze  "
         if self.has_class("compact"):
-            common = f"{back_hint}[{key}]a[/{key}] analyze  [{key}]b[/{key}] browse  [{key}]m[/{key}] sidebar  [{key}]s[/{key}] settings  [{key}]?[/{key}] help  [{key}]q[/{key}] quit"
+            common = f"{back_hint}{analyze_hint}[{key}]b[/{key}] browse  [{key}]m[/{key}] sidebar  [{key}]s[/{key}] settings  [{key}]?[/{key}] help  [{key}]q[/{key}] quit"
         else:
-            common = f"{back_hint}[{key}]a[/{key}] analyze  [{key}]b[/{key}] browse  [{key}]m[/{key}] sidebar  [{key}]h[/{key}] home  [{key}]r[/{key}] refresh  [{key}]s[/{key}] settings  [{key}]?[/{key}] help  [{key}]q[/{key}] quit"
+            common = f"{back_hint}{analyze_hint}[{key}]b[/{key}] browse  [{key}]m[/{key}] sidebar  [{key}]h[/{key}] home  [{key}]r[/{key}] refresh  [{key}]s[/{key}] settings  [{key}]?[/{key}] help  [{key}]q[/{key}] quit"
         contextual = {
             "pane-report": f"[{key}]c[/{key}] copy report  ",
             "pane-ticket": f"[{key}]e[/{key}] copy ticket  ",
@@ -2856,18 +3167,25 @@ class RcaTui(App):
             # Tab activation can arrive while sibling workspaces are still mounting.
             artifacts_ws = None
         if artifacts_ws is not None and artifacts_ws.display:
-            contextual = (
-                f"[{key}]a[/{key}] analyze  [{key}]A[/{key}] all  [{key}]z / d[/{key}] select/deselect all  "
-                f"[{key}]space[/{key}] toggle  [{key}]p / n[/{key}] prev/next page  "
-            )
+            if self._analyzing:
+                contextual = (
+                    f"[{key}]x[/{key}] stop analyze  [{key}]z / d[/{key}] select/deselect all  "
+                    f"[{key}]space[/{key}] toggle  [{key}]p / n[/{key}] prev/next page  "
+                )
+            else:
+                contextual = (
+                    f"[{key}]a[/{key}] analyze  [{key}]A[/{key}] all  [{key}]z / d[/{key}] select/deselect all  "
+                    f"[{key}]space[/{key}] toggle  [{key}]p / n[/{key}] prev/next page  "
+                )
         try:
             results_ws: Vertical | None = self.query_one("#results-workspace", Vertical)
         except Exception:
             results_ws = None
         if results_ws is not None and results_ws.display:
+            clear_hint = f"[{key}]x[/{key}] stop analyze  " if self._analyzing else f"[{key}]x / X[/{key}] clear  "
             contextual = (
                 f"[{key}]enter[/{key}] open  [{key}]v[/{key}] feedback  [{key}]z / d[/{key}] select/deselect all  "
-                f"[{key}]space[/{key}] toggle  [{key}]x / X[/{key}] clear  [{key}]p / n[/{key}] prev/next page  "
+                f"[{key}]space[/{key}] toggle  {clear_hint}[{key}]p / n[/{key}] prev/next page  "
             )
         try:
             qa_ws: Vertical | None = self.query_one("#qa-workspace", Vertical)
@@ -2875,12 +3193,10 @@ class RcaTui(App):
             qa_ws = None
         if qa_ws is not None and qa_ws.display:
             contextual = f"[{key}]g[/{key}] focus QA result  [{key}]tab[/{key}] move field  "
-        try:
-            investigation_ws: Vertical | None = self.query_one("#investigation-workspace", Vertical)
-        except Exception:
-            investigation_ws = None
-        if investigation_ws is not None and investigation_ws.display:
+        if self.query_one("#tabs", TabbedContent).display and active == "pane-context":
             contextual = f"[{key}]u[/{key}] validate  [{key}]v[/{key}] feedback  [{key}]c[/{key}] copy summary  [{key}]g[/{key}] focus context  "
+        if self.query_one("#tabs", TabbedContent).display:
+            contextual = f"[{key}]← / →[/{key}] tabs  " + contextual
         separator = "  [dim]|[/dim]  " if contextual.strip() else ""
         try:
             self.query_one("#shortcutbar", Static).update(contextual.rstrip() + separator + common)
@@ -2894,7 +3210,6 @@ class RcaTui(App):
         self.query_one("#artifact-workspace", Vertical).display = False
         self.query_one("#results-workspace", Vertical).display = False
         self.query_one("#qa-workspace", Vertical).display = False
-        self.query_one("#investigation-workspace", Vertical).display = False
         self.query_one("#tabs", TabbedContent).display = False
         self.query_one("#result-navigation", Horizontal).display = False
         self._set_workspace_nav_active(None)
@@ -2909,16 +3224,35 @@ class RcaTui(App):
         self.query_one("#artifact-workspace", Vertical).display = False
         self.query_one("#results-workspace", Vertical).display = False
         self.query_one("#qa-workspace", Vertical).display = False
-        self.query_one("#investigation-workspace", Vertical).display = False
         tabs = self.query_one("#tabs", TabbedContent)
         tabs.display = True
         tabs.active = pane
+        if pane == "pane-context":
+            self._refresh_current_context()
         self._update_result_navigation()
         self._set_workspace_nav_active("results")
         self._update_back_button()
         self._update_shortcuts()
 
+    def _cycle_result_tab(self, direction: int) -> bool:
+        tabs = next(iter(self.query("#tabs")), None)
+        if not isinstance(tabs, TabbedContent) or not tabs.display:
+            return False
+        try:
+            current_index = RESULT_TAB_IDS.index(str(tabs.active))
+        except ValueError:
+            current_index = 0
+        next_tab = RESULT_TAB_IDS[(current_index + direction) % len(RESULT_TAB_IDS)]
+        tabs.active = next_tab
+        if next_tab == "pane-context":
+            self._refresh_current_context()
+        self._update_shortcuts()
+        return True
+
     def _show_workspace(self, workspace: str, *, record_history: bool = True) -> None:
+        if workspace == "investigation":
+            self._show_results("pane-context", record_history=record_history)
+            return
         if record_history:
             self._record_view_transition(("workspace", workspace))
         self.query_one("#home", Vertical).display = False
@@ -2927,11 +3261,9 @@ class RcaTui(App):
         artifacts = self.query_one("#artifact-workspace", Vertical)
         results = self.query_one("#results-workspace", Vertical)
         qa = self.query_one("#qa-workspace", Vertical)
-        investigation = self.query_one("#investigation-workspace", Vertical)
         artifacts.display = workspace == "artifacts"
         results.display = workspace == "results"
         qa.display = workspace == "qa"
-        investigation.display = workspace == "investigation"
         if workspace == "artifacts":
             self._render_artifact_workspace(self._visible_log_files, force=True)
             self._focus_workspace_list("artifact-workspace-list")
@@ -2939,11 +3271,10 @@ class RcaTui(App):
             self._render_runs(force_workspace=True)
             self._focus_workspace_list("results-workspace-list")
         elif workspace == "qa":
+            self._sync_default_qa_source_path()
             self._update_qa_status_cards()
             self._refresh_qa_policy_preview()
             self._render_qa_result()
-        elif workspace == "investigation":
-            self._refresh_current_context()
         self._set_workspace_nav_active(workspace)
         self._update_back_button()
         self._update_shortcuts()
@@ -3005,7 +3336,7 @@ class RcaTui(App):
             "artifacts": "#nav-artifacts",
             "results": "#nav-results",
             "qa": "#nav-qa",
-            "investigation": "#nav-investigation",
+            "home": "#nav-home",
         }
         for workspace, selector in buttons.items():
             button = self.query(selector).first(Button)
@@ -3051,23 +3382,19 @@ class RcaTui(App):
             self.query_one("#home-diagnostics", Static).update(self._diagnostics_text())
             self.query_one("#home-workflow", Static).update(
                 "[bold #8f8f8f]WORKFLOW[/bold #8f8f8f]\n"
-                "[b][white]01[/white][/b]  Choose artifact directory\n"
-                "[b][white]02[/white][/b]  Filter and select artifact\n"
-                "[b][white]03[/white][/b]  Analyze selected failure\n"
-                "[b][white]04[/white][/b]  Review generated outputs"
+                "[b][white]01[/white][/b]  Ingest CI/CD logs & test artifacts\n"
+                "[b][white]02[/white][/b]  Filter & select target failures\n"
+                "[b][white]03[/white][/b]  Run rule-based or LLM analysis\n"
+                "[b][white]04[/white][/b]  Review root cause & ticket drafts\n"
+                "[b][white]05[/white][/b]  Verify release gates & QA policy"
             )
             self.query_one("#home-keyboard", Static).update(
                 "[bold #8f8f8f]KEYBOARD SHORTCUTS[/bold #8f8f8f]\n"
-                "[bold #f0f6fc]a / A[/bold #f0f6fc]   analyze / batch all\n"
-                "[bold #f0f6fc]f / l[/bold #f0f6fc]   artifacts / results\n"
-                "[bold #f0f6fc]y / i[/bold #f0f6fc]   quality / context\n"
-                "[bold #f0f6fc]b / r[/bold #f0f6fc]   browse / refresh\n"
-                "[bold #f0f6fc]m / s[/bold #f0f6fc]   sidebar / settings\n"
-                "[bold #f0f6fc]z / d / space[/bold #f0f6fc] select / deselect\n"
-                "[bold #f0f6fc]p / n / g[/bold #f0f6fc] page / focus list\n"
-                "[bold #f0f6fc]o / u / v[/bold #f0f6fc] offline / validate Context / feedback\n"
-                "[bold #f0f6fc]x / X[/bold #f0f6fc] clear selected / all results\n"
-                "[bold #f0f6fc]esc / ?[/bold #f0f6fc] back / help guide"
+                "[bold #ffffff]a[/bold #ffffff]  analyze         [bold #ffffff]f[/bold #ffffff]  artifacts\n"
+                "[bold #ffffff]A[/bold #ffffff]  batch all       [bold #ffffff]l[/bold #ffffff]  results\n"
+                "[bold #ffffff]x[/bold #ffffff]  stop analyze    [bold #ffffff]y[/bold #ffffff]  quality\n"
+                "[bold #ffffff]b[/bold #ffffff]  browse          [bold #ffffff]s[/bold #ffffff]  settings\n"
+                "[bold #ffffff]r[/bold #ffffff]  refresh         [bold #ffffff]?[/bold #ffffff]  help guide"
             )
             self.query_one("#home-formats", Static).update(
                 "[bold #8f8f8f]SUPPORTED FORMATS[/bold #8f8f8f]    "
@@ -3301,10 +3628,7 @@ class RcaTui(App):
             analyze_btn = self.query("#analyze").first(Button)
             if analyze_btn is not None:
                 analyze_btn.disabled = self._analyzing or not valid
-            all_button = self.query("#analyze-all").first(Button)
-            if all_button is not None:
-                all_button.disabled = self._analyzing or not self._log_files
-            stop_btn = self.query("#stop-analysis").first(Button)
+            stop_btn = next(iter(self.query("#stop-analysis")), None)
             if stop_btn is not None:
                 stop_btn.display = self._analyzing
             ws_analyze = self.query("#workspace-analyze").first(Button)
@@ -3326,7 +3650,7 @@ class RcaTui(App):
                 refresh_btn.disabled = self._analyzing
             open_result = self.query("#open-workspace-result").first(Button)
             if open_result is not None:
-                open_result.disabled = self._analyzing or not self._selected_runs
+                open_result.disabled = self._analyzing or not self._filtered_runs
             select_all_results = self.query("#results-select-all").first(Button)
             if select_all_results is not None:
                 select_all_results.disabled = self._analyzing or not (
@@ -3351,21 +3675,35 @@ class RcaTui(App):
             pass
         finally:
             self._update_statusbar()
+            self._update_shortcuts()
 
     def _set_state(self, state: str, message: str = "") -> None:
         status = self.query_one("#workflow-status", Static)
         retry = self.query_one("#retry", Button)
         retry.display = state == "error"
         if state == "loading":
-            status.update(f"[{SEMANTIC_WARNING}]●[/{SEMANTIC_WARNING}] {message}")
+            filled = self._progress % (STATUS_PROGRESS_WIDTH + 1)
+            completed = "█" * filled
+            remaining = "░" * (STATUS_PROGRESS_WIDTH - filled)
+            status.update(
+                f"[bold]STATUS[/bold]  [{SEMANTIC_WARNING}]●[/{SEMANTIC_WARNING}] [bold]ANALYZING[/bold]\n"
+                f"[{SEMANTIC_SUCCESS}]{completed}[/{SEMANTIC_SUCCESS}]"
+                f"[#5f5f5f]{remaining}[/#5f5f5f] Working…"
+            )
         elif state == "success":
-            status.update(f"[{SEMANTIC_SUCCESS}]✓[/{SEMANTIC_SUCCESS}] {message}")
+            detail = message or "Analysis complete"
+            status.update(f"[bold]STATUS[/bold]  [{SEMANTIC_SUCCESS}]✓[/{SEMANTIC_SUCCESS}] [bold]COMPLETE[/bold]\n\n{detail}")
         elif state == "error":
-            status.update(f"[bold {SEMANTIC_ERROR}]×[/bold {SEMANTIC_ERROR}] {message}")
+            detail = message or "Analysis could not run"
+            status.update(f"[bold]STATUS[/bold]  [bold {SEMANTIC_ERROR}]×[/bold {SEMANTIC_ERROR}] [bold]ERROR[/bold]\n\n{detail}")
         elif state == "empty":
-            status.update(f"[{SEMANTIC_WARNING}]![/{SEMANTIC_WARNING}] {message}")
+            detail = "Waiting for supported artifacts" if message.startswith("No supported artifacts") else message
+            status.update(f"[bold]STATUS[/bold]  [#d8d8d8]○[/#d8d8d8] [bold]READY[/bold]\n\n{detail}")
+        elif state in {"ready", "idle"}:
+            status.update("[bold]STATUS[/bold]  [#d8d8d8]○[/#d8d8d8] [bold]READY[/bold]")
         else:
-            status.update(message)
+            prefix = "" if message.startswith("[bold]STATUS[/bold]") else "[bold]STATUS[/bold]\n"
+            status.update(f"{prefix}{message}")
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "log-filter":
@@ -3382,27 +3720,20 @@ class RcaTui(App):
             if self._filter_timer is not None:
                 self._filter_timer.stop()
             self._filter_timer = self.set_timer(0.2, self._scan_logs_from_filter)
-        elif event.input.id == "run-filter":
-            target = self.query("#workspace-run-filter").first(Input)
-            if target is not None:
-                target.value = event.value
-            if self._run_filter_timer is not None:
-                self._run_filter_timer.stop()
-            self._run_filter_timer = self.set_timer(0.2, self._render_runs)
         elif event.input.id == "workspace-run-filter":
-            target = self.query("#run-filter").first(Input)
-            if target is not None:
-                target.value = event.value
             if self._run_filter_timer is not None:
                 self._run_filter_timer.stop()
             self._run_filter_timer = self.set_timer(0.2, self._render_runs)
         elif event.input.id in {"qa-policy", "qa-environment"}:
             self._refresh_qa_policy_preview()
+        if event.input.id in {"qa-repo-dir", "qa-baseline", "qa-policy"}:
+            self._update_qa_action_availability()
 
     def _scan_logs_from_filter(self) -> None:
         """Apply the current mirrored filter, not a stale intermediate event value."""
-        filter_input = self.query("#log-filter").first(Input)
-        self._scan_logs(filter_input.value if filter_input is not None else "")
+        filter_input = next(iter(self.query("#log-filter")), None)
+        if isinstance(filter_input, Input):
+            self._scan_logs(filter_input.value)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "dir-input":
@@ -3426,15 +3757,7 @@ class RcaTui(App):
                 sync("#log-sort")
             log_filter = next(iter(self.query("#log-filter")), None)
             self._scan_logs(log_filter.value if log_filter is not None else "")
-        elif event.select.id in {"run-stage", "run-sort", "workspace-run-stage", "workspace-run-sort"}:
-            if event.select.id == "run-stage":
-                sync("#workspace-run-stage")
-            elif event.select.id == "workspace-run-stage":
-                sync("#run-stage")
-            elif event.select.id == "run-sort":
-                sync("#workspace-run-sort")
-            elif event.select.id == "workspace-run-sort":
-                sync("#run-sort")
+        elif event.select.id in {"workspace-run-stage", "workspace-run-sort"}:
             self._render_runs()
 
     def _load_directory(self) -> None:
@@ -3449,6 +3772,21 @@ class RcaTui(App):
             qa_source.value = str(self.logs_dir)
         self._scan_logs()
         self._update_statusbar()
+
+    def _update_session_summary(self, loaded: int, analyzed: int, visible: int, directory_valid: bool) -> None:
+        session = self.query("#session-summary").first(Static)
+        if session is None:
+            return
+        directory = (
+            f"[bold #ffffff]DIRECTORY[/bold #ffffff]\n[dim]{escape(_compact(str(self.logs_dir), 48))}[/dim]"
+            if directory_valid
+            else f"[bold {SEMANTIC_ERROR}]× DIRECTORY UNAVAILABLE[/bold {SEMANTIC_ERROR}]\n[dim]{escape(_compact(str(self.logs_dir), 48))}[/dim]"
+        )
+        session.update(
+            "[bold]SESSION[/bold]\n"
+            f"{loaded} loaded · {analyzed} analyzed · {visible} visible\n\n"
+            f"{directory}"
+        )
 
     @work(thread=True, exclusive=True, group="folder-picker")
     def action_browse_directory(self) -> None:
@@ -3467,7 +3805,7 @@ class RcaTui(App):
     def _scan_logs(self, filter_query: str = "") -> None:
         self._scan_generation += 1
         generation = self._scan_generation
-        required_widgets = ("#log-list", "#type-filter", "#log-sort", "#dir-meta", "#analyze-all")
+        required_widgets = ("#log-list", "#type-filter", "#log-sort", "#session-summary")
         if any(next(iter(self.query(selector)), None) is None for selector in required_widgets):
             return
         list_view = next(iter(self.query("#log-list")), None)
@@ -3526,10 +3864,13 @@ class RcaTui(App):
             files.sort(key=lambda path: path.name.lower())
         elif sort_mode == "name-desc":
             files.sort(key=lambda path: path.name.lower(), reverse=True)
-        self.query_one("#dir-meta", Static).update(
-            f"[dim]{len(all_logs)} log file{'s' if len(all_logs) != 1 else ''}  •  {escape(str(self.logs_dir))}[/dim]"
-            if directory_valid else f"[bold {SEMANTIC_ERROR}]× Directory not found:[/bold {SEMANTIC_ERROR}] {escape(str(self.logs_dir))}"
-        )
+        analyzed_names = {
+            str(item.get("artifact", ""))
+            for item in self._run_index
+            if not item.get("invalid", False)
+        }
+        analyzed_count = sum(path.name in analyzed_names for path in all_logs)
+        self._update_session_summary(len(all_logs), analyzed_count, len(files), directory_valid)
         self._visible_log_files = files
         self._render_artifact_workspace(files)
         available_files: list[Path] = []
@@ -3550,7 +3891,7 @@ class RcaTui(App):
             list_view.index = 0
             self._selected_log = available_files[0]
             self._show_raw(available_files[0])
-            self._set_state("ready", f"{len(available_files)} visible • {available_files[0].name} selected")
+            self._set_state("ready", f"{_compact(available_files[0].name, 20)} ready")
         elif query and all_logs:
             list_view.append(ListItem(Static("No logs match filter. Clear filter or try another name."), disabled=True))
             self._set_state("empty", "No matching logs; clear filter")
@@ -3561,7 +3902,6 @@ class RcaTui(App):
             list_view.append(ListItem(Static("Directory unavailable. Check path and press Enter."), disabled=True))
             self._set_state("error", "Invalid log directory")
         self._set_analysis_enabled()
-        self.query_one("#analyze-all", Button).label = f"Analyze {len(self._visible_log_files)} visible"
         self._update_home()
         pending = [path for path in all_logs if path not in self._log_info]
         if pending:
@@ -3651,7 +3991,7 @@ class RcaTui(App):
             meta = self.query("#artifact-workspace-meta").first(Static)
             button = self.query("#workspace-analyze").first(Button)
             list_view = self.query("#artifact-workspace-list").first(ListView)
-        except NoMatches:
+        except Exception:
             # Classification workers can finish after the workspace was
             # unmounted. The sidebar state remains useful; there is no mounted
             # artifact view to refresh in that lifecycle window.
@@ -3798,9 +4138,9 @@ class RcaTui(App):
             return
         try:
             list_view = self.query_one("#run-list", ListView)
-            query = self.query_one("#run-filter", Input).value.strip().lower()
-            stage_filter = str(self.query_one("#run-stage", Select).value)
-            sort_mode = str(self.query_one("#run-sort", Select).value)
+            query = self.query_one("#workspace-run-filter", Input).value.strip().lower()
+            stage_filter = str(self.query_one("#workspace-run-stage", Select).value)
+            sort_mode = str(self.query_one("#workspace-run-sort", Select).value)
         except Exception:
             # Delayed callbacks may fire while Textual mounts or unmounts.
             return
@@ -3818,7 +4158,9 @@ class RcaTui(App):
             runs.sort(key=lambda item: item["artifact"].lower())
         else:
             runs.sort(key=lambda item: item["modified"], reverse=True)
-        for item in runs:
+        self._runs = [Path(item["path"]) for item in runs]
+        recent_runs = sorted(runs, key=lambda item: item["modified"], reverse=True)[:3]
+        for item in recent_runs:
             if item["invalid"]:
                 label = f"× {escape(item['artifact'])}  invalid report"
             else:
@@ -3827,11 +4169,20 @@ class RcaTui(App):
                     f"   {escape(_compact(item['hypothesis'] or item['summary'], 34))}  {_fmt_age(item['report'])}"
                 )
             list_view.append(ListItem(Static(label)))
-            self._runs.append(Path(item["path"]))
-        if not runs:
+        if not recent_runs:
             message = "No matching runs." if self._run_index else "No runs yet. Analyze a log to create one."
             list_view.append(ListItem(Static(message), disabled=True))
         self._render_results_workspace(runs, force=force_workspace)
+        analyzed_names = {
+            str(item.get("artifact", "")) for item in self._run_index if not item.get("invalid", False)
+        }
+        analyzed_count = sum(path.name in analyzed_names for path in self._log_signatures)
+        self._update_session_summary(
+            len(self._log_signatures),
+            analyzed_count,
+            len(self._visible_log_files),
+            self.logs_dir.is_dir(),
+        )
         self._update_result_navigation()
 
     def _render_results_workspace(self, runs: list[dict], *, force: bool = False) -> None:
@@ -4007,10 +4358,7 @@ class RcaTui(App):
             )
             return
         if policy is None:
-            preview.update(
-                "[dim]Gate policy: No policy loaded. Enter a policy path to preview validated active rules "
-                "before running the gate.[/dim]"
-            )
+            preview.update("[dim]Gate policy: none loaded[/dim]")
             return
         effective = self._effective_qa_policy(policy, environment)
         lines = [
@@ -4127,6 +4475,12 @@ class RcaTui(App):
             f"{escape(signal_detail)}\n"
             f"[dim]{escape(signal_hint)}[/dim]"
         )
+        try:
+            self.query_one("#qa-workspace-meta", Static).update(
+                f"History: {history_state}  •  Gate: {gate_state}  •  Signals: {signal_state}  •  {escape(str(self.logs_dir))}"
+            )
+        except Exception:
+            pass
 
     def _refresh_qa_policy_preview(self) -> None:
         """Validate and render the current policy without starting a gate."""
@@ -4208,7 +4562,8 @@ class RcaTui(App):
                 "empty": SEMANTIC_WARNING,
             }.get(state, "#b8b8b8")
             marker = "✓" if state == "success" else "×" if state == "error" else "!" if state == "empty" else "●"
-            status.update(f"[{color}]{marker}[/{color}] {escape(message)}")
+            status.display = True
+            status.update(f"[bold]QA STATUS[/bold]\n[{color}]{marker}[/{color}] {escape(message)}")
         except Exception:
             return
 
@@ -4217,6 +4572,21 @@ class RcaTui(App):
             button = self.query(selector).first(Button)
             if button is not None:
                 button.disabled = disabled
+        if not disabled:
+            self._update_qa_action_availability()
+
+    def _update_qa_action_availability(self) -> None:
+        if self._qa_busy:
+            return
+        try:
+            gate = self.query_one("#qa-gate", Button)
+            gate.disabled = not bool(
+                self.query_one("#qa-baseline", Input).value.strip()
+                and self.query_one("#qa-repo-dir", Input).value.strip()
+                and self.query_one("#qa-policy", Input).value.strip()
+            )
+        except Exception:
+            return
 
     def _start_qa_operation(self, operation: str) -> None:
         if self._qa_busy:
@@ -4347,7 +4717,8 @@ class RcaTui(App):
             result = payload.get("result") or {}
             outcome = result.get("policy_outcome", "unknown")
             analysis_status = result.get("analysis_status", "unknown")
-            self._set_qa_status("success", f"Quality gate {outcome.upper()} • analysis {analysis_status}")
+            status = "error" if outcome == "block" else "success" if outcome == "pass" else "empty"
+            self._set_qa_status(status, f"Quality gate {outcome.upper()} • analysis {analysis_status}")
         elif payload and payload.get("type") == "insights":
             count = len(payload.get("classifications") or [])
             self._set_qa_status("success", f"Classified {count} test(s)")
@@ -4375,10 +4746,13 @@ class RcaTui(App):
         if payload is None:
             self._qa_history_tests = []
             history_list.clear()
-            history_list.append(ListItem(Static("Load history to browse tracked tests and select one for statistics."), disabled=True))
+            history_list.display = False
             result.update("")
+            result.display = False
             return
+        result.display = True
         kind = payload.get("type")
+        history_list.display = kind in {"history", "stats"}
         if kind == "error":
             self._qa_history_tests = []
             history_list.clear()
@@ -4424,7 +4798,6 @@ class RcaTui(App):
             lines = [
                 f"[bold {color}]QUALITY GATE: {escape(outcome.upper())}[/bold {color}]",
                 f"analysis status: [{_outcome_color(analysis_status)}]{escape(analysis_status)}[/{_outcome_color(analysis_status)}]",
-                "[dim]This is a deterministic policy decision; no deployment, restart, or test execution was performed.[/dim]",
                 "",
                 f"tests analyzed: {escape(summary.get('tests_analyzed', 0))}",
                 f"coverage: {'available' if summary.get('coverage') else 'not supplied'}",
@@ -4466,8 +4839,8 @@ class RcaTui(App):
                         f"{escape(item.get('runner') or 'unknown')}  samples={samples}  failure_rate={_percent(rate)}"
                     )))
             result.update(
-                f"[bold #f0f6fc]TRACKED TESTS · {len(tests)}[/bold #f0f6fc]\n\n"
-                "Select a test above to inspect counts, duration, environments, and recent history."
+                f"[bold #f0f6fc]TRACKED TESTS · {len(tests)}[/bold #f0f6fc]\n"
+                "[dim]Select a test to inspect details.[/dim]"
             )
             return
         if kind == "stats":
@@ -4555,22 +4928,13 @@ class RcaTui(App):
             return
 
         if list_view.id == "log-list" and index < len(self._log_files):
-            self._selected_log = self._log_files[index]
-            self._show_raw(self._selected_log)
-            self._set_state("ready", f"{self._selected_log.name} selected")
-            self._set_analysis_enabled()
+            self._preview_sidebar_artifact(index)
         elif list_view.id == "run-list" and index < len(self._runs):
             self._load_run(self._runs[index])
         elif list_view.id == "artifact-workspace-list":
-            page_start = (self._artifact_page - 1) * PAGE_SIZE
-            target_idx = page_start + index
-            if target_idx < len(self._visible_log_files):
-                target = self._visible_log_files[target_idx]
-                if target in self._selected_artifacts:
-                    self._remove_selected_artifact(target)
-                else:
-                    self._add_selected_artifact(target)
-                self._refresh_artifact_selection([target])
+            target = self._workspace_artifact_at(index)
+            if target is not None:
+                self._analyze_batch_targets([target])
         elif list_view.id == "results-workspace-list":
             if not isinstance(list_view, ResultsListView) or not list_view.consume_mouse_click(event.item):
                 self.action_open_selected_result()
@@ -4636,8 +5000,8 @@ class RcaTui(App):
             self._show_workspace("results")
         elif event.button.id == "nav-qa":
             self._show_workspace("qa")
-        elif event.button.id == "nav-investigation":
-            self._show_workspace("investigation")
+        elif event.button.id == "nav-home":
+            self.action_home()
         elif event.button.id == "context-validate":
             self.action_validate_context()
         elif event.button.id == "context-feedback":
@@ -4654,7 +5018,30 @@ class RcaTui(App):
             self._start_qa_operation("history")
 
     def on_tabbed_content_tab_activated(self, _event: TabbedContent.TabActivated) -> None:
+        try:
+            active = self.query_one("#tabs", TabbedContent).active
+        except Exception:
+            return
+        if active == "pane-context":
+            self._refresh_current_context()
         self._update_shortcuts()
+
+    def _sync_default_qa_source_path(self) -> None:
+        """Prefer conventional test-report directories without replacing user input."""
+        try:
+            source = self.query_one("#qa-source-path", Input)
+        except Exception:
+            return
+        configured = str(self.logs_dir)
+        if source.value.strip() != configured:
+            return
+        logs_dir = Path(configured).expanduser()
+        for name in ("test-results", "test-reports", "test_reports", "reports"):
+            candidate = logs_dir / name
+            if candidate.is_dir():
+                source.value = str(candidate)
+                self._set_qa_status("success", f"Detected test evidence directory: {candidate}")
+                return
 
     def action_show_help(self) -> None:
         self.push_screen(HelpScreen())
@@ -4672,8 +5059,12 @@ class RcaTui(App):
     def action_show_qa(self) -> None:
         self._show_workspace("qa")
 
-    def action_show_investigation(self) -> None:
-        self._show_workspace("investigation")
+    def action_show_overview(self) -> None:
+        if self._current_doc is None:
+            self._show_workspace("results")
+            self.notify("Open a stored run, then review its Overview or Context tab", severity="warning")
+            return
+        self._show_results(pane="pane-overview")
 
     def action_validate_context(self) -> None:
         """Revalidate the selected report on disk and persist to validation store."""
@@ -4869,6 +5260,9 @@ class RcaTui(App):
             self._refresh_results_selection()
 
     def action_stop_or_clear_selected(self) -> None:
+        if self._analyzing:
+            self.action_stop_analysis()
+            return
         results_ws = self.query("#results-workspace").first(Vertical)
         if results_ws is not None and results_ws.display:
             self.action_clear_selected_result()
@@ -4902,13 +5296,18 @@ class RcaTui(App):
         qa_ws = self.query("#qa-workspace").first(Vertical)
         if qa_ws is not None and qa_ws.display:
             try:
+                history_list = self.query_one("#qa-history-list", ListView)
+                if history_list.display and len(history_list.children) > 0:
+                    history_list.focus()
+                    if history_list.index is None:
+                        history_list.index = 0
+                    return
                 self.query_one("#qa-scroll", ResultScroll).focus()
             except Exception:
                 pass
             return
 
-        investigation_ws = self.query("#investigation-workspace").first(Vertical)
-        if investigation_ws is not None and investigation_ws.display:
+        if self.query_one("#tabs", TabbedContent).display and self.query_one("#tabs", TabbedContent).active == "pane-context":
             try:
                 self.query_one("#investigation-scroll", ResultScroll).focus()
             except Exception:
@@ -4925,7 +5324,9 @@ class RcaTui(App):
         if not self._analyzing or self._stop_requested.is_set():
             return
         self._stop_requested.set()
-        self.query_one("#stop-analysis", Button).disabled = True
+        stop_button = next(iter(self.query("#stop-analysis")), None)
+        if isinstance(stop_button, Button):
+            stop_button.disabled = True
         self._set_state("loading", "Stop requested; finishing active work")
         self.notify("Analysis will stop after current work finishes", timeout=3)
 
@@ -4967,8 +5368,7 @@ class RcaTui(App):
         self.notify(f"Mode set to {mode}", timeout=2)
 
     def action_copy_report(self) -> None:
-        inv_ws = self.query("#investigation-workspace").first(Vertical)
-        if inv_ws is not None and inv_ws.display:
+        if self.query_one("#tabs", TabbedContent).display and self.query_one("#tabs", TabbedContent).active == "pane-context":
             self.action_copy_validation_summary()
             return
         self._copy_markdown("#report", "report")
@@ -5028,10 +5428,7 @@ class RcaTui(App):
         self._load_run(target, navigation_runs=opened_runs)
 
     def action_open_selected_result(self) -> None:
-        if not self._selected_runs:
-            self.notify("Select a result to open", severity="warning")
-            return
-        self._open_workspace_result(use_selection=True)
+        self._open_workspace_result(use_selection=bool(self._selected_runs))
 
     def action_clear_selected_result(self) -> None:
         if self._analyzing:
@@ -5079,26 +5476,51 @@ class RcaTui(App):
             self.action_open_selected_result()
             return
 
-        # If in artifacts workspace, toggle selection
+        # Enter opens the focused artifact; Space owns batch selection.
         artifacts_ws = self.query("#artifact-workspace").first(Vertical)
         if artifacts_ws is not None and artifacts_ws.display:
-            self.action_toggle_selection()
+            list_view = self.query_one("#artifact-workspace-list", ListView)
+            index = list_view.index if list_view.index is not None else 0
+            target = self._workspace_artifact_at(index)
+            if target is not None:
+                self._analyze_batch_targets([target])
             return
 
         # Otherwise from sidebar list
         list_view = self.query_one("#log-list", ListView)
         if list_view.index is not None and list_view.index < len(self._log_files):
-            self._selected_log = self._log_files[list_view.index]
-            self._show_raw(self._selected_log)
+            self._preview_sidebar_artifact(list_view.index)
+
+    def _preview_sidebar_artifact(self, index: int) -> None:
+        if index >= len(self._log_files):
+            return
+        self._selected_log = self._log_files[index]
+        self._show_raw(self._selected_log)
+        self._set_state("ready", f"{_compact(self._selected_log.name, 20)} ready")
+        self._set_analysis_enabled()
+
+    def _workspace_artifact_at(self, index: int) -> Path | None:
+        target_index = (self._artifact_page - 1) * PAGE_SIZE + index
+        if target_index >= len(self._visible_log_files):
+            return None
+        return self._visible_log_files[target_index]
+
+    def _toggle_workspace_artifact(self, index: int) -> None:
+        target = self._workspace_artifact_at(index)
+        if target is None:
+            return
+        if target in self._selected_artifacts:
+            self._remove_selected_artifact(target)
+        else:
+            self._add_selected_artifact(target)
+        self._refresh_artifact_selection([target])
 
     def _tick_progress(self) -> None:
         if not self._analyzing:
             return
-        stages = ("reading artifact", "collecting context", "investigating root cause", "writing report")
-        self._progress = (self._progress + 1) % len(stages)
-        stage = stages[self._progress]
+        self._progress = (self._progress + 1) % (STATUS_PROGRESS_WIDTH + 1)
         self.query_one("#analyze", Button).label = "Analyzing…"
-        self._set_state("loading", f"Analyzing {self._selected_log.name if self._selected_log else 'log'} • {stage}")
+        self._set_state("loading")
 
     def action_analyze(self) -> None:
         artifacts_ws = self.query("#artifact-workspace").first(Vertical)
@@ -5179,9 +5601,9 @@ class RcaTui(App):
                 )
             self._update_markdown("#report", "_Analysis in progress._")
             self._update_markdown("#ticket", "_Analysis in progress._")
-            self._set_state("loading", f"Analyzing {path.name} • reading artifact")
+            self._set_state("loading")
             self._update_statusbar()
-            self._progress_timer = self.set_interval(1.5, self._tick_progress)
+            self._progress_timer = self.set_interval(PROGRESS_UPDATE_SECONDS, self._tick_progress)
             model = request["model"]
             base_url = request["base_url"]
             api_key = request["api_key"]
@@ -5302,7 +5724,7 @@ class RcaTui(App):
         self._current_qa_classifications = None
         self._refresh_current_context()
         analyze_button = self.query("#analyze").first(Button)
-        all_button = self.query("#analyze-all").first(Button)
+        all_button = self.query_one("#workspace-analyze-all", Button)
         if analyze_button is not None:
             analyze_button.disabled = True
         if all_button is not None:
@@ -5310,6 +5732,9 @@ class RcaTui(App):
             all_button.disabled = True
         self._set_analysis_enabled()
         self._update_statusbar()
+        self._progress = 0
+        self._set_state("loading")
+        self._progress_timer = self.set_interval(PROGRESS_UPDATE_SECONDS, self._tick_progress)
         request = {
             "repo_dir": self.repo_dir,
             "offline": self.offline,
@@ -5422,6 +5847,8 @@ class RcaTui(App):
             self.run_worker(work, thread=True, exclusive=True, group="analyze")
         except Exception as exc:
             self._analyzing = False
+            if self._progress_timer is not None:
+                self._progress_timer.pause()
             self._set_analysis_enabled()
             self._update_statusbar()
             self.notify(f"Could not start batch analysis: {exc}", severity="error")
@@ -5454,7 +5881,6 @@ class RcaTui(App):
             self._render_runs()
         self._set_state(
             "loading",
-            f"Analyzed {completed}/{total} • {analyzed} ok • {failed} failed • {artifact}",
         )
         self.query_one("#results-workspace-meta", Static).update(
             f"Batch {completed}/{total}  •  {analyzed} completed  •  {failed} failed  •  {escape(str(self.out_dir))}"
@@ -5473,14 +5899,17 @@ class RcaTui(App):
         batch_error: Exception | None = None,
     ) -> None:
         self._analyzing = False
+        if self._progress_timer is not None:
+            self._progress_timer.pause()
         try:
             analyze_button = self.query("#analyze").first(Button)
             if analyze_button is not None:
                 analyze_button.label = "Analyze selected log"
-            all_button = self.query("#analyze-all").first(Button)
+            all_button = self.query_one("#workspace-analyze-all", Button)
             if all_button is not None:
                 all_button.label = f"Analyze {len(self._visible_log_files)} visible"
-            stop_btn = self.query("#stop-analysis").first(Button)
+
+            stop_btn = next(iter(self.query("#stop-analysis")), None)
             if stop_btn is not None:
                 stop_btn.disabled = False
             self._set_analysis_enabled()
@@ -5644,7 +6073,7 @@ class RcaTui(App):
                 integrity_color = SEMANTIC_WARNING
                 integrity_symbol = "!"
                 integrity_detail = "No validation record"
-                integrity_hint = "Press u to validate the report"
+                integrity_hint = "Press u to validate"
                 if val is not None:
                     integrity_state = "STALE" if is_stale else val.status
                     integrity_color = (
@@ -5671,8 +6100,8 @@ class RcaTui(App):
                 trust_state = "NOT LOADED"
                 trust_color = SEMANTIC_WARNING
                 trust_symbol = "!"
-                trust_detail = "No trust profile available"
-                trust_hint = "Capabilities remain fail-closed"
+                trust_detail = "No trust profile"
+                trust_hint = "Fail-closed boundary"
                 if self._current_doc:
                     trust_meta = self._current_doc.get("meta", {}).get("trust", {})
                     source_class = trust_meta.get("source_class", "unknown") if isinstance(trust_meta, dict) else "unknown"
@@ -5692,8 +6121,8 @@ class RcaTui(App):
                 impact_state = "NOT LOADED"
                 impact_color = SEMANTIC_WARNING
                 impact_symbol = "!"
-                impact_detail = "No operational impact data"
-                impact_hint = "Open a stored report"
+                impact_detail = "No operational data"
+                impact_hint = "Select a run"
                 if self._current_doc:
                     devops = self._current_doc.get("devops", {}) if isinstance(self._current_doc.get("devops"), dict) else {}
                     triage = self._current_doc.get("triage", {}) if isinstance(self._current_doc.get("triage"), dict) else {}

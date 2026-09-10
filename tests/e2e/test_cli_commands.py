@@ -285,8 +285,8 @@ def test_config_set_model_preserves_config(tmp_path, capsys):
     assert main(["config", "set", "model", "gemini", "--config", str(config)]) == 0
     text = config.read_text(encoding="utf-8")
     assert "components:" in text
-    assert "provider: gemini" in text
-    assert "model: auto" in text
+    assert "model: gemini" in text
+    assert "provider: gemini" not in text
     assert "API" not in capsys.readouterr().out
 
 

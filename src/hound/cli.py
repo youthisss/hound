@@ -18,7 +18,7 @@ from hound import __version__
 from hound import service
 from hound.analyze.cost import TransportBudget as _BatchBudget, RequestAccount, format_cost
 from hound.collector import CollectionInputError, collect_command, collect_stdin
-from hound.config import PROVIDERS, load_config, set_model_config
+from hound.config import PROVIDERS, load_config, set_llm_config_value
 from hound.formatters import format_document, format_runs
 from hound.models import KINDS, SCHEMA_VERSION, Ticket
 from hound.pipeline import default_state_path
@@ -124,7 +124,7 @@ def _add_llm_args(parser: argparse.ArgumentParser) -> None:
 def _add_common(parser: argparse.ArgumentParser, *, batch: bool = False) -> None:
     if batch:
         parser.add_argument("--logs", required=True,
-                            help="path to a log file, or a directory scanned for *.log")
+                            help="supported artifact file or directory scanned recursively")
     else:
         parser.add_argument("--log", required=True, help="path to the failure log file")
     parser.add_argument("--repo-dir", dest="repo", default=None, help="path to the local git checkout")
@@ -173,13 +173,13 @@ def build_parser() -> argparse.ArgumentParser:
     # Keep normalization at the top level; positional values in nested parsers
     # must not be mistaken for legacy command names.
     sub = parser.add_subparsers(dest="command", parser_class=argparse.ArgumentParser)
-    analyze_cmd = sub.add_parser("analyze", help="analyze artifacts and emit formatted results")
-    analyze_cmd.add_argument("log_directory", nargs="?", help="directory containing supported .log files")
+    analyze_cmd = sub.add_parser("analyze", help="investigate artifacts and emit complete results")
+    analyze_cmd.add_argument("log_directory", nargs="?", help="supported artifact file or directory")
     analyze_cmd.add_argument("--log", dest="legacy_log", default=None, help=argparse.SUPPRESS)
     analyze_cmd.add_argument("--format", choices=("text", "json", "markdown"), default="text")
     analyze_cmd.add_argument("--output", default=None, help="write formatted result to this file")
     _add_analyze_options(analyze_cmd)
-    batch = sub.add_parser("batch", help="analyze artifacts with budgets and usage telemetry")
+    batch = sub.add_parser("batch", help="process many artifacts with budgets and usage telemetry")
     _add_common(batch, batch=True)
     tui = sub.add_parser("console", help="interactive terminal UI")
     tui.add_argument("--logs", default=None, help="log directory to browse (default: cwd)")
@@ -252,8 +252,8 @@ def build_parser() -> argparse.ArgumentParser:
     config_cmd = sub.add_parser("config", help="update non-secret project configuration")
     config_sub = config_cmd.add_subparsers(dest="config_command", required=True)
     config_set = config_sub.add_parser("set", help="set a configuration value")
-    config_set.add_argument("key", choices=("model",))
-    config_set.add_argument("value", help="provider preset or model name")
+    config_set.add_argument("key", choices=("provider", "model"))
+    config_set.add_argument("value", help="provider ID or model name, according to key")
     config_set.add_argument("--config", default=str(CONFIG_FILENAMES[0]), help="YAML config path")
     config_show = config_sub.add_parser("show", help="show effective non-secret configuration")
     config_show.add_argument("--config", default=None, help="optional YAML config path")
@@ -675,11 +675,11 @@ def run_report(args: argparse.Namespace) -> int:
 
 def run_config(args: argparse.Namespace) -> int:
     try:
-        path = set_model_config(args.value, args.config)
+        path = set_llm_config_value(args.key, args.value, args.config)
     except (OSError, ValueError) as exc:
         print(f"error: could not update config: {exc}", file=sys.stderr)
         return 2
-    print(f"model configuration updated: {path}")
+    print(f"{args.key} configuration updated: {path}")
     return 0
 
 

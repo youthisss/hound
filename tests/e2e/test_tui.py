@@ -206,12 +206,57 @@ def test_tui_no_logs(tmp_path):
             assert app.query_one("#analyze", Button).disabled
             assert "No analysis selected" in str(app.query_one("#overview", Static).renderable)
             assert "WORKFLOW" in str(app.query_one("#home-workflow", Static).renderable)
-            assert "No supported artifacts" in str(app.query_one("#workflow-status", Static).renderable)
+            status = str(app.query_one("#workflow-status", Static).renderable)
+            assert "READY" in status
+            assert "Waiting for supported artifacts" in status
+            assert status.startswith("[bold]STATUS[/bold]  [#d8d8d8]○")
 
     anyio.run(main)
 
 
-def test_tui_analyze_all_button_runs_visible_logs(tmp_path):
+def test_tui_workflow_status_animates_analysis_progress(tmp_path):
+    from hound.tui import RcaTui
+    from textual.widgets import Static
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app._analyzing = True
+            app._progress = 0
+            app._set_state("loading")
+            initial = str(app.query_one("#workflow-status", Static).renderable)
+            app._tick_progress()
+            updated = str(app.query_one("#workflow-status", Static).renderable)
+
+            assert "ANALYZING" in updated
+            assert "Working…" in updated
+            assert initial != updated
+
+    anyio.run(main)
+
+
+def test_tui_ready_status_does_not_repeat_selected_file_name(tmp_path):
+    log = tmp_path / "selected.log"
+    log.write_text("test failure", encoding="utf-8")
+
+    from hound.tui import RcaTui
+    from textual.widgets import Static
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            status = str(app.query_one("#workflow-status", Static).renderable)
+            assert "READY" in status
+            assert log.name not in status
+
+    anyio.run(main)
+
+
+def test_tui_workspace_analyze_all_runs_visible_logs(tmp_path):
     shutil.copy(FIXTURES / "pytest_fail.log", tmp_path / "pytest_fail.log")
     shutil.copy(FIXTURES / "build_error.log", tmp_path / "build_error.log")
     from hound.tui import RcaTui
@@ -222,7 +267,9 @@ def test_tui_analyze_all_button_runs_visible_logs(tmp_path):
     async def main():
         async with app.run_test() as pilot:
             await pilot.pause()
-            app.query_one("#analyze-all", Button).press()
+            app.action_show_artifacts()
+            await pilot.pause()
+            app.query_one("#workspace-analyze-all", Button).press()
             overview = app.query_one("#overview", Static)
             for _ in range(400):
                 await pilot.pause(0.02)
@@ -234,28 +281,22 @@ def test_tui_analyze_all_button_runs_visible_logs(tmp_path):
     anyio.run(main)
 
 
-def test_tui_stop_button_only_shows_during_analysis(tmp_path, monkeypatch):
+def test_tui_stop_action_remains_available_during_analysis(tmp_path, monkeypatch):
     shutil.copy(FIXTURES / "pytest_fail.log", tmp_path / "pytest_fail.log")
     from hound.tui import RcaTui
-    from textual.widgets import Button
 
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
 
     async def main():
         async with app.run_test() as pilot:
             await pilot.pause()
-            stop = app.query_one("#stop-analysis", Button)
-            assert stop.display is False
+            assert not app.query("#stop-analysis")
             app._analyzing = True
             app._set_analysis_enabled()
-            assert stop.display is True
             app.action_stop_analysis()
             assert app._stop_requested.is_set()
-            assert stop.disabled is True
             app._analyzing = False
-            stop.disabled = False
             app._set_analysis_enabled()
-            assert stop.display is False
 
     anyio.run(main)
 
@@ -294,7 +335,9 @@ def test_tui_parallel_analyze_all_respects_llm_call_cap(tmp_path, monkeypatch):
     async def main():
         async with app.run_test() as pilot:
             await pilot.pause()
-            app.query_one("#analyze-all", Button).press()
+            app.action_show_artifacts()
+            await pilot.pause()
+            app.query_one("#workspace-analyze-all", Button).press()
             overview = app.query_one("#overview", Static)
             for _ in range(500):
                 await pilot.pause(0.02)
@@ -464,12 +507,39 @@ def test_tui_directory_metadata_and_filter(tmp_path):
     async def main():
         async with app.run_test() as pilot:
             await pilot.pause()
-            assert "2 log files" in str(app.query_one("#dir-meta", Static).renderable)
+            session = str(app.query_one("#session-summary", Static).renderable)
+            assert "2 loaded" in session
+            assert "DIRECTORY" in session
+            assert str(tmp_path)[:20] in session
+            assert not app.query("#dir-meta")
             assert not app.query_one("#analyze", Button).disabled
             app.query_one("#log-filter", Input).value = "pytest"
             await pilot.pause(0.4)
             assert [path.name for path in app._log_files] == ["pytest_fail.log"]
             assert app._selected_log.name == "pytest_fail.log"
+
+    anyio.run(main)
+
+
+def test_tui_input_typing_does_not_trigger_global_shortcuts(tmp_path):
+    from hound.tui import RcaTui
+    from textual.widgets import Input
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            log_filter = app.query_one("#log-filter", Input)
+            log_filter.focus()
+            triggered = []
+            app.action_analyze = lambda: triggered.append("analyze")
+
+            await pilot.press("a")
+            await pilot.pause(0.25)
+
+            assert log_filter.value == "a"
+            assert triggered == []
 
     anyio.run(main)
 
@@ -489,6 +559,33 @@ def test_tui_raw_header_tracks_selected_log(tmp_path):
             app.action_select_log()
             header = str(app.query_one("#raw-header", Static).renderable)
             assert "build_error.log" in header
+
+    anyio.run(main)
+
+
+def test_tui_enter_analyzes_focused_workspace_artifact(tmp_path):
+    shutil.copy(FIXTURES / "pytest_fail.log", tmp_path / "pytest_fail.log")
+    shutil.copy(FIXTURES / "build_error.log", tmp_path / "build_error.log")
+
+    from hound.tui import RcaTui
+    from textual.widgets import ListView
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.action_show_artifacts()
+            await pilot.pause()
+            logs = app.query_one("#artifact-workspace-list", ListView)
+            logs.focus()
+            logs.index = app._visible_log_files.index(tmp_path / "build_error.log")
+            analyzed = []
+            app._analyze_batch_targets = lambda targets: analyzed.extend(targets)
+
+            await pilot.press("enter")
+
+            assert analyzed == [tmp_path / "build_error.log"]
 
     anyio.run(main)
 
@@ -692,9 +789,11 @@ def test_tui_sidebar_can_minimize_and_keeps_workspace_navigation(tmp_path):
             sidebar = app.query_one("#sidebar")
             assert app.has_class("sidebar-collapsed")
             assert sidebar.display is False
-            assert app.query_one("#show-sidebar", Button).display is True
+            show_sidebar = app.query_one("#show-sidebar", Button)
+            assert show_sidebar.display is True
+            assert str(show_sidebar.label) == "==="
 
-            app.query_one("#show-sidebar", Button).press()
+            show_sidebar.press()
             await pilot.pause()
             assert not app.has_class("sidebar-collapsed")
             assert sidebar.display is True
@@ -766,14 +865,16 @@ def test_tui_artifact_workspace_multi_select_and_batch_analyze(tmp_path, monkeyp
             await pilot.pause()
             assert captured == expected_order
 
-            # Enter also toggles the highlighted selection.
+            # Enter analyzes the focused artifact without changing batch selection.
+            captured.clear()
             artifact_list.index = 0
             await pilot.press("enter")
             await pilot.pause()
             artifact_list.index = 3
             await pilot.press("enter")
             await pilot.pause()
-            assert len(app._selected_artifacts) == 0
+            assert captured == [app._visible_log_files[0], app._visible_log_files[3]]
+            assert len(app._selected_artifacts) == 2
 
     anyio.run(main)
 
@@ -912,13 +1013,13 @@ def test_tui_workspace_filters_sync_and_filter(tmp_path):
             app.query_one("#workspace-run-filter", Input).value = "database"
             await pilot.pause(0.3)
             assert app._runs == [tmp_path / "old"]
-            assert app.query_one("#run-filter", Input).value == "database"
+            assert app.query_one("#workspace-run-filter", Input).value == "database"
 
             app.query_one("#workspace-run-filter", Input).value = ""
             app.query_one("#workspace-run-stage", Select).value = "deploy"
             await pilot.pause()
             assert app._runs == [tmp_path / "new"]
-            assert app.query_one("#run-stage", Select).value == "deploy"
+            assert app.query_one("#workspace-run-stage", Select).value == "deploy"
 
     anyio.run(main)
 
@@ -982,6 +1083,32 @@ def test_tui_workspace_results_open_with_enter(tmp_path):
             await pilot.press("enter")
             await pilot.pause()
             assert app.query_one("#tabs").display is True
+
+    anyio.run(main)
+
+
+def test_tui_result_tabs_cycle_with_left_and_right_arrows(tmp_path):
+    from hound.tui import RcaTui
+    from textual.widgets import TabbedContent
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+
+    async def main():
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app._show_results("pane-report")
+
+            await pilot.press("right")
+            assert app.query_one("#tabs", TabbedContent).active == "pane-ticket"
+
+            await pilot.press("right")
+            assert app.query_one("#tabs", TabbedContent).active == "pane-raw"
+
+            await pilot.press("left")
+            assert app.query_one("#tabs", TabbedContent).active == "pane-ticket"
+
+            await pilot.press("left")
+            assert app.query_one("#tabs", TabbedContent).active == "pane-report"
 
     anyio.run(main)
 
@@ -1095,7 +1222,7 @@ def test_tui_workspace_results_selection_toggle(tmp_path):
             ])
             await pilot.pause(0.2)
             assert run_dir not in app._selected_runs
-            assert app.query_one("#open-workspace-result", Button).disabled
+            assert not app.query_one("#open-workspace-result", Button).disabled
             assert app.query_one("#clear-selected", Button).disabled
 
             # Select and deselect all result shortcuts.
@@ -1122,7 +1249,7 @@ def test_tui_workspace_results_selection_toggle(tmp_path):
             # Toggle again
             await pilot.press("space")
             assert run_dir not in app._selected_runs
-            assert app.query_one("#open-workspace-result", Button).disabled
+            assert not app.query_one("#open-workspace-result", Button).disabled
             assert app.query_one("#clear-selected", Button).disabled
 
     anyio.run(main)
@@ -1231,7 +1358,7 @@ def test_tui_results_list_selection_event_opens_the_indexed_result(tmp_path):
     anyio.run(main)
 
 
-def test_tui_recent_runs_search_and_sort(tmp_path):
+def test_tui_results_workspace_filters_recent_runs(tmp_path):
     from hound.tui import RcaTui
     from textual.widgets import Input, Select
 
@@ -1247,11 +1374,11 @@ def test_tui_recent_runs_search_and_sort(tmp_path):
                  "artifact": "deploy.log", "stage": "deploy", "severity": "low",
                  "summary": "rollout failed", "hypothesis": "image missing", "invalid": False},
             ])
-            app.query_one("#run-filter", Input).value = "database"
+            app.query_one("#workspace-run-filter", Input).value = "database"
             await pilot.pause(0.3)
             assert app._runs == [tmp_path / "old"]
-            app.query_one("#run-filter", Input).value = ""
-            app.query_one("#run-stage", Select).value = "deploy"
+            app.query_one("#workspace-run-filter", Input).value = ""
+            app.query_one("#workspace-run-stage", Select).value = "deploy"
             await pilot.pause()
             assert app._runs == [tmp_path / "new"]
 
@@ -1633,6 +1760,20 @@ def test_tui_overview_evidence_has_no_mojibake():
     assert "â" not in text
 
 
+def test_tui_overview_uses_semantic_colors_for_severity_and_confidence():
+    from hound.tui import SEMANTIC_ERROR, SEMANTIC_SUCCESS, _overview_text
+
+    text = _overview_text({
+        "failure": {},
+        "root_cause": {"confidence": "high"},
+        "triage": {"severity": "high"},
+        "meta": {},
+    })
+
+    assert f"[bold {SEMANTIC_ERROR}]HIGH" in text
+    assert f"[{SEMANTIC_SUCCESS}]high" in text
+
+
 def test_tui_settings_provider_change_updates_base_url(tmp_path):
     from hound.tui import RcaTui, SettingsScreen
     from textual.widgets import Input, Select
@@ -1673,6 +1814,8 @@ def test_tui_settings_connection_runs_without_blocking_ui(tmp_path, monkeypatch)
             await pilot.pause()
             screen = app.screen
             assert isinstance(screen, SettingsScreen)
+            screen.query_one("#settings-offline", Button).press()
+            await pilot.pause()
             connect = screen.query_one("#settings-connect", Button)
             connect.press()
             await pilot.pause(0.02)
@@ -1810,6 +1953,8 @@ def test_tui_settings_connection_error_is_recoverable(tmp_path, monkeypatch):
             await pilot.pause()
             screen = app.screen
             assert isinstance(screen, SettingsScreen)
+            screen.query_one("#settings-offline", Button).press()
+            await pilot.pause()
             connect = screen.query_one("#settings-connect", Button)
             connect.press()
             for _ in range(50):
@@ -1864,13 +2009,12 @@ def test_tui_home_and_settings_expose_trust_capabilities(tmp_path):
             assert app.query_one("#nav-qa", Button).has_class("is-active")
             assert "SARIF" in str(app.query_one("#qa-workspace").query(".qa-description").first(Static).renderable)
 
-            app.query_one("#nav-investigation", Button).press()
+            app.action_show_overview()
             await pilot.pause()
-            assert app.query_one("#investigation-workspace").display
-            assert app.query_one("#nav-investigation", Button).has_class("is-active")
+            assert app.query_one("#results-workspace").display
+            assert app.query_one("#nav-results", Button).has_class("is-active")
             assert not app.query_one("#nav-qa", Button).has_class("is-active")
-            assert str(app.query_one("#investigation-workspace .workspace-title", Static).renderable) == "CONTEXT (READ-ONLY)"
-            assert "connector collection remains" in str(app.query_one("#investigation-workspace-meta", Static).renderable)
+            assert "Connector collection remains" in str(app.query_one("#investigation-workspace-meta", Static).renderable)
             assert "No report selected" in str(app.query_one("#investigation", Static).renderable)
             assert app.query_one("#context-validate", Button).disabled
 
@@ -1979,7 +2123,11 @@ def test_tui_context_validation_readiness_legacy_and_fork_trust(tmp_path):
             }])
             app._load_run(run_dir)
             await pilot.pause(0.1)
-            app._show_workspace("investigation")
+            app.action_show_overview()
+            await pilot.pause()
+
+            assert app.query_one("#tabs").active == "pane-overview"
+            app.query_one("#tabs").active = "pane-context"
             await pilot.pause()
 
             status = str(app.query_one("#context-status", Static).renderable)
@@ -2043,6 +2191,7 @@ def test_tui_qa_history_and_show_test_statistics(tmp_path):
         async with app.run_test() as pilot:
             await pilot.press("y")
             await pilot.pause()
+            assert app.query_one("#qa-history-list", ListView).display is False
             app.query_one("#qa-load-history", Button).press()
             for _ in range(200):
                 await pilot.pause(0.02)
@@ -2051,6 +2200,7 @@ def test_tui_qa_history_and_show_test_statistics(tmp_path):
             assert app._qa_result["type"] == "history"
             assert app._qa_history_tests
             history_list = app.query_one("#qa-history-list", ListView)
+            assert history_list.display is True
             history_list.index = 0
             app.on_list_view_selected(ListView.Selected(history_list, history_list.children[0]))
             for _ in range(200):
@@ -2058,6 +2208,7 @@ def test_tui_qa_history_and_show_test_statistics(tmp_path):
                 if app._qa_result and app._qa_result.get("type") == "stats":
                     break
             assert app._qa_result["type"] == "stats"
+            assert history_list.display is True
             rendered = str(app.query_one("#qa-result", Static).renderable)
             assert "TEST STATISTICS" in rendered
             assert "total_eventually_returns" in rendered
@@ -2071,7 +2222,7 @@ def test_tui_imports_qa_history_from_workspace(tmp_path):
 
     shutil.copy(FIXTURES / "junit_flaky.xml", tmp_path / "junit_flaky.xml")
     from hound.tui import RcaTui
-    from textual.widgets import Button, Static
+    from textual.widgets import Button, ListView, Static
 
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
 
@@ -2087,6 +2238,7 @@ def test_tui_imports_qa_history_from_workspace(tmp_path):
             assert app._qa_result and app._qa_result["type"] == "import"
             assert app._qa_result["imported"] > 0
             assert "HISTORY IMPORT COMPLETE" in str(app.query_one("#qa-result", Static).renderable)
+            assert app.query_one("#qa-history-list", ListView).display is False
 
             app.query_one("#qa-load-history", Button).press()
             for _ in range(250):
@@ -2095,6 +2247,7 @@ def test_tui_imports_qa_history_from_workspace(tmp_path):
                     break
             assert app._qa_result and app._qa_result["type"] == "history"
             assert app._qa_history_tests
+            assert app.query_one("#qa-history-list", ListView).display is True
             assert "TRACKED TESTS" in str(app.query_one("#qa-result", Static).renderable)
             with sqlite3.connect(app.out_dir / ".hound" / "history.sqlite3") as connection:
                 columns = {row[1] for row in connection.execute("PRAGMA table_info(test_results)")}
@@ -2107,7 +2260,7 @@ def test_tui_imports_qa_history_from_workspace(tmp_path):
 def test_tui_qa_analyze_without_history_is_explicitly_insufficient(tmp_path):
     shutil.copy(FIXTURES / "pytest_fail.log", tmp_path / "pytest_fail.log")
     from hound.tui import RcaTui
-    from textual.widgets import Button, Static
+    from textual.widgets import Button, ListView, Static
 
     app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
 
@@ -2124,6 +2277,7 @@ def test_tui_qa_analyze_without_history_is_explicitly_insufficient(tmp_path):
             classifications = app._qa_result["classifications"]
             assert classifications
             assert classifications[0]["decision"] == "insufficient_history"
+            assert app.query_one("#qa-history-list", ListView).display is False
             assert "insufficient_history" in str(app.query_one("#qa-result", Static).renderable)
 
     anyio.run(main)
@@ -2150,7 +2304,7 @@ def test_tui_quality_gate_distinguishes_policy_block_from_analysis_status(tmp_pa
     policy.write_text("version: '1.0'\nrules:\n  new_failure: block\n", encoding="utf-8")
 
     from hound.tui import RcaTui
-    from textual.widgets import Button, Input, Static
+    from textual.widgets import Button, Input, ListView, Static
 
     app = RcaTui(
         logs_dir=str(artifacts),
@@ -2180,6 +2334,7 @@ def test_tui_quality_gate_distinguishes_policy_block_from_analysis_status(tmp_pa
             gate = app._qa_result["result"]
             assert gate["policy_outcome"] == "block"
             assert gate["analysis_status"] == "insufficient_evidence"
+            assert app.query_one("#qa-history-list", ListView).display is False
             rendered = str(app.query_one("#qa-result", Static).renderable)
             assert "QUALITY GATE: BLOCK" in rendered
             assert "analysis status" in rendered
@@ -2217,6 +2372,8 @@ def test_tui_feedback_modal_records_review_for_loaded_run(tmp_path):
             await pilot.pause(0.05)
             app.action_open_feedback()
             await pilot.pause()
+            assert isinstance(app.screen, FeedbackScreen)
+            await pilot.press("right")
             assert isinstance(app.screen, FeedbackScreen)
             app.screen.query_one("#feedback-save", Button).press()
             for _ in range(250):
@@ -2458,6 +2615,14 @@ def test_tui_context_validation_persistence_and_cards(tmp_path):
             assert "TRUST & CAPABILITIES" in str(card_trust.renderable)
             assert "OPERATIONAL IMPACT" in str(card_impact.renderable)
 
+            # Verify symmetrical spacing around connector text
+            header = app.query("#pane-context .result-header").first()
+            meta = app.query_one("#investigation-workspace-meta")
+            grid = app.query("#pane-context .metadata-grid").first()
+            gap_above = meta.region.y - (header.region.y + header.region.height)
+            gap_below = grid.region.y - (meta.region.y + meta.region.height)
+            assert gap_above == gap_below == 1
+
             # Trigger validation via key 'u'
             await pilot.press("u")
             await pilot.pause(0.1)
@@ -2607,6 +2772,7 @@ def test_tui_back_navigation_and_shortcuts(tmp_path):
         async with app.run_test(size=(100, 35)) as pilot:
             await pilot.pause()
             back_btn = app.query_one("#back-button", Button)
+            assert str(back_btn.label) == "<--"
             shortcutbar = app.query_one("#shortcutbar", Static)
 
             # 1. Initial Home state
@@ -2687,8 +2853,8 @@ def test_tui_back_navigation_and_shortcuts(tmp_path):
             for expected in (
                 "Artifacts",
                 "Quality & gates",
-                "Context (read-only)",
-                "Overview · Report · Ticket · Raw log",
+                "Current run overview",
+                "Overview · Report · Ticket · Raw log · Context",
                 "space",
                 "Validate Context",
             ):
@@ -2698,3 +2864,59 @@ def test_tui_back_navigation_and_shortcuts(tmp_path):
             assert len(app.screen_stack) == 1
 
     anyio.run(main)
+
+
+def test_tui_workflow_status_placement_and_stop_shortcut(tmp_path):
+    from hound.tui import RcaTui
+    from textual.widgets import Static
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+
+    async def main():
+        async with app.run_test(size=(100, 35)) as pilot:
+            await pilot.pause()
+
+            # 1. Verify engine and workflow status share one sidebar summary box.
+            sidebar = app.query_one("#sidebar")
+            summary = app.query_one("#engine-status")
+            assert summary in sidebar.children
+            assert [child.id for child in summary.children] == ["engine-summary", "workflow-status"]
+            status_text = str(app.query_one("#workflow-status", Static).renderable)
+            assert "STATUS" in status_text
+            assert "READY" in status_text
+
+            # 2. Verify home keyboard guide includes stop analyze shortcut
+            home_kb = str(app.query_one("#home-keyboard", Static).renderable)
+            assert "stop analyze" in home_kb
+
+            # 3. Verify shortcut bar updates dynamically when analyzing
+            shortcutbar = app.query_one("#shortcutbar", Static)
+            assert "analyze" in str(shortcutbar.renderable)
+            assert "stop analyze" not in str(shortcutbar.renderable)
+
+            app._analyzing = True
+            app._set_analysis_enabled()
+            await pilot.pause()
+            assert "stop analyze" in str(shortcutbar.renderable)
+
+            # 4. Pressing x during analysis triggers stop request
+            assert not app._stop_requested.is_set()
+            await pilot.press("x")
+            await pilot.pause()
+            assert app._stop_requested.is_set()
+
+            # 4b. Verify ctrl+x also triggers stop
+            app._stop_requested.clear()
+            await pilot.press("ctrl+x")
+            await pilot.pause()
+            assert app._stop_requested.is_set()
+
+            # 5. Reset and verify shortcut bar returns to normal when idle
+            app._analyzing = False
+            app._set_analysis_enabled()
+            await pilot.pause()
+            assert "stop analyze" not in str(shortcutbar.renderable)
+            assert "analyze" in str(shortcutbar.renderable)
+
+    anyio.run(main)
+
