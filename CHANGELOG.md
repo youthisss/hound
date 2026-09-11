@@ -38,6 +38,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   container/action identity, and public URLs to Hound. This is a breaking rename;
   legacy Python imports and distribution names are not provided.
 
+## [0.5.0] - 2026-09-11
+
+### Added
+- **Model Context Protocol (MCP) Server**: Added stdio JSON-RPC 2.0 server (`hound mcp`) exposing linear diagnostic tools: `hound_analyze`, `hound_log_command`, `hound_check_gate`, `hound_get_insights`, `hound_doctor`, and `hound_list_incidents` with bounded outputs, path confinement (`HOUND_MCP_ROOTS`), and explicit administrator opt-in for command execution (`HOUND_MCP_ALLOW_COMMANDS`).
+- **Coding Agent Plugin Bundle**: Added `plugins/hound/` manifest, slash commands (`/hound-analyze`, `/hound-doctor`, `/hound-gate`, `/hound-incidents`, `/hound-insights`, `/hound-run`), and a failure triage hook (`post_test_failure.py`).
+- **Coding Agent Skill**: Added `skills/hound-tracer/SKILL.md` providing step-by-step diagnostic workflows, triage playbooks, and evidence requirements for autonomous coding agents.
+- **Command Collection Timeout**: Added `timeout` and `CollectionTimeoutError` to `hound.collector.collect_command` for bounding long-running commands while preserving partial redacted logs.
+
+### Fixed
+- **TUI Artifact Selection**: In `ArtifactListView`, mouse clicks toggle artifact selection and update raw log preview without triggering premature batch analysis.
+
 ## [0.4.1] - 2026-09-11
 
 ### Added

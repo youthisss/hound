@@ -21,6 +21,7 @@ hound/
 │       ├── devops/            # deployment timelines and investigations
 │       ├── connectors/       # bounded read-only deployment/observability adapters
 │       ├── source/            # source context and test impact analysis
+│       ├── mcp/              # stdio Model Context Protocol server and linear tools
 │       └── output/            # reports, tickets, Slack, and delivery ledger
 ├── docs/
 │   ├── guides/               # usage, GitHub Action, server, and connectors
@@ -66,6 +67,7 @@ hound/
 15. **Source intelligence V1** runs only for trusted repositories with explicit `--source-context`. It resolves repository-contained frame files, extracts Python symbols (bounded text fallback for other recognized suffixes), and attaches diff, blame, commit, CODEOWNERS, and direct related-test evidence. Symlinks, hidden/secret files, binaries, oversized files, and traversal paths are excluded. Source evidence stays local and out of LLM payloads unless trusted configuration explicitly sets `source.send_to_llm: true`. See `docs/reference/source-intelligence.md`.
 16. **Test impact recommendations** use a depth-limited Python call graph and rank tests from direct references, optional coverage, static dependency candidates, and optional historical correlation. Every graph edge is labeled `static_candidate`; output is advisory and never changes CI selection. Missing coverage remains explicit. See `docs/reference/test-impact.md`.
 17. **Delivery reliability and telemetry** use a separate WAL-mode delivery ledger with `pending`, `confirmed`, `failed`, and `unknown` states. Ambiguous outcomes block automatic retries until reconciliation. A bounded process-local telemetry registry exposes payload-free counters and latency percentiles through authenticated `/stats`. See `docs/operations/delivery-reliability.md`, `docs/operations/operations-metrics.md`, and `docs/operations/pilot-readiness.md`.
+18. **Model Context Protocol (MCP) Server** (`hound mcp`): stdio JSON-RPC 2.0 interface exposing linear tools (`hound_analyze`, `hound_log_command`, `hound_check_gate`, `hound_get_insights`, `hound_doctor`, `hound_list_incidents`). The server validates requests, bounds responses, and restricts file access to configured MCP roots. Command execution requires explicit administrator opt-in. Harness-specific installation remains the responsibility of each MCP client configuration.
 
 `service.analyze_log()` is the adapter-facing entry point for CLI, TUI, server, and collector. It delegates to the single `pipeline.analyze()` core.
 

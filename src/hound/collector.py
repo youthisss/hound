@@ -10,6 +10,7 @@ import re
 import signal
 import subprocess
 import sys
+import threading
 import time
 from typing import TextIO
 from uuid import uuid4
@@ -41,6 +42,14 @@ class CollectedLog:
     metadata: dict
 
 
+class CollectionTimeoutError(TimeoutError):
+    """Command timeout with the redacted partial evidence attached."""
+
+    def __init__(self, message: str, collected: CollectedLog) -> None:
+        super().__init__(message)
+        self.collected = collected
+
+
 def collect_command(
     command: list[str],
     output: str | Path | None = None,
@@ -48,6 +57,7 @@ def collect_command(
     cwd: str | Path | None = None,
     stream: TextIO | None = None,
     raw_console: bool = False,
+    timeout: float | None = None,
 ) -> CollectedLog:
     """Run command without a shell, tee output, and persist a redacted log."""
     if not command:
@@ -56,9 +66,19 @@ def collect_command(
     log_file, metadata_file = _output_paths(output, name or command[0])
     started_at = datetime.now(timezone.utc)
     started = time.perf_counter()
+    deadline = (started + timeout) if timeout is not None else None
     process: subprocess.Popen[str] | None = None
     exit_code = 3
     redactor = _StreamingRedactor()
+    watchdog: threading.Timer | None = None
+    timed_out = False
+
+    def _handle_timeout() -> None:
+        nonlocal timed_out
+        timed_out = True
+        if process is not None:
+            _stop_process(process)
+
     try:
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
         process = subprocess.Popen(
@@ -74,6 +94,11 @@ def collect_command(
             start_new_session=os.name != "nt",
             creationflags=creationflags,
         )
+        if timeout is not None and timeout > 0:
+            watchdog = threading.Timer(timeout, _handle_timeout)
+            watchdog.daemon = True
+            watchdog.start()
+
         with _open_log(log_file) as saved:
             if process.stdout is None:
                 raise OSError("failed to capture command output")
@@ -83,7 +108,32 @@ def collect_command(
                 stream.flush()
                 saved.write(redacted_line)
             saved.write(redactor.finish())
-        exit_code = _normalize_exit_code(process.wait())
+
+        if timed_out:
+            raise TimeoutError(f"command timed out after {timeout} seconds")
+
+        remaining = max(0.1, deadline - time.perf_counter()) if deadline is not None else None
+        exit_code = _normalize_exit_code(process.wait(timeout=remaining))
+    except (TimeoutError, subprocess.TimeoutExpired):
+        if process is not None:
+            _stop_process(process)
+        exit_code = 124
+        metadata = _metadata(
+            source="command",
+            name=name or Path(command[0]).name,
+            command=command,
+            exit_code=exit_code,
+            started_at=started_at,
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            cwd=Path(cwd).resolve() if cwd else Path.cwd().resolve(),
+            log_file=log_file,
+        )
+        metadata["timed_out"] = True
+        _write_metadata(metadata_file, metadata)
+        collected = CollectedLog(log_file, metadata_file, exit_code, metadata)
+        raise CollectionTimeoutError(
+            f"command timed out after {timeout} seconds", collected
+        ) from None
     except KeyboardInterrupt:
         if process is not None:
             _stop_process(process, interrupt=True)
@@ -96,6 +146,9 @@ def collect_command(
             _stop_process(process)
         _remove_if_exists(log_file)
         raise
+    finally:
+        if watchdog is not None:
+            watchdog.cancel()
     metadata = _metadata(
         source="command",
         name=name or Path(command[0]).name,

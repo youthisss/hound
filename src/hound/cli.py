@@ -484,6 +484,10 @@ def build_parser() -> argparse.ArgumentParser:
                          help="trust profile for the captured artifact")
     _add_llm_args(log_cmd)
     log_cmd.add_argument("command_args", nargs=argparse.REMAINDER, metavar="COMMAND")
+    sub.add_parser(
+        "mcp",
+        help="run the Model Context Protocol (stdio) service for AI coding agents",
+    )
     return parser
 
 
@@ -1948,6 +1952,12 @@ def _file_github_ticket(ticket: Ticket, config_path: str | None = None, config=N
     return url
 
 
+def run_mcp(args: argparse.Namespace) -> int:
+    from hound.mcp.server import run_server
+
+    return run_server()
+
+
 def main(argv: list[str] | None = None) -> int:
     effective_argv = sys.argv[1:] if argv is None else argv
     if not effective_argv:
@@ -2024,6 +2034,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_doctor(args)
     if args.command == "log":
         return run_log(args)
+    if args.command == "mcp":
+        return run_mcp(args)
     parser.print_help()
     return 2
 

@@ -1754,16 +1754,26 @@ class ResultsListView(ListView):
 
 
 class ArtifactListView(ListView):
+    """Make mouse clicks toggle artifact selection without analyzing."""
+
     def __init__(self, *children: ListItem, on_item_clicked: Callable[[int], None], **kwargs: object) -> None:
         super().__init__(*children, **kwargs)
         self._on_item_clicked = on_item_clicked
+        self._mouse_clicked_item: ListItem | None = None
 
     def _on_list_item__child_clicked(self, event: ListItem._ChildClicked) -> None:
         event.stop()
         self.focus()
         self.index = self._nodes.index(event.item)
         if self.index is not None:
+            self._mouse_clicked_item = event.item
             self._on_item_clicked(self.index)
+
+    def consume_mouse_click(self, item: ListItem) -> bool:
+        if self._mouse_clicked_item is not item:
+            return False
+        self._mouse_clicked_item = None
+        return True
 
 
 class HomeLogo(Static):
@@ -4932,9 +4942,10 @@ class RcaTui(App):
         elif list_view.id == "run-list" and index < len(self._runs):
             self._load_run(self._runs[index])
         elif list_view.id == "artifact-workspace-list":
-            target = self._workspace_artifact_at(index)
-            if target is not None:
-                self._analyze_batch_targets([target])
+            if not isinstance(list_view, ArtifactListView) or not list_view.consume_mouse_click(event.item):
+                target = self._workspace_artifact_at(index)
+                if target is not None:
+                    self._analyze_batch_targets([target])
         elif list_view.id == "results-workspace-list":
             if not isinstance(list_view, ResultsListView) or not list_view.consume_mouse_click(event.item):
                 self.action_open_selected_result()
@@ -5509,6 +5520,10 @@ class RcaTui(App):
         target = self._workspace_artifact_at(index)
         if target is None:
             return
+        self._selected_log = target
+        self._show_raw(target)
+        self._set_state("ready", f"{_compact(target.name, 20)} ready")
+        self._set_analysis_enabled()
         if target in self._selected_artifacts:
             self._remove_selected_artifact(target)
         else:

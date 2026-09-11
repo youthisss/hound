@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json.schemastore.org/partial-plugin-manifest.json",
+  "name": "hound-tracer",
+  "version": "0.5.0",
+  "displayName": "Hound Tracer CI/CD & Build Diagnostics",
+  "description": "Offline-first diagnostic, Root Cause Analysis (RCA), and quality gate plugin for troubleshooting CI/CD, build, test, and container crashes.",
+  "author": {
+    "name": "Hound Tracer Maintainers",
+    "email": "fannyrizqi11@gmail.com",
+    "url": "https://github.com/youthisss/hound-tracer"
+  },
+  "homepage": "https://github.com/youthisss/hound-tracer",
+  "repository": "https://github.com/youthisss/hound-tracer.git",
+  "license": "MIT",
+  "keywords": [
+    "ci-cd",
+    "diagnostics",
+    "root-cause-analysis",
+    "testing",
+    "quality-gate",
+    "flaky-tests",
+    "kubernetes"
+  ],
+  "mcpServers": {
+    "hound": {
+      "command": "python",
+      "args": ["-m", "hound.mcp"],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "HOUND_MCP_ROOTS": "."
+      }
+    }
+  },
+  "skills": [
+    "../../skills/hound-tracer/SKILL.md"
+  ],
+  "commands": [
+    {
+      "name": "hound:analyze",
+      "description": "Diagnose failure logs or test reports using Hound Tracer RCA engine",
+      "file": "commands/analyze.md"
+    },
+    {
+      "name": "hound:run",
+      "description": "Execute a test or build command, redact secrets, and auto-diagnose failures",
+      "file": "commands/run.md"
+    },
+    {
+      "name": "hound:gate",
+      "description": "Evaluate test and coverage reports against project quality gates",
+      "file": "commands/gate.md"
+    },
+    {
+      "name": "hound:insights",
+      "description": "Check test flakiness rates and duration percentiles",
+      "file": "commands/insights.md"
+    },
+    {
+      "name": "hound:doctor",
+      "description": "Check local environment and tooling readiness for Hound Tracer",
+      "file": "commands/doctor.md"
+    },
+    {
+      "name": "hound:incidents",
+      "description": "List deduplicated failure incidents and recurrence counts",
+      "file": "commands/incidents.md"
+    }
+  ],
+  "hooks": {
+    "postExecution": {
+      "description": "Suggests running Hound RCA when a test runner or build command fails with exit code != 0",
+      "file": "hooks/post_test_failure.py"
+    }
+  }
+}
