@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/hound-tracer/"><img src="https://img.shields.io/pypi/v/hound-tracer.svg" alt="PyPI Version"></a>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta%20v0.4.1-yellow.svg" alt="Status"></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta%20v0.5.0-yellow.svg" alt="Status"></a>
   <a href="#testing-and-verification"><img src="https://img.shields.io/badge/Tests-Targeted%20gates-success.svg" alt="Tests"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%20to%203.12-blue.svg" alt="Python Version"></a>
   <a href="#security-and-privacy"><img src="https://img.shields.io/badge/Security-Redaction%20Default-orange.svg" alt="Security"></a>
@@ -43,6 +43,7 @@ Hound is strictly advisory and read-only: it analyzes artifacts and produces str
 - **Container and infrastructure awareness:** Identifies Kubernetes crashes (`CrashLoopBackOff`, exit code 137 `OOMKilled`), failed container probes, Helm rollbacks, and Terraform apply errors.
 - **Quality gates and test analytics:** Track flakiness trends and run times in a local SQLite store (`hound insights`), and enforce build policies on coverage regressions or security findings (`hound gate`).
 - **Idempotent ticket delivery:** Push reports to GitHub, Jira, GitLab, or Slack with an SQLite delivery ledger that prevents duplicate tickets during network retries.
+- **AI Agent Integration:** Run the MCP stdio server (`hound mcp`) or load the Agent Skill (`skills/hound-tracer/SKILL.md`). The bundle in `plugins/hound/` is a reference manifest; each coding harness may require its own registration format. Hound bounds MCP responses and redacts diagnostic evidence before returning it.
 
 ---
 
@@ -622,7 +623,7 @@ jobs:
 
       - name: Investigate Failures with Hound Tracer
         if: steps.test_run.outcome == 'failure'
-        uses: youthisss/hound-tracer@v0.4.1
+        uses: youthisss/hound-tracer@v0.5.0
         with:
           log: "artifacts/pytest.log"
           repo: "${{ github.workspace }}"

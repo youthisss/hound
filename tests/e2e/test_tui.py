@@ -590,6 +590,35 @@ def test_tui_enter_analyzes_focused_workspace_artifact(tmp_path):
     anyio.run(main)
 
 
+def test_tui_click_selects_workspace_artifact_without_analyzing(tmp_path):
+    shutil.copy(FIXTURES / "pytest_fail.log", tmp_path / "pytest_fail.log")
+    shutil.copy(FIXTURES / "build_error.log", tmp_path / "build_error.log")
+
+    from hound.tui import RcaTui
+    from textual.widgets import ListView
+
+    app = RcaTui(logs_dir=str(tmp_path), out_dir=str(tmp_path / "out"), offline=True)
+
+    async def main():
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.action_show_artifacts()
+            await pilot.pause()
+            logs = app.query_one("#artifact-workspace-list", ListView)
+            analyzed = []
+            app._analyze_batch_targets = lambda targets: analyzed.extend(targets)
+
+            first_item = logs.children[0]
+            await pilot.click(first_item)
+            await pilot.pause(0.1)
+
+            assert len(analyzed) == 0
+            assert len(app._selected_artifacts) == 1
+            assert logs.index == 0
+
+    anyio.run(main)
+
+
 def test_tui_caps_widgets_but_keeps_all_visible_targets(tmp_path, monkeypatch):
     from hound.tui import RcaTui
     from textual.widgets import ListView, Static
