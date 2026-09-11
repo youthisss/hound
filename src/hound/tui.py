@@ -3859,6 +3859,9 @@ class RcaTui(App):
             if self._log_signatures.get(path) != signatures[path]:
                 self._log_info.pop(path, None)
         self._log_signatures.update(signatures)
+        for path in all_logs:
+            if path not in self._log_info and path.suffix.lower() != ".log":
+                self._log_info[path] = self._log_classification(path)
         type_filter = str(self.query_one("#type-filter", Select).value)
         files = [
             path for path in all_logs
@@ -3992,8 +3995,17 @@ class RcaTui(App):
     def _replace_list_item_label(item: ListItem, label: str) -> None:
         try:
             item.query_one(Static).update(label)
-        except Exception:
             return
+        except Exception:
+            pass
+        for child in getattr(item, "_pending_children", ()):
+            if isinstance(child, Static):
+                child.update(label)
+                return
+        for child in getattr(item, "children", ()):
+            if isinstance(child, Static):
+                child.update(label)
+                return
 
     def _refresh_artifact_selection(self, changed: list[Path] | None = None) -> None:
         """Update selection in place so ListView retains focus and scrolling."""
@@ -4048,13 +4060,15 @@ class RcaTui(App):
 
     def _apply_classifications(self, results: dict[Path, tuple[str, str]], generation: int) -> None:
         self._log_info.update(results)
-        if generation != self._scan_generation or not self.is_mounted:
+        if not self.is_mounted:
             return
         log_filter = next(iter(self.query("#log-filter")), None)
         if not isinstance(log_filter, Input):
             return
         # Keep sidebar labels synchronized without restarting classification.
         self._refresh_sidebar_classifications(list(results))
+        if generation != self._scan_generation:
+            return
         type_filter = str(self.query_one("#type-filter", Select).value)
         sort_mode = str(self.query_one("#log-sort", Select).value)
         if type_filter == "all" and sort_mode != "type":
