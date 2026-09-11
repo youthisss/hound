@@ -4041,7 +4041,7 @@ class RcaTui(App):
             if index is not None and index < len(list_view.children):
                 self._replace_list_item_label(list_view.children[index], self._sidebar_log_label(path))
 
-    @work(thread=True, group="classify-logs", exclusive=True)
+    @work(thread=True, group="classify-logs", exclusive=True, exit_on_error=False)
     def _classify_logs_background(self, paths: list[Path], generation: int) -> None:
         results = {path: self._log_classification(path) for path in paths}
         self.call_from_thread(self._apply_classifications, results, generation)
