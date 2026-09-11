@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "hound": {
+      "command": "python",
+      "args": ["-m", "hound.mcp"],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "HOUND_MCP_ROOTS": "."
+      }
+    }
+  }
+}

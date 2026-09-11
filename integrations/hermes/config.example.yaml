@@ -1,0 +1,13 @@
+mcp_servers:
+  hound:
+    command: python
+    args:
+      - -m
+      - hound.mcp
+    env:
+      PYTHONUNBUFFERED: "1"
+      HOUND_MCP_ROOTS: "."
+
+# Install skills/hound-tracer/SKILL.md under ~/.hermes/skills/hound-tracer/.
+# Run /reload-skills after a manual update.
+# Use /hound-tracer <task> to invoke it and /skills update for tracked installs.

@@ -1,6 +1,13 @@
 ---
 name: hound-tracer
 description: Offline-first diagnostic, RCA (Root Cause Analysis), and quality gate agent for CI/CD, build, test, and container failures.
+version: 0.5.1
+license: MIT
+slash: true
+metadata:
+  opencode/slash: true
+  hermes:
+    tags: [ci-cd, diagnostics, testing, quality-gate]
 triggers:
   - CI/CD pipeline failure (GitHub Actions, GitLab CI, Jenkins, Argo)
   - Test runner failure (pytest, jest, vitest, go test, cargo test, maven, dotnet test)
