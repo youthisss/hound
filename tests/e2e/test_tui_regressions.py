@@ -75,7 +75,8 @@ def test_tui_lists_structured_artifacts_alongside_logs(tmp_path):
             await pilot.pause()
             (tmp_path / "junit.xml").write_text(JUNIT_XML, encoding="utf-8")
             app.action_refresh()
-            for _ in range(200):
+            await app.workers.wait_for_complete()
+            for _ in range(400):
                 await pilot.pause(0.05)
                 items = app.query_one("#log-list", ListView)
                 if items.children and "TEST" in str(items.children[0].query_one(Static).renderable):
