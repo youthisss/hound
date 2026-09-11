@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   container/action identity, and public URLs to Hound. This is a breaking rename;
   legacy Python imports and distribution names are not provided.
 
+## [0.5.1] - 2026-09-11
+
+### Added
+- **Multi-Harness Integration Examples**: Added configuration templates in `integrations/` for OpenCode V2, Hermes Agent, Claude Code, Codex, Cursor, and Antigravity to simplify workspace-scoped MCP and skill setup.
+- **Safe Update Command**: Added `/hound:update` reference command specification and OpenCode `hound-update` command template to inspect Hound installations and prepare confirmed updates without altering uncommitted repositories.
+- **Harness Integration Test Suite**: Added `tests/unit/test_harness_integrations.py` validating syntax, command references, and structure of all integration configs.
+
 ## [0.5.0] - 2026-09-11
 
 ### Added
