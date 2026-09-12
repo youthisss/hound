@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-09-12
+
 ### Added
 - A first-run integration prompt and `hound integrations` installer for detecting
   coding harnesses, installing the packaged Hound skill, configuring OpenCode and
