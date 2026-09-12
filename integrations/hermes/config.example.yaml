@@ -1,9 +1,7 @@
 mcp_servers:
   hound:
-    command: python
-    args:
-      - -m
-      - hound.mcp
+    command: hound-mcp
+    args: []
     env:
       PYTHONUNBUFFERED: "1"
       HOUND_MCP_ROOTS: "."

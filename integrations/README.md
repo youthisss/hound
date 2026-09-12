@@ -3,7 +3,7 @@
 Hound Tracer uses two portable surfaces:
 
 - `skills/hound-tracer/SKILL.md` for agent instructions.
-- `python -m hound.mcp` for MCP tools.
+- `hound-mcp` for MCP tools installed through the Python package.
 
 The files in this directory are configuration examples, not interchangeable plugin manifests. Copy or merge only the example for the harness you use. Keep existing settings when merging.
 
@@ -28,3 +28,18 @@ All examples restrict Hound to the current workspace with `HOUND_MCP_ROOTS=.`. T
 - Hermes registry or URL install: run `/skills update` or `hermes skills update`.
 - Published Python package: use the same package manager that installed Hound. Review the target version before upgrading.
 - Do not let an agent replace harness configuration or update packages without user confirmation.
+
+## Installer
+
+After installing the Python package, detect and configure supported harnesses:
+
+```console
+hound integrations detect
+hound integrations install --detect --dry-run
+hound integrations install --detect
+```
+
+Use `--scope project` to write project-local skills and configuration. The default
+scope is global. Existing JSON or JSONC configuration is backed up before Hound
+merges its entries. Hound also offers this setup once before opening its terminal
+interface for the first time.
