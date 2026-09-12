@@ -341,7 +341,7 @@ def test_tui_and_cli_use_shared_service(tmp_path, monkeypatch):
             app.query_one("#log-list", ListView).index = 0
             app.action_analyze()
             for _ in range(100):
-                if calls:
+                if calls and not app._analyzing:
                     break
                 await pilot.pause(0.02)
 
