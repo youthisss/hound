@@ -10,6 +10,7 @@ import sys
 from typing import Any
 
 from platformdirs import user_config_path
+import yaml
 
 
 SUPPORTED_HARNESSES = ("opencode", "claude", "codex", "cursor", "hermes", "antigravity")
@@ -250,18 +251,76 @@ def _install_opencode(scope: str, root: Path, dry_run: bool) -> tuple[list[str],
 
 def _install_json_mcp(harness: str, scope: str, root: Path, dry_run: bool) -> tuple[list[str], list[str]]:
     changed = _install_skill(harness, scope, root, dry_run)
+    warnings: list[str] = []
     if harness == "claude":
         plugin_dir = (root / ".claude" / "plugins" / "hound") if scope == "project" else (_home() / ".claude" / "plugins" / "hound")
         changed.extend(_copy_asset_tree(_asset("plugins", "hound"), plugin_dir, dry_run=dry_run))
-    if harness == "cursor":
+        config = (root / ".mcp.json") if scope == "project" else (_home() / ".claude.json")
+    elif harness == "cursor":
         config = (root / ".cursor" / "mcp.json") if scope == "project" else (_home() / ".cursor" / "mcp.json")
+    elif harness == "antigravity":
+        config = (root / ".agent" / "mcp_config.json") if scope == "project" else (_home() / ".gemini" / "antigravity" / "mcp_config.json")
+    else:
+        config = None
+    if config is not None:
         server = {"command": "hound-mcp", "args": [], "env": {"HOUND_MCP_ROOTS": "."}}
         fragment = {"mcpServers": {"hound": server}}
         did_change, backup = _merge_json_config(config, fragment, dry_run=dry_run)
         if did_change:
             changed.append(str(config))
-        return changed, [f"Backup created: {backup}"] if backup else []
-    return changed, [f"{harness}: skill installed; merge the packaged MCP example if this harness requires explicit MCP configuration."]
+        if backup:
+            warnings.append(f"Backup created: {backup}")
+    elif harness == "codex":
+        config = (root / ".codex" / "config.toml") if scope == "project" else (_home() / ".codex" / "config.toml")
+        did_change, backup, note = _merge_codex_config(config, dry_run=dry_run)
+        if did_change:
+            changed.append(str(config))
+        if backup:
+            warnings.append(f"Backup created: {backup}")
+        if note:
+            warnings.append(note)
+    elif harness == "hermes":
+        config = (root / ".hermes" / "config.yaml") if scope == "project" else (_home() / ".hermes" / "config.yaml")
+        did_change, backup = _merge_hermes_config(config, dry_run=dry_run)
+        if did_change:
+            changed.append(str(config))
+        if backup:
+            warnings.append(f"Backup created: {backup}")
+    return changed, warnings
+
+
+def _merge_codex_config(path: Path, *, dry_run: bool) -> tuple[bool, Path | None, str | None]:
+    content = path.read_text(encoding="utf-8") if path.exists() else ""
+    if "[mcp_servers.hound]" in content:
+        return False, None, None
+    block = '\n[mcp_servers.hound]\ncommand = "hound-mcp"\nargs = []\nenv = { PYTHONUNBUFFERED = "1", HOUND_MCP_ROOTS = "." }\n'
+    updated = content.rstrip() + block
+    backup = None if dry_run or not path.exists() else _backup(path)
+    if not dry_run:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(updated, encoding="utf-8")
+    return True, backup, None
+
+
+def _merge_hermes_config(path: Path, *, dry_run: bool) -> tuple[bool, Path | None]:
+    if path.exists():
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded, dict):
+            raise ValueError(f"configuration root must be a mapping: {path}")
+    else:
+        loaded = {}
+    current = loaded.get("mcp_servers")
+    servers = dict(current) if isinstance(current, dict) else {}
+    desired = {"command": "hound-mcp", "args": [], "env": {"PYTHONUNBUFFERED": "1", "HOUND_MCP_ROOTS": "."}}
+    if servers.get("hound") == desired:
+        return False, None
+    servers["hound"] = desired
+    loaded["mcp_servers"] = servers
+    backup = None if dry_run or not path.exists() else _backup(path)
+    if not dry_run:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.safe_dump(loaded, sort_keys=False), encoding="utf-8")
+    return True, backup
 
 
 def install_integrations(harnesses: list[str], *, scope: str, root: Path, dry_run: bool = False) -> list[IntegrationResult]:
