@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import yaml
+
 from hound import integrations
 from hound.cli import main
 
@@ -77,3 +79,22 @@ def test_first_run_decline_is_not_repeated(tmp_path, monkeypatch, capsys):
 
 def test_jsonc_parser_accepts_trailing_commas():
     assert integrations._strip_jsonc('{"commands": {"test": true,},}') == '{"commands": {"test": true}}'
+
+
+def test_all_harnesses_receive_mcp_configuration(tmp_path, monkeypatch):
+    home = _use_home(monkeypatch, tmp_path)
+
+    results = integrations.install_integrations(
+        ["claude", "codex", "cursor", "hermes", "antigravity"],
+        scope="global",
+        root=tmp_path,
+    )
+
+    assert all(result.installed for result in results)
+    assert json.loads((home / ".claude.json").read_text(encoding="utf-8"))["mcpServers"]["hound"]["command"] == "hound-mcp"
+    assert '[mcp_servers.hound]' in (home / ".codex" / "config.toml").read_text(encoding="utf-8")
+    assert yaml.safe_load((home / ".hermes" / "config.yaml").read_text(encoding="utf-8"))["mcp_servers"]["hound"]["command"] == "hound-mcp"
+    assert json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]["hound"]["command"] == "hound-mcp"
+    antigravity = home / ".gemini" / "antigravity" / "mcp_config.json"
+    assert json.loads(antigravity.read_text(encoding="utf-8"))["mcpServers"]["hound"]["command"] == "hound-mcp"
+    assert (home / ".claude" / "plugins" / "hound" / "plugin.json").is_file()
