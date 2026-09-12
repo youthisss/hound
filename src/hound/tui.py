@@ -3092,13 +3092,16 @@ class RcaTui(App):
         except Exception:
             pass
 
-    def _current_view_state(self) -> tuple[str, str | None]:
+    def _get_tabs(self) -> TabbedContent | None:
         try:
-            tabs = self.query_one("#tabs", TabbedContent)
-            if tabs.display:
-                return ("results_tab", tabs.active)
+            return self.query_one("#tabs", TabbedContent)
         except Exception:
-            pass
+            return None
+
+    def _current_view_state(self) -> tuple[str, str | None]:
+        tabs = self._get_tabs()
+        if tabs is not None and tabs.display:
+            return ("results_tab", tabs.active)
         for name in ("artifact", "results", "qa"):
             try:
                 ws = self.query_one(f"#{name}-workspace", Vertical)
@@ -3149,10 +3152,8 @@ class RcaTui(App):
         self._update_shortcuts()
 
     def _update_shortcuts(self) -> None:
-        try:
-            active = self.query_one("#tabs", TabbedContent).active
-        except Exception:
-            active = "pane-overview"
+        tabs = self._get_tabs()
+        active = tabs.active if tabs is not None else "pane-overview"
         key = "bold #b8b8b8"
         can_back = self._current_view_state() != ("home", None)
         back_hint = f"[{key}]esc[/{key}] back  " if can_back else ""
@@ -3166,11 +3167,8 @@ class RcaTui(App):
             "pane-ticket": f"[{key}]e[/{key}] copy ticket  ",
             "pane-raw": f"[{key}]enter[/{key}] open log  ",
         }.get(active, "")
-        try:
-            if self.query_one("#tabs", TabbedContent).display and len(self._opened_runs) > 1:
-                contextual = f"[{key}]p / n[/{key}] previous/next result  " + contextual
-        except Exception:
-            pass
+        if tabs is not None and tabs.display and len(self._opened_runs) > 1:
+            contextual = f"[{key}]p / n[/{key}] previous/next result  " + contextual
         try:
             artifacts_ws: Vertical | None = self.query_one("#artifact-workspace", Vertical)
         except Exception:
@@ -3203,9 +3201,9 @@ class RcaTui(App):
             qa_ws = None
         if qa_ws is not None and qa_ws.display:
             contextual = f"[{key}]g[/{key}] focus QA result  [{key}]tab[/{key}] move field  "
-        if self.query_one("#tabs", TabbedContent).display and active == "pane-context":
+        if tabs is not None and tabs.display and active == "pane-context":
             contextual = f"[{key}]u[/{key}] validate  [{key}]v[/{key}] feedback  [{key}]c[/{key}] copy summary  [{key}]g[/{key}] focus context  "
-        if self.query_one("#tabs", TabbedContent).display:
+        if tabs is not None and tabs.display:
             contextual = f"[{key}]← / →[/{key}] tabs  " + contextual
         separator = "  [dim]|[/dim]  " if contextual.strip() else ""
         try:
@@ -3220,7 +3218,9 @@ class RcaTui(App):
         self.query_one("#artifact-workspace", Vertical).display = False
         self.query_one("#results-workspace", Vertical).display = False
         self.query_one("#qa-workspace", Vertical).display = False
-        self.query_one("#tabs", TabbedContent).display = False
+        tabs = self._get_tabs()
+        if tabs is not None:
+            tabs.display = False
         self.query_one("#result-navigation", Horizontal).display = False
         self._set_workspace_nav_active(None)
         self._update_home()
@@ -3234,9 +3234,10 @@ class RcaTui(App):
         self.query_one("#artifact-workspace", Vertical).display = False
         self.query_one("#results-workspace", Vertical).display = False
         self.query_one("#qa-workspace", Vertical).display = False
-        tabs = self.query_one("#tabs", TabbedContent)
-        tabs.display = True
-        tabs.active = pane
+        tabs = self._get_tabs()
+        if tabs is not None:
+            tabs.display = True
+            tabs.active = pane
         if pane == "pane-context":
             self._refresh_current_context()
         self._update_result_navigation()
@@ -3245,8 +3246,8 @@ class RcaTui(App):
         self._update_shortcuts()
 
     def _cycle_result_tab(self, direction: int) -> bool:
-        tabs = next(iter(self.query("#tabs")), None)
-        if not isinstance(tabs, TabbedContent) or not tabs.display:
+        tabs = self._get_tabs()
+        if tabs is None or not tabs.display:
             return False
         try:
             current_index = RESULT_TAB_IDS.index(str(tabs.active))
@@ -3266,7 +3267,9 @@ class RcaTui(App):
         if record_history:
             self._record_view_transition(("workspace", workspace))
         self.query_one("#home", Vertical).display = False
-        self.query_one("#tabs", TabbedContent).display = False
+        tabs = self._get_tabs()
+        if tabs is not None:
+            tabs.display = False
         self.query_one("#result-navigation", Horizontal).display = False
         artifacts = self.query_one("#artifact-workspace", Vertical)
         results = self.query_one("#results-workspace", Vertical)
@@ -5043,10 +5046,10 @@ class RcaTui(App):
             self._start_qa_operation("history")
 
     def on_tabbed_content_tab_activated(self, _event: TabbedContent.TabActivated) -> None:
-        try:
-            active = self.query_one("#tabs", TabbedContent).active
-        except Exception:
+        tabs = self._get_tabs()
+        if tabs is None:
             return
+        active = tabs.active
         if active == "pane-context":
             self._refresh_current_context()
         self._update_shortcuts()
@@ -5174,7 +5177,8 @@ class RcaTui(App):
         self.push_screen(FeedbackScreen(self, run_dir))
 
     def action_prev_page(self) -> None:
-        if self.query_one("#tabs", TabbedContent).display:
+        tabs = self._get_tabs()
+        if tabs is not None and tabs.display:
             self.action_previous_result()
             return
         # Check active workspace
@@ -5193,7 +5197,8 @@ class RcaTui(App):
             return
 
     def action_next_page(self) -> None:
-        if self.query_one("#tabs", TabbedContent).display:
+        tabs = self._get_tabs()
+        if tabs is not None and tabs.display:
             self.action_next_result()
             return
         artifacts_ws = self.query("#artifact-workspace").first(Vertical)
@@ -5332,7 +5337,8 @@ class RcaTui(App):
                 pass
             return
 
-        if self.query_one("#tabs", TabbedContent).display and self.query_one("#tabs", TabbedContent).active == "pane-context":
+        tabs = self._get_tabs()
+        if tabs is not None and tabs.display and tabs.active == "pane-context":
             try:
                 self.query_one("#investigation-scroll", ResultScroll).focus()
             except Exception:
@@ -5393,7 +5399,8 @@ class RcaTui(App):
         self.notify(f"Mode set to {mode}", timeout=2)
 
     def action_copy_report(self) -> None:
-        if self.query_one("#tabs", TabbedContent).display and self.query_one("#tabs", TabbedContent).active == "pane-context":
+        tabs = self._get_tabs()
+        if tabs is not None and tabs.display and tabs.active == "pane-context":
             self.action_copy_validation_summary()
             return
         self._copy_markdown("#report", "report")
