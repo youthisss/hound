@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/hound-tracer/"><img src="https://img.shields.io/pypi/v/hound-tracer.svg" alt="PyPI Version"></a>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta%20v0.5.1-yellow.svg" alt="Status"></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Status-Beta%20v0.5.2-yellow.svg" alt="Status"></a>
   <a href="#testing-and-verification"><img src="https://img.shields.io/badge/Tests-Targeted%20gates-success.svg" alt="Tests"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%20to%203.12-blue.svg" alt="Python Version"></a>
   <a href="#security-and-privacy"><img src="https://img.shields.io/badge/Security-Redaction%20Default-orange.svg" alt="Security"></a>
@@ -625,7 +625,7 @@ jobs:
 
       - name: Investigate Failures with Hound Tracer
         if: steps.test_run.outcome == 'failure'
-        uses: youthisss/hound-tracer@v0.5.1
+        uses: youthisss/hound-tracer@v0.5.2
         with:
           log: "artifacts/pytest.log"
           repo: "${{ github.workspace }}"

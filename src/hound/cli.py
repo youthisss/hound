@@ -484,6 +484,17 @@ def build_parser() -> argparse.ArgumentParser:
                          help="trust profile for the captured artifact")
     _add_llm_args(log_cmd)
     log_cmd.add_argument("command_args", nargs=argparse.REMAINDER, metavar="COMMAND")
+    integrations_cmd = sub.add_parser("integrations", help="install Hound skills and MCP configuration for coding harnesses")
+    integrations_sub = integrations_cmd.add_subparsers(dest="integrations_command", required=True)
+    integrations_detect = integrations_sub.add_parser("detect", help="show coding harnesses found on this machine")
+    integrations_detect.add_argument("--json", action="store_true", help="output JSON")
+    integrations_install = integrations_sub.add_parser("install", help="install integrations after explicit confirmation")
+    integrations_install.add_argument("harnesses", nargs="*", metavar="HARNESS")
+    integrations_install.add_argument("--detect", action="store_true", help="target every detected harness")
+    integrations_install.add_argument("--scope", choices=("global", "project"), default="global")
+    integrations_install.add_argument("--dry-run", action="store_true", help="show files without writing them")
+    integrations_install.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    integrations_install.add_argument("--json", action="store_true", help="output JSON")
     sub.add_parser(
         "mcp",
         help="run the Model Context Protocol (stdio) service for AI coding agents",
@@ -1958,6 +1969,39 @@ def run_mcp(args: argparse.Namespace) -> int:
     return run_server()
 
 
+def run_integrations(args: argparse.Namespace) -> int:
+    from hound.integrations import detect_harnesses, install_integrations, print_results
+
+    detected = detect_harnesses()
+    if args.integrations_command == "detect":
+        if args.json:
+            print(json.dumps(detected, indent=2))
+        else:
+            for harness, present in detected.items():
+                print(f"{harness}: {'detected' if present else 'not detected'}")
+        return 0
+    harnesses = list(args.harnesses or [])
+    unsupported = sorted(set(harnesses) - {"opencode", "claude", "codex", "cursor", "hermes", "antigravity"})
+    if unsupported:
+        print(f"error: unsupported harness: {', '.join(unsupported)}", file=sys.stderr)
+        return 2
+    if args.detect:
+        harnesses.extend(name for name, present in detected.items() if present and name not in harnesses)
+    if not harnesses:
+        print("error: select a harness or pass --detect", file=sys.stderr)
+        return 2
+    if not args.dry_run and not args.yes:
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            print("error: confirmation requires a TTY; pass --yes or --dry-run", file=sys.stderr)
+            return 2
+        print("Hound will install skills and merge available MCP configuration for: " + ", ".join(harnesses))
+        if input("Continue? [y/N] ").strip().lower() not in {"y", "yes"}:
+            print("No changes made.")
+            return 0
+    results = install_integrations(harnesses, scope=args.scope, root=Path.cwd(), dry_run=args.dry_run)
+    return print_results(results, as_json=args.json, dry_run=args.dry_run)
+
+
 def main(argv: list[str] | None = None) -> int:
     effective_argv = sys.argv[1:] if argv is None else argv
     if not effective_argv:
@@ -1967,6 +2011,10 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
+        if argv is None:
+            from hound.integrations import first_run_offer
+
+            first_run_offer()
         return run_tui(argparse.Namespace(
             logs=None,
             repo=None,
@@ -2036,6 +2084,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_log(args)
     if args.command == "mcp":
         return run_mcp(args)
+    if args.command == "integrations":
+        return run_integrations(args)
     parser.print_help()
     return 2
 

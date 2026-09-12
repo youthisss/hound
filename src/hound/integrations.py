@@ -1,0 +1,339 @@
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import asdict, dataclass
+from importlib.resources import files
+from pathlib import Path
+import shutil
+import sys
+from typing import Any
+
+from platformdirs import user_config_path
+
+
+SUPPORTED_HARNESSES = ("opencode", "claude", "codex", "cursor", "hermes", "antigravity")
+
+
+@dataclass(frozen=True)
+class IntegrationResult:
+    harness: str
+    detected: bool
+    installed: bool
+    changed: list[str]
+    warnings: list[str]
+
+
+def _home() -> Path:
+    return Path.home()
+
+
+def _asset(*parts: str):
+    return files("hound").joinpath("integration_assets", *parts)
+
+
+def _executable_exists(*names: str) -> bool:
+    return any(shutil.which(name) for name in names)
+
+
+def detect_harnesses() -> dict[str, bool]:
+    home = _home()
+    return {
+        "opencode": _executable_exists("opencode") or (home / ".config" / "opencode").exists(),
+        "claude": _executable_exists("claude") or (home / ".claude").exists(),
+        "codex": _executable_exists("codex") or (home / ".codex").exists(),
+        "cursor": _executable_exists("cursor") or (home / ".cursor").exists(),
+        "hermes": _executable_exists("hermes") or (home / ".hermes").exists(),
+        "antigravity": _executable_exists("antigravity") or (home / ".gemini" / "antigravity").exists(),
+    }
+
+
+def _skill_directory(harness: str, scope: str, root: Path) -> Path:
+    if scope == "project":
+        folder = ".opencode" if harness == "opencode" else f".{harness}"
+        if harness == "antigravity":
+            folder = ".agent"
+        return root / folder / "skills" / "hound-tracer"
+    locations = {
+        "opencode": _home() / ".config" / "opencode" / "skills" / "hound-tracer",
+        "claude": _home() / ".claude" / "skills" / "hound-tracer",
+        "codex": _home() / ".codex" / "skills" / "hound-tracer",
+        "cursor": _home() / ".cursor" / "skills" / "hound-tracer",
+        "hermes": _home() / ".hermes" / "skills" / "hound-tracer",
+        "antigravity": _home() / ".gemini" / "antigravity" / "skills" / "hound-tracer",
+    }
+    return locations[harness]
+
+
+def _backup(path: Path) -> Path:
+    candidate = path.with_suffix(path.suffix + ".hound.bak")
+    counter = 1
+    while candidate.exists():
+        candidate = path.with_suffix(path.suffix + f".hound.bak.{counter}")
+        counter += 1
+    shutil.copy2(path, candidate)
+    return candidate
+
+
+def _write_if_changed(path: Path, content: str, *, dry_run: bool) -> bool:
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return False
+    if not dry_run:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    return True
+
+
+def _strip_jsonc(text: str) -> str:
+    output: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            output.append(char)
+            index += 1
+            continue
+        if text[index:index + 2] == "//":
+            index = text.find("\n", index)
+            if index == -1:
+                break
+            output.append("\n")
+            index += 1
+            continue
+        if text[index:index + 2] == "/*":
+            end = text.find("*/", index + 2)
+            index = len(text) if end == -1 else end + 2
+            continue
+        output.append(char)
+        index += 1
+    return _remove_trailing_commas("".join(output))
+
+
+def _remove_trailing_commas(text: str) -> str:
+    output: list[str] = []
+    in_string = False
+    escaped = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            output.append(char)
+            index += 1
+            continue
+        if char == ",":
+            lookahead = index + 1
+            while lookahead < len(text) and text[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(text) and text[lookahead] in "}]":
+                index += 1
+                continue
+        output.append(char)
+        index += 1
+    return "".join(output)
+
+
+def _load_json_config(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    data = json.loads(_strip_jsonc(path.read_text(encoding="utf-8")))
+    if not isinstance(data, dict):
+        raise ValueError(f"configuration root must be an object: {path}")
+    return data
+
+
+def _merge_json_config(path: Path, fragment: dict[str, Any], *, dry_run: bool) -> tuple[bool, Path | None]:
+    current = _load_json_config(path)
+    merged = _deep_merge(current, fragment)
+    content = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return False, None
+    backup = None if dry_run or not path.exists() else _backup(path)
+    if not dry_run:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    return True, backup
+
+
+def _deep_merge(current: dict[str, Any], fragment: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(current)
+    for key, value in fragment.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _mcp_server() -> dict[str, Any]:
+    return {
+        "hound": {
+            "type": "local",
+            "command": ["hound-mcp"],
+            "cwd": ".",
+            "environment": {"PYTHONUNBUFFERED": "1", "HOUND_MCP_ROOTS": "."},
+            "codemode": True,
+        }
+    }
+
+
+def _install_skill(harness: str, scope: str, root: Path, dry_run: bool) -> list[str]:
+    destination = _skill_directory(harness, scope, root) / "SKILL.md"
+    content = _asset("skills", "hound-tracer", "SKILL.md").read_text(encoding="utf-8")
+    return [str(destination)] if _write_if_changed(destination, content, dry_run=dry_run) else []
+
+
+def _copy_asset_tree(source: Any, destination: Path, *, dry_run: bool) -> list[str]:
+    changed: list[str] = []
+    for item in source.iterdir():
+        target = destination / item.name
+        if item.is_dir():
+            changed.extend(_copy_asset_tree(item, target, dry_run=dry_run))
+        else:
+            content = item.read_bytes()
+            if target.exists() and target.read_bytes() == content:
+                continue
+            changed.append(str(target))
+            if not dry_run:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+    return changed
+
+
+def _install_opencode(scope: str, root: Path, dry_run: bool) -> tuple[list[str], list[str]]:
+    changed = _install_skill("opencode", scope, root, dry_run)
+    config = (root / ".opencode" / "opencode.jsonc") if scope == "project" else (_home() / ".config" / "opencode" / "opencode.jsonc")
+    fragment = {
+        "$schema": "https://opencode.ai/config.json",
+        "mcp": {"servers": _mcp_server()},
+        "commands": {
+            "hound-analyze": {
+                "description": "Analyze a failure artifact with Hound Tracer",
+                "template": "Load the hound-tracer skill and analyze the artifact in $ARGUMENTS. Keep Hound offline and verify its evidence before editing code.",
+            },
+            "hound-update": {
+                "description": "Show the safe Hound Tracer update procedure",
+                "template": "Load the hound-tracer skill. Inspect how Hound Tracer and its skill were installed, then show the exact update command and target version. Do not modify packages or configuration until I confirm.",
+            },
+        },
+    }
+    did_change, backup = _merge_json_config(config, fragment, dry_run=dry_run)
+    if did_change:
+        changed.append(str(config))
+    warnings = [f"Backup created: {backup}"] if backup else []
+    return changed, warnings
+
+
+def _install_json_mcp(harness: str, scope: str, root: Path, dry_run: bool) -> tuple[list[str], list[str]]:
+    changed = _install_skill(harness, scope, root, dry_run)
+    if harness == "claude":
+        plugin_dir = (root / ".claude" / "plugins" / "hound") if scope == "project" else (_home() / ".claude" / "plugins" / "hound")
+        changed.extend(_copy_asset_tree(_asset("plugins", "hound"), plugin_dir, dry_run=dry_run))
+    if harness == "cursor":
+        config = (root / ".cursor" / "mcp.json") if scope == "project" else (_home() / ".cursor" / "mcp.json")
+        server = {"command": "hound-mcp", "args": [], "env": {"HOUND_MCP_ROOTS": "."}}
+        fragment = {"mcpServers": {"hound": server}}
+        did_change, backup = _merge_json_config(config, fragment, dry_run=dry_run)
+        if did_change:
+            changed.append(str(config))
+        return changed, [f"Backup created: {backup}"] if backup else []
+    return changed, [f"{harness}: skill installed; merge the packaged MCP example if this harness requires explicit MCP configuration."]
+
+
+def install_integrations(harnesses: list[str], *, scope: str, root: Path, dry_run: bool = False) -> list[IntegrationResult]:
+    detected = detect_harnesses()
+    results: list[IntegrationResult] = []
+    for harness in harnesses:
+        if harness not in SUPPORTED_HARNESSES:
+            raise ValueError(f"unsupported harness: {harness}")
+        try:
+            if harness == "opencode":
+                changed, warnings = _install_opencode(scope, root, dry_run)
+            else:
+                changed, warnings = _install_json_mcp(harness, scope, root, dry_run)
+            results.append(IntegrationResult(harness, detected[harness], not dry_run, changed, warnings))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            results.append(IntegrationResult(harness, detected[harness], False, [], [str(exc)]))
+    if not dry_run:
+        _write_manifest(results, scope)
+    return results
+
+
+def _manifest_path() -> Path:
+    return Path(user_config_path("hound-tracer")) / "integrations.json"
+
+
+def _write_manifest(results: list[IntegrationResult], scope: str) -> None:
+    path = _manifest_path()
+    payload = {"scope": scope, "results": [asdict(result) for result in results]}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def has_completed_setup() -> bool:
+    return _manifest_path().is_file()
+
+
+def print_results(results: list[IntegrationResult], *, as_json: bool = False, dry_run: bool = False) -> int:
+    if as_json:
+        print(json.dumps([asdict(result) for result in results], indent=2))
+    else:
+        heading = "Planned integration changes" if dry_run else "Integration setup"
+        print(heading)
+        for result in results:
+            state = "detected" if result.detected else "not detected"
+            print(f"  {result.harness}: {state}")
+            for path in result.changed:
+                print(f"    {'would write' if dry_run else 'wrote'} {path}")
+            if not result.changed and not result.warnings:
+                print("    already configured")
+            for warning in result.warnings:
+                print(f"    note: {warning}", file=sys.stderr)
+    return 0 if all(result.installed or dry_run for result in results) else 1
+
+
+def first_run_offer() -> None:
+    if has_completed_setup() or os.environ.get("HOUND_SKIP_SETUP") == "1":
+        return
+    detected = [name for name, present in detect_harnesses().items() if present]
+    if not detected:
+        return
+    print("Hound found coding harnesses that are not configured yet:")
+    print("  " + ", ".join(detected))
+    try:
+        answer = input("Install the Hound skill and available MCP integration now? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+    if answer not in {"y", "yes"}:
+        path = _manifest_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"skipped": True}, indent=2) + "\n", encoding="utf-8")
+        print("Skipped. Run 'hound integrations install --detect' later.")
+        return
+    results = install_integrations(detected, scope="global", root=Path.cwd())
+    print_results(results)

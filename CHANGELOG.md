@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A first-run integration prompt and `hound integrations` installer for detecting
+  coding harnesses, installing the packaged Hound skill, configuring OpenCode and
+  Cursor MCP access, and installing the Claude plugin bundle.
+- A dedicated `hound-mcp` executable for MCP clients using an isolated `uv tool`
+  installation.
 - Explicit delivery, incident, and authenticated server-client administration
   commands, including reconciliation, verified-absence failure marking, retry of
   known failures, job polling, and cancellation.

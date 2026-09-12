@@ -59,6 +59,7 @@ dev = [
 
 [project.scripts]
 hound = "hound.cli:main"
+hound-mcp = "hound.mcp.server:run_server"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hound"]

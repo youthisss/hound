@@ -24,13 +24,13 @@ def test_codex_example_contains_hound_mcp_command() -> None:
     path = ROOT / "integrations" / "codex" / "config.toml"
     content = path.read_text(encoding="utf-8")
     assert "[mcp_servers.hound]" in content
-    assert 'args = ["-m", "hound.mcp"]' in content
+    assert 'command = "hound-mcp"' in content
 
 
 def test_hermes_example_is_valid_yaml() -> None:
     path = ROOT / "integrations" / "hermes" / "config.example.yaml"
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert config["mcp_servers"]["hound"]["command"] == "python"
+    assert config["mcp_servers"]["hound"]["command"] == "hound-mcp"
 
 
 def test_reference_plugin_commands_exist() -> None:

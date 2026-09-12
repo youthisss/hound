@@ -5,7 +5,7 @@
     "servers": {
       "hound": {
         "type": "local",
-        "command": ["python", "-m", "hound.mcp"],
+        "command": ["hound-mcp"],
         "cwd": ".",
         "environment": {
           "PYTHONUNBUFFERED": "1",
